@@ -1,0 +1,7 @@
+namespace airbot_fbs;
+
+table FloatArray {
+    values: [float];
+}
+
+root_type FloatArray;
