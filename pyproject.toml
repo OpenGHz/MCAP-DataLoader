@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools<70.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcap-data-loader"
+version = "0.0.0"
+description = "MCAP Data Loader"
+authors = [{ name = "OpenGHz", email = "your.email@example.com" }]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic",
+    "numpy",
+    "more-itertools",
+    "typing-extensions",
+    "flatbuffers",
+    "foxglove-schemas-flatbuffer",
+    "mcap",
+    "flatten-dict",
+    "av",
+    "PyTurboJPEG",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mcap_data_loader*"]
