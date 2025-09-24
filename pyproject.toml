@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcap-data-loader"
-version = "0.0.1"
+version = "0.0.2"
 description = "MCAP Data Loader"
 authors = [{ name = "OpenGHz", email = "your.email@example.com" }]
 readme = "README.md"
@@ -12,6 +12,7 @@ license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = [
     "pydantic",
+    "pydantic-settings",
     "numpy",
     "more-itertools",
     "typing-extensions",
@@ -30,10 +31,7 @@ include = ["mcap_data_loader*"]
 
 [tool.setuptools.package-data]
 # Include FlatBuffers schema files in the wheel/sdist
-"mcap_data_loader" = [
-    "schemas/**/*.fbs",
-    "schemas/**/*.bfbs",
-]
+"mcap_data_loader" = ["schemas/**/*.fbs", "schemas/**/*.bfbs"]
 
 [tool.setuptools]
 include-package-data = true

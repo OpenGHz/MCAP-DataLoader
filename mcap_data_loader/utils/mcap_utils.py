@@ -2,7 +2,7 @@ from mcap.reader import make_reader
 from mcap.writer import Writer
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from turbojpeg import TurboJPEG
-from typing import Dict, IO, Set, Optional, Iterable, List, Generator, Any
+from typing import Dict, IO, Set, Optional, Iterable, List, Generator, Any, final
 from foxglove_schemas_flatbuffer import CompressedImage, RawImage, Time, get_schema
 from importlib.resources import read_binary
 from enum import Enum
@@ -16,8 +16,8 @@ from mcap_data_loader.utils.basic import zip
 from mcap_data_loader.utils.av_coder import AvCoder
 
 
-class FlatbufferSchemas(Enum):
-    """Enum for Flatbuffer schemas used in MCAP files."""
+class FlatBuffersSchemas(Enum):
+    """Enum for FlatBuffers schemas used in MCAP files."""
 
     NONE = ()
     RAW_IMAGE = ("foxglove.RawImage", get_schema("RawImage"))
@@ -31,8 +31,8 @@ class FlatbufferSchemas(Enum):
     )
 
 
-class McapFlatbufferWriter:
-    """Class to handle writing MCAP files with Flatbuffer schemas."""
+class McapFlatBuffersWriter:
+    """Class to handle writing MCAP files with FlatBuffers schemas."""
 
     def __init__(self, initial_builder_size: int = 1024 * 1024):
         self.builder = flatbuffers.Builder(initial_builder_size)
@@ -68,26 +68,26 @@ class McapFlatbufferWriter:
 
     def register_schemas(
         self,
-        types: Optional[Set[FlatbufferSchemas]] = None,
-    ) -> Dict[FlatbufferSchemas, int]:
-        types = set(FlatbufferSchemas) if types is None else types
-        types.discard(FlatbufferSchemas.NONE)
+        types: Optional[Set[FlatBuffersSchemas]] = None,
+    ) -> Dict[FlatBuffersSchemas, int]:
+        types = set(FlatBuffersSchemas) if types is None else types
+        types.discard(FlatBuffersSchemas.NONE)
         for stype in types:
             self._smapping[stype] = self._writer.register_schema(
                 stype.value[0],
-                SchemaEncoding.Flatbuffer,
+                SchemaEncoding.FlatBuffers,
                 stype.value[1],
             )
         return self._smapping
 
     def register_channel(
-        self, topic: str, schema_type: FlatbufferSchemas, strict: bool = True
+        self, topic: str, schema_type: FlatBuffersSchemas, strict: bool = True
     ) -> int:
         """Register a channel with the given topic and schema type in the MCAP writer.
         The schema will be automatically registered if not already present.
         Args:
             topic (str): The topic name for the channel.
-            schema_type (FlatbufferSchemas): The schema type for the channel.
+            schema_type (FlatBuffersSchemas): The schema type for the channel.
             strict (bool): Whether to enforce strict channel registration.
         Returns:
             int: The channel ID for the registered channel.
@@ -97,7 +97,7 @@ class McapFlatbufferWriter:
         if topic not in self._cmapping:
             c_id = self._writer.register_channel(
                 topic,
-                MessageEncoding.Flatbuffer,
+                MessageEncoding.FlatBuffers,
                 self._smapping.get(
                     schema_type, self.register_schemas({schema_type})[schema_type]
                 ),
@@ -233,8 +233,8 @@ class McapFlatbufferWriter:
         return self._img_enc_mapping[channels][image.dtype.type]
 
 
-class McapFlatbufferReader:
-    """Class to handle reading MCAP files with Flatbuffer schemas."""
+class McapFlatBuffersReader:
+    """Class to handle reading MCAP files with FlatBuffers schemas."""
 
     def __init__(self, file: IO[bytes]):
         self.file_io = file
@@ -248,13 +248,13 @@ class McapFlatbufferReader:
 
     @staticmethod
     def _decode_array(data: bytes) -> np.ndarray:
-        """Decode a FloatArray Flatbuffer message."""
+        """Decode a FloatArray FlatBuffers message."""
         fb = FloatArray.FloatArray.GetRootAs(data, 0)
         return fb.ValuesAsNumpy()
 
     @staticmethod
     def _decode_raw_image(data: bytes) -> np.ndarray:
-        """Decode a RawImage Flatbuffer message."""
+        """Decode a RawImage FlatBuffers message."""
         raw_img = RawImage.RawImage.GetRootAs(data, 0)
         width = raw_img.Width()
         height = raw_img.Height()
@@ -293,7 +293,7 @@ class McapFlatbufferReader:
         return img
 
     def _decode_compressed_image(self, data: bytes) -> np.ndarray:
-        """Decode a CompressedImage Flatbuffer message."""
+        """Decode a CompressedImage FlatBuffers message."""
         compressed_img = CompressedImage.CompressedImage.GetRootAs(data, 0)
         img_format = compressed_img.Format().decode("utf-8")
         assert img_format == "jpeg", f"Expected JPEG format, but got {img_format}"
@@ -478,6 +478,12 @@ class McapFlatbufferReader:
                 return 0
         return first_count
 
+    @final
+    def close(self):
+        """Close the MCAP file."""
+        if not self.file_io.closed:
+            self.file_io.close()
+
     @cache
     def __len__(self) -> int:
         """Get the total number of messages in the MCAP file."""
@@ -491,6 +497,9 @@ class McapFlatbufferReader:
             else:
                 raise ValueError("No messages found in the MCAP file.")
         return length
+
+    def __del__(self):
+        self.close()
 
 
 def h264_attachment_to_compressed_images(
@@ -512,7 +521,7 @@ def h264_attachment_to_compressed_images(
     jpeg = TurboJPEG()
     av_coder = AvCoder()
     reader = make_reader(file)
-    mfb_writer = McapFlatbufferWriter()
+    mfb_writer = McapFlatBuffersWriter()
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     writer = Writer(output_path)
@@ -535,7 +544,9 @@ def h264_attachment_to_compressed_images(
             channel.schema_id,
             channel.metadata,
         )
-    smapping = mfb_writer.register_schemas(writer, {FlatbufferSchemas.COMPRESSED_IMAGE})
+    smapping = mfb_writer.register_schemas(
+        writer, {FlatBuffersSchemas.COMPRESSED_IMAGE}
+    )
     for schema, channel, message in reader.iter_messages():
         writer.add_message(
             message.channel_id,
@@ -548,8 +559,8 @@ def h264_attachment_to_compressed_images(
         if attachment.media_type == "video/mp4":
             c_id = writer.register_channel(
                 topic=attachment.name,
-                message_encoding=MessageEncoding.Flatbuffer,
-                schema_id=smapping[FlatbufferSchemas.COMPRESSED_IMAGE],
+                message_encoding=MessageEncoding.FlatBuffers,
+                schema_id=smapping[FlatBuffersSchemas.COMPRESSED_IMAGE],
             )
             for frame, pts in av_coder.iter_decode(
                 attachment.data, mismatch_tolerance=0, ensure_base_stamp=True

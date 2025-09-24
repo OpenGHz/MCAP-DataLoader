@@ -12,10 +12,12 @@ from typing import (
 )
 from pydantic import BaseModel, NonNegativeInt, computed_field
 from abc import ABC, abstractmethod
-from functools import cached_property
+from functools import cached_property, cache
 from logging import getLogger
 from mcap_data_loader.utils.basic import StrEnum, SlicesType, multi_slices_to_indexes
 from enum import auto
+from more_itertools import peekable, nth, ilen
+
 
 try:
     from torch.utils.data import IterableDataset, get_worker_info
@@ -150,6 +152,8 @@ class IterableDatasetConfig(BaseModel):
         slices (DataSlicesConfig): Slicing configuration for samples, episodes, and datasets
         rearrange (Literal["none", "sort", "shuffle"]): Rearrangement strategy for episodes.
             Each dataset is processed separately.
+        flatten (bool): Whether to flatten the dataset, i.e., yield all samples in a single iterable.
+        cache (bool): Whether to cache all samples in memory after iterating.
     Description:
         - `data_root` can be file path, URL or other data source prefix
         - `shuffle_buffer_size` of 0 means no shuffle
@@ -169,6 +173,7 @@ class IterableDatasetConfig(BaseModel):
     filter_fn: Optional[Callable[[Any], bool]] = None
     slices: DataSlicesConfig = DataSlicesConfig()
     rearrange: DataRearrangeConfig = DataRearrangeConfig()
+    cache: bool = False
 
 
 class IterableDatasetABC(IterableDataset, ABC):
@@ -179,47 +184,27 @@ class IterableDatasetABC(IterableDataset, ABC):
 
     def __init__(self, config: IterableDatasetConfig) -> None:
         super().__init__()
-        self.cfg = config
-        self._rng = random.Random(self.cfg.seed)
+        self.config = config
+        self._rng = random.Random(self.config.seed)
 
     def load(self):
         """
         Load the dataset into memory or prepare it for streaming.
         """
+        if self.config.cache:
+            self._indexed_stream = peekable(self.read_stream())
 
     @abstractmethod
-    def _read_stream(self) -> Iterable[Any]:
+    def read_stream(self) -> Iterable[Any]:
         """
-        Returns an **iterable object**, each element is a sample.
+        Returns an **iterable object**, each element is a stream item.
         Subclasses read files, databases, network streams, etc. based on data_root.
+        Args:
+            flatten (bool): Whether to flatten the dataset, i.e., yield all samples in a single iterable.
+        Yields:
+            Iterable[Any]: An iterable of samples or episodes.
         """
         raise NotImplementedError
-
-    def __iter__(self) -> Iterator[Any]:
-        # -> Generator[Any, None, None] only for >py39
-        # TODO: really consider how to handle multi-process/multi-node sharding
-        # 1. Get the original stream
-        stream = self._read_stream()
-
-        # 2. Multi-process/multi-node sharding
-        stream = self._shard_stream(stream)
-
-        # 3. Skip resumed samples
-        stream = self._skip_samples(stream)
-
-        # 4. Filter
-        if self.cfg.filter_fn is not None:
-            stream = filter(self.cfg.filter_fn, stream)
-
-        # 5. Transform
-        if self.cfg.transform is not None:
-            stream = map(self.cfg.transform, stream)
-
-        # 6. Shuffle (streaming)
-        if self.cfg.shuffle_buffer_size > 0:
-            stream = self._shuffle_stream(stream)
-
-        yield from stream
 
     def _shard_stream(self, stream: Iterable[Any]) -> Generator[Any, None, None]:
         """
@@ -227,8 +212,8 @@ class IterableDatasetABC(IterableDataset, ABC):
         """
         worker_info = get_worker_info()
         # Total parallelism = number of nodes * processes per node * workers per process
-        total_parts = self.cfg.world_size
-        part_id = self.cfg.rank
+        total_parts = self.config.world_size
+        part_id = self.config.rank
 
         if worker_info is not None:
             total_parts *= worker_info.num_workers
@@ -242,11 +227,11 @@ class IterableDatasetABC(IterableDataset, ABC):
         """
         Skip samples before resume_from_sample.
         """
-        if self.cfg.resume_from_sample <= 0:
+        if self.config.resume_from_sample <= 0:
             yield from stream
             return
         for idx, sample in enumerate(stream, start=1):
-            if idx > self.cfg.resume_from_sample:
+            if idx > self.config.resume_from_sample:
                 yield sample
 
     def _shuffle_stream(self, stream: Iterable[Any]) -> Generator[Any, None, None]:
@@ -256,7 +241,7 @@ class IterableDatasetABC(IterableDataset, ABC):
         buf: List[Any] = []
         for sample in stream:
             buf.append(sample)
-            if len(buf) >= self.cfg.shuffle_buffer_size:
+            if len(buf) >= self.config.shuffle_buffer_size:
                 idx = self._rng.randrange(len(buf))
                 yield buf.pop(idx)
         # Randomly output remaining samples
@@ -265,3 +250,57 @@ class IterableDatasetABC(IterableDataset, ABC):
 
     def get_logger(self):
         return getLogger(self.__class__.__name__)
+
+    def __getitem__(self, index: int):
+        """
+        Get a specific sample by index.
+        This is not efficient for large datasets, use with caution.
+        """
+        # TODO: should support 2-dim indexing, e.g.
+        # dataset[episode_index][sample_index] or
+        # dataset[episode_index, sample_index]?
+        # This may be configurable in the future.
+        if index < 0:
+            index += len(self)
+        if self.config.cache:
+            return self._indexed_stream[index]
+        else:
+            return nth(self.__iter__(), index)
+
+    @cache
+    def __len__(self) -> int:
+        """
+        Get the total number of samples.
+        This is not efficient for large datasets for the first time, use with caution.
+        """
+        if self.config.cache:
+            return len(self._indexed_stream)
+        else:
+            # do not pass self which may cause infinite recursion
+            return ilen(self.__iter__())
+
+    def __iter__(self) -> Iterator[Any]:
+        # -> Generator[Any, None, None] only for >py39
+        # TODO: really consider how to handle multi-process/multi-node sharding
+        # 1. Get the original stream
+        stream = self.read_stream()
+
+        # 2. Multi-process/multi-node sharding
+        stream = self._shard_stream(stream)
+
+        # 3. Skip resumed samples
+        stream = self._skip_samples(stream)
+
+        # 4. Filter
+        if self.config.filter_fn is not None:
+            stream = filter(self.config.filter_fn, stream)
+
+        # 5. Transform
+        if self.config.transform is not None:
+            stream = map(self.config.transform, stream)
+
+        # 6. Shuffle (streaming)
+        if self.config.shuffle_buffer_size > 0:
+            stream = self._shuffle_stream(stream)
+
+        yield from stream
