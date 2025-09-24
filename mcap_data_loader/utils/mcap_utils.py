@@ -75,7 +75,7 @@ class McapFlatBuffersWriter:
         for stype in types:
             self._smapping[stype] = self._writer.register_schema(
                 stype.value[0],
-                SchemaEncoding.FlatBuffers,
+                SchemaEncoding.Flatbuffer,
                 stype.value[1],
             )
         return self._smapping
@@ -97,7 +97,7 @@ class McapFlatBuffersWriter:
         if topic not in self._cmapping:
             c_id = self._writer.register_channel(
                 topic,
-                MessageEncoding.FlatBuffers,
+                MessageEncoding.Flatbuffer,
                 self._smapping.get(
                     schema_type, self.register_schemas({schema_type})[schema_type]
                 ),
@@ -559,7 +559,7 @@ def h264_attachment_to_compressed_images(
         if attachment.media_type == "video/mp4":
             c_id = writer.register_channel(
                 topic=attachment.name,
-                message_encoding=MessageEncoding.FlatBuffers,
+                message_encoding=MessageEncoding.Flatbuffer,
                 schema_id=smapping[FlatBuffersSchemas.COMPRESSED_IMAGE],
             )
             for frame, pts in av_coder.iter_decode(
