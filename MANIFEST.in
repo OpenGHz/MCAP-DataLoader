@@ -1,0 +1,2 @@
+# Include FlatBuffers schema files in source distribution
+recursive-include mcap_data_loader/schemas *.fbs *.bfbs
