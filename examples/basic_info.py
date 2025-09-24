@@ -6,7 +6,7 @@ if __name__ == "__main__":
 
     dataset = McapFlatBuffersEpisodeDataset(
         McapFlatBuffersEpisodeDatasetConfig(
-            data_root="/home/ghz/Work/OpenGHz/data-collection/airbot-data-collection/airbot_data_collection/data/filic_demon",
+            data_root="data/example",
             keys=["/follow/arm/joint_state/position", "log_stamps"],
         )
     )

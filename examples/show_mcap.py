@@ -5,13 +5,11 @@ from mcap_data_loader.datasets.mcap_dataset import (
 from pprint import pprint
 
 
-path = "/home/ghz/下载/emergency_button.mcap"
+path = "data/example"
 dataset = McapFlatBuffersSampleDataset(
     McapDatasetConfig(
         data_root=path,
         topics=[
-            "/lead/arm/pose/position",
-            "/lead/arm/wrench/force",
             "/follow/arm/pose/position",
         ],
     )
