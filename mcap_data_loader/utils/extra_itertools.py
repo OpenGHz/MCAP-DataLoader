@@ -1,4 +1,4 @@
-from itertools import chain, tee, islice
+from itertools import chain, islice
 from collections import deque
 from typing import Any, Iterable
 
@@ -84,13 +84,12 @@ def past_future(
     and each future window contains `future_num` elements. The total iteration steps
     equal to the length of the iterable when `step` is 1.
     """
-    it1, it2 = tee(iterable)
     try:
-        first = next(it1)
+        first = next(iter(iterable))
     except StopIteration:
         return ()
 
-    padded = chain([first] * past_num, it2, [None] * future_num)
+    padded = chain([first] * past_num, iterable, [None] * future_num)
 
     windows = ewindowed(
         padded, past_num + future_num + 1, fillvalue, step, fill_with_last
