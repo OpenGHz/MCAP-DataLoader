@@ -1,6 +1,11 @@
 from itertools import chain, islice
 from collections import deque
-from typing import Any, Iterable
+from collections.abc import Iterator
+from typing import Any, Iterable, Callable, TypeVar, Generic
+from typing_extensions import Self
+
+
+T = TypeVar("T")
 
 
 def ewindowed(
@@ -84,6 +89,8 @@ def past_future(
     and each future window contains `future_num` elements. The total iteration steps
     equal to the length of the iterable when `step` is 1.
     """
+    if isinstance(iterable, Iterator):
+        raise ValueError("iterable must be a reusable iterable, not an iterator")
     try:
         first = next(iter(iterable))
     except StopIteration:
@@ -99,6 +106,21 @@ def past_future(
         past = win[: past_num + 1]
         future = win[past_num:]
         yield past, future
+
+
+class Iterablizer(Generic[T]):
+    # since the func return type is usually unknown when
+    # passed to __init__, we don't annotate the return with T
+    def __init__(self, func: Callable[..., Iterable]):
+        self.gen_func = func
+
+    def __call__(self, *args, **kwds) -> "Iterablizer[T]":
+        self.args = args
+        self.kwargs = kwds
+        return self
+
+    def __iter__(self) -> Iterator[T]:
+        return self.gen_func(*self.args, **self.kwargs)
 
 
 if __name__ == "__main__":
@@ -118,13 +140,21 @@ if __name__ == "__main__":
     #             break
     #     print("===" * 10)
 
-    max_steps = 20
-    iterable = range(10)
-    start = time.perf_counter()
-    cnt = 0
-    for past, future in past_future(iterable, 2, 3, None, 1, True):
-        print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
-        print(f"{past=}, {future=}")
-        cnt += 1
-        print(f"step: {cnt}/{max_steps}")
-        start = time.perf_counter()
+    # max_steps = 20
+    # iterable = range(10)
+    # # iterable = iter(range(10))  # raise an error
+    # start = time.perf_counter()
+    # cnt = 0
+    # for past, future in past_future(iterable, 2, 3, None, 1, True):
+    #     print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
+    #     print(f"{past=}, {future=}")
+    #     cnt += 1
+    #     print(f"step: {cnt}/{max_steps}")
+    #     start = time.perf_counter()
+
+    from itertools import pairwise
+
+    iterable = (f"{i}" for i in range(10))
+    it_reusable = Iterablizer[str](pairwise)(iterable)
+    for item in it_reusable:
+        print(item)

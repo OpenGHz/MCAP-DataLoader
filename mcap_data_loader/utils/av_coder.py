@@ -1,14 +1,14 @@
 import av
 import numpy as np
-from io import BytesIO
 import fractions
-from typing import List, Optional, Union, Literal, Dict, Generator
+import json
+from io import BytesIO
+from typing import List, Optional, Union, Literal, Dict
+from collections.abc import Generator
 from turbojpeg import TurboJPEG
 from logging import getLogger
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
-from ast import literal_eval
-import json
 
 
 class AvCoder:
@@ -109,7 +109,7 @@ class AvCoder:
         if self._start_time == 0:
             assert timestamp > 0, "Timestamp must be greater than 0"
             self._start_time = timestamp
-            self._container.metadata["comment"] = str({"base_stamp": timestamp})
+            self._container.metadata["comment"] = json.dumps({"base_stamp": timestamp})
         if self._preprocess is None:
             self._set_frame_type(frame)
         video_frame = av.VideoFrame.from_ndarray(
@@ -199,7 +199,13 @@ class AvCoder:
         # Enable multithreading for decoding
         video_stream = container.streams.video[0]
         video_stream.thread_type = thread_type
-        comment: dict = literal_eval(container.metadata.get("comment", "{}"))
+        meta_comment = container.metadata.get("comment", "{}")
+        try:
+            comment: dict = json.loads(meta_comment)
+        except json.JSONDecodeError:
+            meta_comment = meta_comment.replace("'", '"')
+            comment: dict = json.loads(meta_comment)
+
         base_stamp = comment.get("base_stamp", None)
         if base_stamp is None:
             assert not ensure_base_stamp, (
@@ -289,7 +295,7 @@ class AvCoder:
         mismatch_tolerance: int = 0,
         ensure_base_stamp: bool = False,
         target_time_base: int = int(1e9),
-    ) -> Generator[Union[tuple[np.ndarray, int], np.ndarray], None, None]:
+    ) -> Generator[Union[tuple[np.ndarray, int], np.ndarray]]:
         """
         Generator to decode frames from a video file. This method yields frames one by one.
         Args:

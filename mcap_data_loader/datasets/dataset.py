@@ -2,14 +2,13 @@ import random
 from typing import (
     Any,
     Callable,
-    Generator,
     Iterable,
-    Iterator,
     List,
     Optional,
     Dict,
     Union,
 )
+from collections.abc import Generator
 from pydantic import BaseModel, NonNegativeInt, computed_field
 from abc import ABC, abstractmethod
 from functools import cached_property, cache
@@ -206,7 +205,7 @@ class IterableDatasetABC(IterableDataset, ABC):
         """
         raise NotImplementedError
 
-    def _shard_stream(self, stream: Iterable[Any]) -> Generator[Any, None, None]:
+    def _shard_stream(self, stream: Iterable[Any]) -> Generator[Any]:
         """
         Shard the data stream based on worker and distributed rank, ensuring each sample is processed only once.
         """
@@ -223,7 +222,7 @@ class IterableDatasetABC(IterableDataset, ABC):
             if idx % total_parts == part_id:
                 yield sample
 
-    def _skip_samples(self, stream: Iterable[Any]) -> Generator[Any, None, None]:
+    def _skip_samples(self, stream: Iterable[Any]) -> Generator[Any]:
         """
         Skip samples before resume_from_sample.
         """
@@ -234,7 +233,7 @@ class IterableDatasetABC(IterableDataset, ABC):
             if idx > self.config.resume_from_sample:
                 yield sample
 
-    def _shuffle_stream(self, stream: Iterable[Any]) -> Generator[Any, None, None]:
+    def _shuffle_stream(self, stream: Iterable[Any]) -> Generator[Any]:
         """
         Use fixed-size buffer for streaming shuffle.
         """
@@ -279,8 +278,7 @@ class IterableDatasetABC(IterableDataset, ABC):
             # do not pass self which may cause infinite recursion
             return ilen(self.__iter__())
 
-    def __iter__(self) -> Iterator[Any]:
-        # -> Generator[Any, None, None] only for >py39
+    def __iter__(self) -> Generator[Any]:
         # TODO: really consider how to handle multi-process/multi-node sharding
         # 1. Get the original stream
         stream = self.read_stream()

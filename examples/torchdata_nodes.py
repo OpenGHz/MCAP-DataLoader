@@ -25,6 +25,7 @@ if __name__ == "__main__":
     source_nodes = {}
     weights = {}
     for episode in dataset:
+        # episode = iter(episode)  # never use iterator here!
         source_nodes[episode.config.data_root] = nodes.IterableWrapper(episode)
         weights[episode.config.data_root] = 1.0
 
@@ -49,10 +50,10 @@ if __name__ == "__main__":
     node = nodes.Prefetcher(node, 10, 1000)
     # node = nodes.PinMemory(node, "cuda", 1000)
     # node = nodes.Unbatcher(node)
-    node = nodes.Loader(node, False)
+    loader = nodes.Loader(node, False)
 
     max_steps = 10
-    for idx, data in enumerate(node):
+    for idx, data in enumerate(loader):
         print(f"Step {idx}: \n {pformat(data)}")
         if idx + 1 >= max_steps:
             break

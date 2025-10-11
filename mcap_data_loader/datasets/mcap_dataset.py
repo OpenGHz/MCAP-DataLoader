@@ -1,5 +1,6 @@
 import os
-from typing import Any, Generator, Iterable, Iterator, List, Optional, Dict, Union
+from typing import Any, List, Optional, Dict, Union, Iterable
+from collections.abc import Generator
 from pydantic import field_validator
 from functools import cache
 import numpy as np
@@ -74,7 +75,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         """
         self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
 
-    def read_stream(self) -> Generator[Dict[str, Any], None, None]:
+    def read_stream(self) -> Generator[Dict[str, Any]]:
         """
         Read MCAP file and return message stream.
         """
@@ -93,7 +94,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         """Get the total number of messages in the MCAP file."""
         return len(self.reader) if self.reader else 0
 
-    def __iter__(self) -> Iterator[Dict[str, np.ndarray]]:
+    def __iter__(self) -> Generator[Dict[str, np.ndarray]]:
         return super().__iter__()
 
 
@@ -155,7 +156,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         self._file_cnt = file_cnt
         self._dataset_files = dataset_files
 
-    def read_stream(self) -> Generator[Iterable[dict[str, Any]], None, None]:
+    def read_stream(self) -> Generator[Iterable[dict[str, Any]]]:
         """
         Read MCAP files and return episodic message stream.
         Each episode corresponds to one MCAP file.
@@ -187,7 +188,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         else:
             return super().__len__()
 
-    def __iter__(self) -> Iterator[McapFlatBuffersSampleDataset]:
+    def __iter__(self) -> Generator[McapFlatBuffersSampleDataset]:
         return super().__iter__()
 
     def __getitem__(

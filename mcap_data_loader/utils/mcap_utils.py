@@ -2,18 +2,19 @@ from mcap.reader import make_reader
 from mcap.writer import Writer
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from turbojpeg import TurboJPEG
-from typing import Dict, IO, Set, Optional, Iterable, List, Generator, Any, final
+from typing import Dict, IO, Set, Optional, List, Any, final
+from collections.abc import Generator, Iterable
 from foxglove_schemas_flatbuffer import CompressedImage, RawImage, Time, get_schema
 from importlib.resources import read_binary
 from enum import Enum
 from functools import cache
+from mcap_data_loader.schemas.airbot_fbs import FloatArray
+from mcap_data_loader.utils.basic import zip
+from mcap_data_loader.utils.av_coder import AvCoder
 import os
 import json
 import numpy as np
 import flatbuffers
-from mcap_data_loader.schemas.airbot_fbs import FloatArray
-from mcap_data_loader.utils.basic import zip
-from mcap_data_loader.utils.av_coder import AvCoder
 
 
 class FlatBuffersSchemas(Enum):
@@ -301,7 +302,7 @@ class McapFlatBuffersReader:
 
     def iter_message_samples(
         self, topics: Optional[Iterable[str]] = None, reverse: bool = False
-    ) -> Generator[Dict[str, Any], None, None]:
+    ) -> Generator[Dict[str, Any]]:
         """Iterate over messages in the MCAP file."""
         # TODO: support iter through a reference topic
         # and inter other topics with start_time according
@@ -337,7 +338,7 @@ class McapFlatBuffersReader:
 
     def iter_attachment_samples(
         self, names: Optional[Iterable[str]] = None, reverse: bool = False
-    ) -> Generator[Dict[str, Any], None, None]:
+    ) -> Generator[Dict[str, Any]]:
         """Iterate over target attachments in the MCAP file."""
         assert not reverse, "Reverse iteration is not supported for attachments yet."
         if names is None:
@@ -391,7 +392,7 @@ class McapFlatBuffersReader:
         topics: Optional[Iterable[str]] = None,
         attachments: Optional[Iterable[str]] = None,
         reverse: bool = False,
-    ) -> Generator[Dict[str, np.ndarray], None, None]:
+    ) -> Generator[Dict[str, np.ndarray]]:
         """Iterate over messages and attachments in the MCAP file.
         Args:
             keys (Optional[Iterable[str]]): Specific keys to include in the samples.

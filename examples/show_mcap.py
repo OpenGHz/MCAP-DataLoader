@@ -1,16 +1,18 @@
 from mcap_data_loader.datasets.mcap_dataset import (
-    McapFlatBuffersSampleDataset,
-    McapDatasetConfig,
+    McapFlatBuffersEpisodeDataset,
+    McapFlatBuffersEpisodeDatasetConfig,
 )
 from pprint import pprint
 
 
 path = "data/example"
-dataset = McapFlatBuffersSampleDataset(
-    McapDatasetConfig(
+dataset = McapFlatBuffersEpisodeDataset(
+    McapFlatBuffersEpisodeDatasetConfig(
         data_root=path,
-        topics=[
-            "/follow/arm/pose/position",
+        keys=[
+            "/follow/arm/joint_state/position",
+            "/follow/eef/joint_state/position",
+            "/env_camera/color/image_raw",
         ],
     )
 )
@@ -21,5 +23,7 @@ dataset.load()
 #     # print(index)
 #     pass
 
-for index, sample in enumerate(dataset):
-    pprint(sample)
+for index, episode in enumerate(dataset):
+    for sample in episode:
+        pprint(sample)
+        break
