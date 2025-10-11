@@ -1,3 +1,9 @@
+"""
+Example of using `more_itertools.batched` to process data in batches.
+This is particularly useful for scenarios like training machine learning models
+where batch processing can improve efficiency.
+"""
+
 if __name__ == "__main__":
     import time
     from more_itertools import batched
@@ -13,7 +19,7 @@ if __name__ == "__main__":
     data_root = root_dir
     keys = [
         "/follow/arm/joint_state/position",
-        "follow/eef/joint_state/position",
+        "/follow/eef/joint_state/position",
     ]
 
     dataset = McapFlatBuffersEpisodeDataset(
@@ -27,6 +33,7 @@ if __name__ == "__main__":
         try:
             for step, batch in enumerate(batched(episode, batch_size, strict=True)):
                 print(f"{step=}", batch[0].keys())
+                assert len(batch) == batch_size
             else:
                 print(
                     f"Processed {len(episode)} samples in episode {episode.config.data_root}"

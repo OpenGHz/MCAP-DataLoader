@@ -1,3 +1,7 @@
+"""
+Get basic information about the dataset.
+"""
+
 if __name__ == "__main__":
     from mcap_data_loader.datasets.mcap_dataset import (
         McapFlatBuffersEpisodeDataset,

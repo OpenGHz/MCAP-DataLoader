@@ -1,6 +1,6 @@
 from typing import List, Union, Dict
-import time
 from enum import Enum
+import time
 import os
 import sys
 
