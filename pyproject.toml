@@ -19,7 +19,7 @@ dependencies = [
     "flatbuffers",
     "foxglove-schemas-flatbuffer",
     "mcap",
-    # "pymcap",
+    "pymcap",
     "flatten-dict",
     "av",
     "PyTurboJPEG",

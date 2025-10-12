@@ -1,5 +1,6 @@
 import os
-from typing import Any, List, Optional, Dict, Union, Iterable
+from typing import Any, List, Optional, Dict, Union
+from functools import cached_property
 from collections.abc import Generator
 from pydantic import field_validator
 from functools import cache
@@ -7,6 +8,7 @@ import numpy as np
 from mcap_data_loader.utils.mcap_utils import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
+    file_hash,
     # zip,
     # DictableSlicesType,
     # DictableIndexesType,
@@ -17,6 +19,9 @@ from mcap_data_loader.datasets.dataset import (
     DataRearrangeConfig,
     RearrangeType,
 )
+
+
+SampleType = Dict[str, np.ndarray]
 
 
 class McapDatasetConfig(IterableDatasetConfig):
@@ -94,8 +99,11 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         """Get the total number of messages in the MCAP file."""
         return len(self.reader) if self.reader else 0
 
-    def __iter__(self) -> Generator[Dict[str, np.ndarray]]:
+    def __iter__(self) -> Generator[SampleType]:
         return super().__iter__()
+
+
+EpisodeStreamElementType = Union[McapFlatBuffersSampleDataset, SampleType]
 
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
@@ -139,7 +147,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         )
         file_cnt = 0
         for root in self.config.data_root:
-            files = get_items_by_ext(root, ".mcap")
+            files = get_items_by_ext(root, ".mcap", True)
             DataRearrangeConfig.rearrange(
                 files, self.config.rearrange.episode, self._rng
             )
@@ -156,7 +164,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         self._file_cnt = file_cnt
         self._dataset_files = dataset_files
 
-    def read_stream(self) -> Generator[Iterable[dict[str, Any]]]:
+    def read_stream(self) -> Generator[EpisodeStreamElementType]:
         """
         Read MCAP files and return episodic message stream.
         Each episode corresponds to one MCAP file.
@@ -180,6 +188,17 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         """Get all dataset files corresponding to each dataset root."""
         return self._dataset_files
 
+    @cached_property
+    def all_file_hashs(self) -> Dict[str, List[str]]:
+        """Get the hash values of all dataset files corresponding to each dataset root."""
+        file_hashs = {}
+        for dataset, file_paths in self._dataset_files.items():
+            hashs = []
+            for file_path in file_paths:
+                hashs.append(file_hash(file_path))
+            file_hashs[dataset] = hashs
+        return file_hashs
+
     @cache
     def __len__(self) -> int:
         """Get the total number of episodes across all dataset roots."""
@@ -191,7 +210,5 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
     def __iter__(self) -> Generator[McapFlatBuffersSampleDataset]:
         return super().__iter__()
 
-    def __getitem__(
-        self, index
-    ) -> Union[Dict[str, np.ndarray], McapFlatBuffersSampleDataset]:
+    def __getitem__(self, index) -> EpisodeStreamElementType:
         return super().__getitem__(index)

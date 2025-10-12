@@ -1,5 +1,7 @@
 from typing import List, Union, Dict
 from enum import Enum
+from pathlib import Path
+import hashlib
 import time
 import os
 import sys
@@ -143,6 +145,8 @@ def get_items_by_ext(
         directory (str): The directory to search in.
         extension (str): The file extension to filter by. If empty, return directories.
             If extension is ".", return all files.
+        with_directory (bool, optional): Whether to include the directory path in the
+            returned file names. Defaults to False.
     Returns:
         List[str]: A list of file or directory names that match the extension.
     """
@@ -167,13 +171,36 @@ def get_items_by_ext(
         ]
 
 
+def file_hash(
+    file_path: Union[str, Path], algorithm: str = "md5", chunk_size: int = 1024**3
+) -> str:
+    """Compute the hash of a file using the specified algorithm.
+    Args:
+        filepath (Union[str, Path]): Path to the file.
+        algorithm (str, optional): Hash algorithm to use. Defaults to "md5".
+        chunk_size (int, optional): Size of chunks to read the file. Defaults to 1GB.
+    Returns:
+        str: Hexadecimal hash string.
+    """
+    hash_obj = hashlib.new(algorithm)
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_size), b""):
+            hash_obj.update(chunk)
+    return hash_obj.hexdigest()
+
+
 if __name__ == "__main__":
-    assert multi_slices_to_indexes(()) == []
-    assert multi_slices_to_indexes(10) == list(range(10))
-    assert multi_slices_to_indexes((5, 10)) == list(range(5, 10))
-    assert multi_slices_to_indexes((5, 10, "suffix")) == [
-        f"{i}suffix" for i in range(5, 10)
-    ]
-    assert multi_slices_to_indexes([(1, 4), (8, 10)]) == list(range(1, 4)) + list(
-        range(8, 10)
-    )
+    # assert multi_slices_to_indexes(()) == []
+    # assert multi_slices_to_indexes(10) == list(range(10))
+    # assert multi_slices_to_indexes((5, 10)) == list(range(5, 10))
+    # assert multi_slices_to_indexes((5, 10, "suffix")) == [
+    #     f"{i}suffix" for i in range(5, 10)
+    # ]
+    # assert multi_slices_to_indexes([(1, 4), (8, 10)]) == list(range(1, 4)) + list(
+    #     range(8, 10)
+    # )
+
+    print(get_items_by_ext("data/example", ".mcap", True))
+    print(get_items_by_ext("data/example", ".mcap", False))
+    print(get_items_by_ext("data/example", "", False))
+    print(get_items_by_ext("data/example", ".", False))

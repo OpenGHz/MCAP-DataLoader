@@ -2,7 +2,7 @@ from mcap.reader import make_reader
 from mcap.writer import Writer
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from turbojpeg import TurboJPEG
-from typing import Dict, IO, Set, Optional, List, Any, final
+from typing import Dict, IO, Set, Optional, List, Any, Union, final
 from collections.abc import Generator, Iterable
 from foxglove_schemas_flatbuffer import CompressedImage, RawImage, Time, get_schema
 from importlib.resources import read_binary
@@ -11,10 +11,13 @@ from functools import cache
 from mcap_data_loader.schemas.airbot_fbs import FloatArray
 from mcap_data_loader.utils.basic import zip
 from mcap_data_loader.utils.av_coder import AvCoder
+from pathlib import Path
+from pymcap import PyMCAP
 import os
 import json
 import numpy as np
 import flatbuffers
+import shutil
 
 
 class FlatBuffersSchemas(Enum):
@@ -51,18 +54,41 @@ class McapFlatBuffersWriter:
             },
         }
 
-    def set_writer(self, writer: Writer, start: bool = True):
+    def set_writer(self, writer: Writer, start: bool = False):
         """Set the MCAP writer for this instance."""
-        self._smapping.clear()
-        self._cmapping.clear()
-        self.builder.Clear()
+        if self._writer is not None:
+            raise ValueError("Writer is already set. Please unset it first.")
+
         self._writer = writer
         if start:
             writer.start()
 
-    def unset_writer(self):
+    def create_writer(
+        self,
+        file_path: Union[str, Path],
+        start: bool = True,
+        overwrite: bool = False,
+        make_dirs: bool = True,
+    ) -> Writer:
+        """Create and set a new MCAP writer (with default settings) for this instance."""
+        file_path = Path(file_path)
+        if file_path.suffix != ".mcap":
+            raise ValueError("File extension must be .mcap")
+        if file_path.exists() and not overwrite:
+            raise FileExistsError("File already exists and overwrite is not allowed.")
+        if make_dirs:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.set_writer(Writer(str(file_path)), start)
+        return self._writer
+
+    def unset_writer(self, finish: bool = False):
         """Unset the MCAP writer for this instance."""
+        if finish and self._writer is not None:
+            self._writer.finish()
         self._writer = None
+        self._smapping.clear()
+        self._cmapping.clear()
+        self.builder.Clear()
 
     def get_writer(self) -> Optional[Writer]:
         return self._writer
@@ -501,6 +527,17 @@ class McapFlatBuffersReader:
 
     def __del__(self):
         self.close()
+
+
+class McapCLI(PyMCAP):
+    """Class to interact with the MCAP command-line interface (CLI) tool."""
+
+    def _PyMCAP__get_executable(self):
+        executable_path = shutil.which("mcap")
+        if executable_path is None:
+            return super().__get_executable()
+        else:
+            return executable_path
 
 
 def h264_attachment_to_compressed_images(

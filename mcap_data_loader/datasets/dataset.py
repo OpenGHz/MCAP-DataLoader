@@ -250,7 +250,7 @@ class IterableDatasetABC(IterableDataset, ABC):
     def get_logger(self):
         return getLogger(self.__class__.__name__)
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> Any:
         """
         Get a specific sample by index.
         This is not efficient for large datasets, use with caution.
