@@ -108,13 +108,13 @@ def past_future(
         yield past, future
 
 
-class Iterablizer(Generic[T]):
+class Reusablizer(Generic[T]):
     # since the func return type is usually unknown when
     # passed to __init__, we don't annotate the return with T
     def __init__(self, func: Callable[..., Iterable]):
         self.gen_func = func
 
-    def __call__(self, *args, **kwds) -> "Iterablizer[T]":
+    def __call__(self, *args, **kwds) -> "Reusablizer[T]":
         self.args = args
         self.kwargs = kwds
         return self
@@ -155,6 +155,6 @@ if __name__ == "__main__":
     from itertools import pairwise
 
     iterable = (f"{i}" for i in range(10))
-    it_reusable = Iterablizer[str](pairwise)(iterable)
+    it_reusable = Reusablizer[str](pairwise)(iterable)
     for item in it_reusable:
         print(item)
