@@ -1,8 +1,8 @@
-from mcap_data_loader.utils.mcap_utils import (
+from mcap_data_loader.serialization.flb import (
     McapFlatBuffersWriter,
     FlatBuffersSchemas,
-    McapCLI,
 )
+from mcap_data_loader.utils.mcap_utils import McapCLI
 from time import time_ns
 
 

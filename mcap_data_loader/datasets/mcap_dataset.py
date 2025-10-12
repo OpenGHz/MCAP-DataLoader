@@ -5,7 +5,7 @@ from collections.abc import Generator
 from pydantic import field_validator
 from functools import cache
 import numpy as np
-from mcap_data_loader.utils.mcap_utils import McapFlatBuffersReader
+from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
     file_hash,
@@ -189,15 +189,15 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         return self._dataset_files
 
     @cached_property
-    def all_file_hashs(self) -> Dict[str, List[str]]:
+    def all_file_hashes(self) -> Dict[str, List[str]]:
         """Get the hash values of all dataset files corresponding to each dataset root."""
-        file_hashs = {}
+        file_hashes = {}
         for dataset, file_paths in self._dataset_files.items():
             hashs = []
             for file_path in file_paths:
                 hashs.append(file_hash(file_path))
-            file_hashs[dataset] = hashs
-        return file_hashs
+            file_hashes[dataset] = hashs
+        return file_hashes
 
     @cache
     def __len__(self) -> int:
