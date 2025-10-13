@@ -38,6 +38,10 @@ if __name__ == "__main__":
     )
 
     def process_sample(sample):
+        # NOTE: If modifying the sample in-place, the modified data
+        # may be re-passed to the function, the specific reason is not yet determined.
+        # Although this may result in duplicate modifications, it can improve performance
+        # if used judiciously.
         return np.concatenate(
             [
                 sample["/follow/arm/joint_state/position"],

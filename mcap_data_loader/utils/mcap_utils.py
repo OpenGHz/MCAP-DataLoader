@@ -4,6 +4,8 @@ from mcap.writer import Writer
 from mcap.reader import McapReader, make_reader
 from typing import Optional, List, Dict, Union, Literal, Any
 from pathlib import Path
+from time import time_ns
+from mcap_data_loader.utils.basic import StrEnum
 import shutil
 import uuid
 import json
@@ -66,12 +68,12 @@ class McapCLI(PyMCAP):
 DeriveMetadata = Dict[str, Union[Literal["self", "parents"], List[str]]]
 
 
-class McapDeriveMetadataHandler:
-    """Handler for MCAP derivation metadata."""
-
-    def __init__(self):
-        self.writer = None
-        self.reader = None
+class McapHandlerBasis:
+    def __init__(
+        self, writer: Optional[Writer] = None, reader: Optional[McapReader] = None
+    ):
+        self.writer = writer
+        self.reader = reader
 
     def set_writer(self, writer: Writer, replace: bool = False):
         """Set the MCAP writer."""
@@ -84,6 +86,10 @@ class McapDeriveMetadataHandler:
         if self.reader is not None and not replace:
             raise ValueError("Reader is already set. Use `replace=True` to replace it.")
         self.reader = reader
+
+
+class McapDeriveMetadataHandler(McapHandlerBasis):
+    """Handler for MCAP derivation metadata."""
 
     def write(
         self,
@@ -171,3 +177,26 @@ class McapDeriveMetadataHandler:
     @classmethod
     def get_logger(cls) -> logging.Logger:
         return logging.getLogger(cls.__name__)
+
+
+class MediaType(StrEnum):
+    TEXT_PLAIN = "text/plain"
+    TEXT_HTML = "text/html"
+    IMAGE_PNG = "image/png"
+    IMAGE_JPEG = "image/jpeg"
+    VIDEO_MP4 = "video/mp4"
+    APPLICATION_JSON = "application/json"
+    APPLICATION_OCTET_STREAM = "application/octet-stream"
+
+
+class McapTool(McapHandlerBasis):
+    """Utility class for MCAP file operations."""
+
+    def add_log_stamps_attachment(self, log_stamps: List[int]):
+        self.writer.add_attachment(
+            time_ns(),
+            time_ns(),
+            "log_stamps",
+            MediaType.APPLICATION_JSON,
+            json.dumps(log_stamps).encode("utf-8"),
+        )
