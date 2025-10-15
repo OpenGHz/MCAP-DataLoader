@@ -16,6 +16,7 @@ from logging import getLogger
 from mcap_data_loader.utils.basic import StrEnum, SlicesType, multi_slices_to_indexes
 from enum import auto
 from more_itertools import peekable, nth, ilen
+from pathlib import Path
 
 
 try:
@@ -162,7 +163,7 @@ class IterableDatasetConfig(BaseModel):
         - `transform` and `filter_fn` for sample-level transformation and filtering
     """
 
-    data_root: Union[str, List[str]]
+    data_root: Union[Path, List[Path]]
     shuffle_buffer_size: NonNegativeInt = 0
     seed: Optional[int] = None
     world_size: NonNegativeInt = 1

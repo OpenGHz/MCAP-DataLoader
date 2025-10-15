@@ -1,10 +1,11 @@
 import os
+import numpy as np
+from pathlib import Path
 from typing import Any, List, Optional, Dict, Union
 from functools import cached_property
 from collections.abc import Generator
 from pydantic import field_validator
 from functools import cache
-import numpy as np
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
@@ -34,14 +35,14 @@ class McapDatasetConfig(IterableDatasetConfig):
     attachments: Optional[List[str]] = []
 
     @field_validator("data_root")
-    def validate_data_root(cls, v) -> str:
-        if not isinstance(v, str):
+    def validate_data_root(cls, v) -> Path:
+        if not isinstance(v, Path):
             if len(v) == 1:
                 v = v[0]
             else:
-                raise ValueError(f"data_root {v} must be a string path to a MCAP file")
-        if not v.endswith(".mcap"):
-            raise ValueError(f"data_root {v} must be a `.mcap` file")
+                raise ValueError(f"data_root {v} must be a single path to a MCAP file")
+        if not v.is_file() or v.suffix != ".mcap":
+            raise ValueError(f"data_root {v} must be an existing `.mcap` file")
         return v
 
     def model_post_init(self, context):
@@ -114,13 +115,13 @@ class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
     flatten: bool = False
 
     @field_validator("data_root")
-    def validate_data_root(cls, v) -> List[str]:
-        if isinstance(v, str):
+    def validate_data_root(cls, v) -> List[Path]:
+        if isinstance(v, Path):
             v = [v]
         for directory in v:
-            if not os.path.isdir(directory):
+            if not directory.is_dir():
                 raise ValueError(
-                    f"data_root {os.path.abspath(directory)} must be a directory containing MCAP files"
+                    f"data_root {directory.absolute()} must be a directory containing MCAP files"
                 )
         return v
 
@@ -147,7 +148,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         )
         file_cnt = 0
         for root in self.config.data_root:
-            files = get_items_by_ext(root, ".mcap", True)
+            files = get_items_by_ext(root, ".mcap")
             DataRearrangeConfig.rearrange(
                 files, self.config.rearrange.episode, self._rng
             )
@@ -171,11 +172,11 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
         """
         cfg_dict = self.config.model_dump()
         cfg_dict.pop("data_root")
-        for dataset, file_paths in self._dataset_files.items():
+        for dataset_root, file_paths in self._dataset_files.items():
+            self.get_logger().debug("Reading dataset root: %s", dataset_root)
             for file_path in file_paths:
-                full_path = os.path.join(dataset, file_path)
                 sample_ds = McapFlatBuffersSampleDataset(
-                    McapDatasetConfig(data_root=full_path, **cfg_dict)
+                    McapDatasetConfig(data_root=file_path, **cfg_dict)
                 )
                 sample_ds.load()
                 if self.config.flatten:

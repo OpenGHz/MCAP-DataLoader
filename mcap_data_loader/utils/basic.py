@@ -137,9 +137,7 @@ def multi_slices_to_indexes(slices: SlicesType) -> List[int]:
     return slices
 
 
-def get_items_by_ext(
-    directory: str, extension: str, with_directory: bool = False
-) -> List[str]:
+def get_items_by_ext(directory: Union[str, Path], extension: str) -> List[Path]:
     """Get all files or directories in a directory with a specific extension (suffix).
     Args:
         directory (str): The directory to search in.
@@ -150,24 +148,21 @@ def get_items_by_ext(
     Returns:
         List[str]: A list of file or directory names that match the extension.
     """
-    if not os.path.exists(directory):
+    directory = Path(directory)
+    if not directory.is_dir():
+        raise ValueError(f"{directory} is not a directory")
+    if not directory.exists():
         return []
-    entries = os.scandir(directory)
-    if with_directory:
-        prefix = directory.removesuffix("/") + "/"
-    else:
-        prefix = ""
+    entries = directory.iterdir()
     if extension == ".":
-        return [prefix + entry.name for entry in entries if entry.is_file()]
+        return [entry for entry in entries if entry.is_file()]
     elif not extension:
-        return [entry.name for entry in entries if entry.is_dir()]
+        return [entry for entry in entries if entry.is_dir()]
     else:
-        if not extension.startswith("."):
-            extension = "." + extension
         return [
-            prefix + entry.name
+            entry
             for entry in entries
-            if entry.name.endswith(extension) and entry.is_file()
+            if entry.is_file() and entry.suffix.endswith(extension)
         ]
 
 
@@ -200,7 +195,6 @@ if __name__ == "__main__":
     #     range(8, 10)
     # )
 
-    print(get_items_by_ext("data/example", ".mcap", True))
-    print(get_items_by_ext("data/example", ".mcap", False))
-    print(get_items_by_ext("data/example", "", False))
-    print(get_items_by_ext("data/example", ".", False))
+    print(get_items_by_ext("data/example", ".mcap"))
+    print(get_items_by_ext("data/example", ""))
+    print(get_items_by_ext("data/example", "."))
