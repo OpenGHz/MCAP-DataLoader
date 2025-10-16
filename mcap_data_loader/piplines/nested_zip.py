@@ -1,22 +1,21 @@
 from pydantic import BaseModel
-from mcap_data_loader.utils.basic import NonIteratorIterable
-from typing import List, Tuple
+from typing import Tuple
 from collections.abc import Generator
+from mcap_data_loader.piplines.basis import Pipeline, T
 
 
 class NestedZipConfig(BaseModel):
     depth: int = 1
-    iterables: List[NonIteratorIterable]
 
 
-class NestedZip:
+class NestedZip(Pipeline[Tuple[T, ...]]):
     def __init__(self, config: NestedZipConfig):
         self.config = config
 
-    def __iter__(self) -> Generator[Tuple]:
-        yield from self._recursive_iter(self.config.iterables, self.config.depth)
+    def __iter__(self) -> Generator[Tuple[T, ...]]:
+        yield from self._recursive_iter(self._iterables, self.config.depth)
 
-    def _recursive_iter(self, iterables, level) -> Generator[Tuple]:
+    def _recursive_iter(self, iterables, level) -> Generator[Tuple[T, ...]]:
         if level > 0:
             # print(level, next(iter(iterables)))
             for items in zip(*iterables):
@@ -48,12 +47,7 @@ if __name__ == "__main__":
 
     for depth, expected in expected_results.items():
         print(f"Depth: {depth}.")
-        nested = NestedZip(
-            NestedZipConfig(
-                depth=depth,
-                iterables=iterables,
-            )
-        )
+        nested = NestedZip(NestedZipConfig(depth=depth)).wrap(iterables)
         for i, item in enumerate(nested):
             pprint(item)
             assert item == expected[i], (

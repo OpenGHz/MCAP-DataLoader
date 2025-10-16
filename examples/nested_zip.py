@@ -22,23 +22,18 @@ if __name__ == "__main__":
         ),
     )
     depth = 2
-    nested = NestedZip(
-        NestedZipConfig(
-            depth=depth,
-            iterables=datasets,
-        )
-    )
-    for samples in nested:
-        pprint(samples)
-        assert len(samples) == len(datasets)
+    nested = NestedZip(NestedZipConfig(depth=depth)).wrap(datasets)
+    for items in nested:
+        pprint(items)
+        assert len(items) == len(datasets)
         if depth == 0:
-            assert isinstance(samples[0], McapFlatBuffersEpisodeDataset)
+            assert isinstance(items[0], McapFlatBuffersEpisodeDataset)
         elif depth == 1:
-            assert isinstance(samples[0], McapFlatBuffersSampleDataset)
+            assert isinstance(items[0], McapFlatBuffersSampleDataset)
         elif depth == 2:
-            assert isinstance(samples[0], dict)
+            assert isinstance(items[0], dict)
         elif depth == 3:
-            assert isinstance(samples[0], str)
+            assert isinstance(items[0], str)
         else:
             raise ValueError(f"Unsupported depth {depth}.")
         break

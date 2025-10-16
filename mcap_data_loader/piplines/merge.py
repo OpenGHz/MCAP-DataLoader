@@ -1,20 +1,15 @@
 from pydantic import BaseModel
-from typing import List, TypeVar, Generic
 from collections.abc import Mapping, Generator
 from collections import ChainMap
-from mcap_data_loader.utils.basic import NonIteratorIterable
+from mcap_data_loader.piplines.basis import Pipeline, T
 
 
-T = TypeVar("T")
-
-
-class MergeConfig(BaseModel, Generic[T]):
-    iterables: List[NonIteratorIterable[T]]
+class MergeConfig(BaseModel):
     method: str = "auto"
 
 
-class Merge(Generic[T]):
-    def __init__(self, config: MergeConfig[T]) -> None:
+class Merge(Pipeline[T]):
+    def __init__(self, config: MergeConfig) -> None:
         self.config = config
         self._methods = {
             "ChainMap": lambda items: ChainMap(*items),
@@ -37,7 +32,7 @@ class Merge(Generic[T]):
 
     def __iter__(self) -> Generator[T]:
         if self.config.method == "auto":
-            first = next(zip(*self.config.iterables))
+            first = next(zip(*self._iterables))
             item_type = type(first[0])
             if not all(isinstance(item, item_type) for item in first):
                 raise ValueError(
@@ -57,7 +52,7 @@ class Merge(Generic[T]):
                 f"Unsupported merge method {self.config.method}. "
                 f"Supported methods are: {list(self._methods.keys())}."
             )
-        for items in zip(*self.config.iterables):
+        for items in zip(*self._iterables):
             yield self._methods[self.config.method](items)
 
 
@@ -69,17 +64,15 @@ if __name__ == "__main__":
         print("Generating...")
         yield {"b": 2}
 
-    merger = Merge(
-        MergeConfig(
-            iterables=[
-                # gen(),
-                [{"a": 1}, {"b": 2}],
-                [{"c": 3}, {"d": 4}],
-                # [(1, 2), (3, 4)],
-                # [(5, 6), (7, 8)],
-            ]
-        )
-    )
+    iterables = [
+        # gen(),
+        [{"a": 1}, {"b": 2}],
+        [{"c": 3}, {"d": 4}],
+        # [(1, 2), (3, 4)],
+        # [(5, 6), (7, 8)],
+    ]
+
+    merger = Merge(MergeConfig()).wrap(iterables)
     for item in merger:
         print(item)
     print("------------------------------")
