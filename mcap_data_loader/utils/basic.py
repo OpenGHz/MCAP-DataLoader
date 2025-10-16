@@ -1,10 +1,29 @@
-from typing import List, Union, Dict
+from typing import List, Union, Dict, TypeVar
 from enum import Enum
 from pathlib import Path
+from collections.abc import Iterable, Iterator
+from typing_extensions import Annotated
+from pydantic import PlainValidator
 import hashlib
 import time
-import os
 import sys
+
+
+T = TypeVar("T")
+
+
+def validate_iterable_not_iterator(value: Iterable) -> Iterable:
+    if not isinstance(value, Iterable):
+        raise ValueError("Value must be an Iterable")
+    if isinstance(value, Iterator):
+        raise ValueError("Value must not be an Iterator")
+    return value
+
+
+NonIteratorIterable = Annotated[
+    Iterable[T],
+    PlainValidator(validate_iterable_not_iterator),
+]
 
 
 SlicesType = Union[List[tuple], tuple, int]

@@ -1,0 +1,44 @@
+if __name__ == "__main__":
+    from mcap_data_loader.piplines import NestedZipConfig, NestedZip
+    from mcap_data_loader.datasets.mcap_dataset import (
+        McapFlatBuffersEpisodeDataset,
+        McapFlatBuffersEpisodeDatasetConfig,
+        McapFlatBuffersSampleDataset,
+    )
+    from pprint import pprint
+
+    root_dir = "data/example"
+    data_root = root_dir
+    keys = [
+        "/follow/arm/joint_state/position",
+        "/follow/eef/joint_state/position",
+    ]
+    datasets = (
+        McapFlatBuffersEpisodeDataset(
+            McapFlatBuffersEpisodeDatasetConfig(data_root=data_root, keys=keys[:1])
+        ),
+        McapFlatBuffersEpisodeDataset(
+            McapFlatBuffersEpisodeDatasetConfig(data_root=data_root, keys=keys[1:])
+        ),
+    )
+    depth = 2
+    nested = NestedZip(
+        NestedZipConfig(
+            depth=depth,
+            iterables=datasets,
+        )
+    )
+    for samples in nested:
+        pprint(samples)
+        assert len(samples) == len(datasets)
+        if depth == 0:
+            assert isinstance(samples[0], McapFlatBuffersEpisodeDataset)
+        elif depth == 1:
+            assert isinstance(samples[0], McapFlatBuffersSampleDataset)
+        elif depth == 2:
+            assert isinstance(samples[0], dict)
+        elif depth == 3:
+            assert isinstance(samples[0], str)
+        else:
+            raise ValueError(f"Unsupported depth {depth}.")
+        break
