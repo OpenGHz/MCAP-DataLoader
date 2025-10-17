@@ -22,7 +22,7 @@ if __name__ == "__main__":
         ),
     )
     depth = 2
-    nested = NestedZip(NestedZipConfig(depth=depth)).wrap(datasets)
+    nested = NestedZip(NestedZipConfig(depth=depth))(datasets)
     for items in nested:
         pprint(items)
         assert len(items) == len(datasets)

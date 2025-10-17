@@ -14,7 +14,7 @@ class Pipeline(ABC, Generic[T]):
 
     @final
     @validate_call
-    def wrap(self, iterables: List[NonIteratorIterable]) -> Self:
+    def __call__(self, iterables: List[NonIteratorIterable]) -> Self:
         self._iterables = iterables
         return self
 

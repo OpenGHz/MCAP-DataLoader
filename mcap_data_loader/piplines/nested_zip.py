@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
     for depth, expected in expected_results.items():
         print(f"Depth: {depth}.")
-        nested = NestedZip(NestedZipConfig(depth=depth)).wrap(iterables)
+        nested = NestedZip(NestedZipConfig(depth=depth))(iterables)
         for i, item in enumerate(nested):
             pprint(item)
             assert item == expected[i], (

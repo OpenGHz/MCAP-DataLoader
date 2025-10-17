@@ -72,7 +72,7 @@ if __name__ == "__main__":
         # [(5, 6), (7, 8)],
     ]
 
-    merger = Merge(MergeConfig()).wrap(iterables)
+    merger = Merge(MergeConfig())(iterables)
     for item in merger:
         print(item)
     print("------------------------------")

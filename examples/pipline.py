@@ -20,9 +20,9 @@ if __name__ == "__main__":
             McapFlatBuffersEpisodeDatasetConfig(data_root=data_root, keys=keys[1:])
         ),
     )
-    nested = NestedZip(NestedZipConfig(depth=1)).wrap(datasets)
+    nested = NestedZip(NestedZipConfig(depth=1))(datasets)
     for episodes in nested:
-        merged = Merge[dict](MergeConfig(method="auto")).wrap(episodes)
+        merged = Merge[dict](MergeConfig(method="auto"))(episodes)
         for sample in merged:
             pprint(sample)
             assert set(sample.keys()) == set(keys)
