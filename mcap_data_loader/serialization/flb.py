@@ -15,6 +15,7 @@ from pathlib import Path
 import json
 import numpy as np
 import flatbuffers
+import logging
 
 
 class FlatBuffersSchemas(Enum):
@@ -72,7 +73,9 @@ class McapFlatBuffersWriter:
         if file_path.suffix != ".mcap":
             raise ValueError("File extension must be .mcap")
         if file_path.exists() and not overwrite:
-            raise FileExistsError("File already exists and overwrite is not allowed.")
+            raise FileExistsError(
+                f"File {file_path} already exists and overwrite is not allowed."
+            )
         if make_dirs:
             file_path.parent.mkdir(parents=True, exist_ok=True)
         self.set_writer(Writer(str(file_path)), start)
@@ -415,6 +418,7 @@ class McapFlatBuffersReader:
         topics: Optional[Iterable[str]] = None,
         attachments: Optional[Iterable[str]] = None,
         reverse: bool = False,
+        strict: bool = True,
     ) -> Generator[Dict[str, np.ndarray]]:
         """Iterate over messages and attachments in the MCAP file.
         Args:
@@ -425,6 +429,8 @@ class McapFlatBuffersReader:
                 If None, will include all topics.
             attachments (Optional[Iterable[str]]): Specific attachments to include in the samples.
                 If None, will include all attachments.
+            reverse (bool): Whether to iterate in reverse order.
+            strict (bool): Whether to enforce strict length matching between topic and attachment iterators.
         Returns:
             Generator[Dict[str, Any]]: A generator yielding dictionaries containing message and attachment data.
         Raises:
@@ -466,11 +472,17 @@ class McapFlatBuffersReader:
             if attachments
             else empty_iter()
         )
-        for msg_data, att_data in zip(topic_iter, attachment_iter):
-            data = {}
-            data.update(msg_data)
-            data.update(att_data)
-            yield data
+        try:
+            for msg_data, att_data in zip(topic_iter, attachment_iter):
+                data = {}
+                data.update(msg_data)
+                data.update(att_data)
+                yield data
+        except ValueError as e:
+            error = "Topic and attachment iterators have different lengths"
+            if strict:
+                raise ValueError(error) from e
+            self.get_logger().warning(error)
 
     def topic_message_counts(self) -> Dict[str, int]:
         """Get the message count for each topic in the MCAP file."""
@@ -507,6 +519,10 @@ class McapFlatBuffersReader:
         """Close the MCAP file."""
         if not self.file_io.closed:
             self.file_io.close()
+
+    @classmethod
+    def get_logger(cls) -> logging.Logger:
+        return logging.getLogger(cls.__name__)
 
     @cache
     def __len__(self) -> int:

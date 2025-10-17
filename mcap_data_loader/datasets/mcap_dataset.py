@@ -33,6 +33,7 @@ class McapDatasetConfig(IterableDatasetConfig):
     keys: List[str] = []
     topics: Optional[List[str]] = []
     attachments: Optional[List[str]] = []
+    strict: bool = True
 
     @field_validator("data_root")
     def validate_data_root(cls, v) -> Path:
@@ -86,10 +87,11 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         Read MCAP file and return message stream.
         """
         yield from self.reader.iter_samples(
-            keys=self.config.keys,
-            topics=self.config.topics,
-            attachments=self.config.attachments,
-            reverse=self.config.rearrange.episode == RearrangeType.REVERSE,
+            self.config.keys,
+            self.config.topics,
+            self.config.attachments,
+            self.config.rearrange.episode == RearrangeType.REVERSE,
+            self.config.strict,
         )
 
     def __del__(self):

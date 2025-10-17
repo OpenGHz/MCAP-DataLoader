@@ -19,7 +19,4 @@ mcap_cli = McapCLI("INFO")
 assert not mcap_cli.is_mcap_corrupted(file_path)
 # Show the file info
 output = mcap_cli.run_command(f"info {file_path}")
-if output.success:
-    print(output.stdout)
-else:
-    mcap_cli.logger.error(output.stderr)
+print(mcap_cli.check_cmd_output(output))

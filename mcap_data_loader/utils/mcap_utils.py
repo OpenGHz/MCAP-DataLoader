@@ -63,6 +63,7 @@ class McapCLI(PyMCAP):
             raise RuntimeError(
                 f"MCAP command failed with error: {output.stderr.strip()}"
             )
+        return output.stdout.strip()
 
 
 DeriveMetadata = Dict[str, Union[Literal["self", "parents"], List[str]]]
