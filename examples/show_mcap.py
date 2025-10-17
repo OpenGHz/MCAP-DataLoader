@@ -14,6 +14,7 @@ dataset = McapFlatBuffersEpisodeDataset(
             "/follow/eef/joint_state/position",
             "/env_camera/color/image_raw",
         ],
+        strict=False,
     )
 )
 dataset.load()
@@ -24,6 +25,8 @@ dataset.load()
 #     pass
 
 for index, episode in enumerate(dataset):
+    pprint(f"{episode.config.data_root}: {len(episode)} samples")
     for sample in episode:
-        pprint(sample)
-        break
+        # pprint(sample)
+        # break
+        pass
