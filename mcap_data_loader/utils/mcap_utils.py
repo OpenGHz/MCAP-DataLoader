@@ -66,7 +66,7 @@ class McapCLI(PyMCAP):
         return output.stdout.strip()
 
 
-DeriveMetadata = Dict[str, Union[Literal["self", "parents"], List[str]]]
+DeriveMetadata = Dict[Literal["self", "parents"], Dict[str, Any]]
 
 
 class McapHandlerBasis:
@@ -95,6 +95,7 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
     def write(
         self,
         self_uuid: str = "",
+        config: Optional[Dict[str, Any]] = None,
         parent_derive_info: Optional[Dict[str, Dict[str, Any]]] = None,
         parent_file_paths: Optional[List[str]] = None,
     ):
@@ -109,6 +110,7 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
             ValueError: If the writer is not set or if the parent file's derive info is
                         missing or does not match the given info.
         """
+        self.derive_config = config or {}
         self.parent_derive_info = parent_derive_info or {}
         self.parent_file_paths = parent_file_paths or self.parent_derive_info.keys()
         parent_uuids = []
@@ -133,7 +135,7 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
                 parent_info = given_info
                 write_parent = True
 
-            parent_uuid = parent_info.get("self", "")
+            parent_uuid = parent_info.get("self", {}).get("uuid", "")
             if not parent_uuid:
                 raise ValueError(
                     f"Parent file {parent_file_path} does not have a valid 'self' UUID."
@@ -144,12 +146,21 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
                 )
                 McapCLI().add_metadata(parent_file_path, "derive", parent_info)
             parent_uuids.append(parent_uuid)
-        self.writer.add_metadata(
+
+        self.writer.add_attachment(
+            time_ns(),
+            time_ns(),
             "derive",
-            {
-                "self": self_uuid or uuid.uuid1().hex,
-                "parents": json.dumps(parent_uuids),
-            },
+            MediaType.APPLICATION_JSON,
+            json.dumps(
+                {
+                    "self": {
+                        "uuid": self_uuid or uuid.uuid1().hex,
+                        "config": self.derive_config,
+                    },
+                    "parents": parent_uuids,
+                }
+            ),
         )
 
     @staticmethod
@@ -159,15 +170,15 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
             dict: A dictionary containing 'self' and 'parents' UUIDs.
         """
         derive = {}
-        for meta in reader.iter_metadata():
-            if meta.name == "derive":
-                derive["self"] = meta.metadata["self"]
-                derive["parents"] = json.loads(meta.metadata.get("parents", "[]"))
+        for data in reader.iter_attachments():
+            if data.name == "derive":
+                return json.loads(data.data)
         return derive
 
     def read(self) -> DeriveMetadata:
         if self.reader is None:
             raise ValueError("Reader is not initialized.")
+        return self._read(self.reader)
 
     def finish(self):
         """Finish writing or close reading the MCAP file."""
