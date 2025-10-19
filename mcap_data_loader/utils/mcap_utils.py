@@ -95,7 +95,7 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
     def write(
         self,
         self_uuid: str = "",
-        config: Optional[Dict[str, Any]] = None,
+        configs: Optional[List[Dict[str, Any]]] = None,
         parent_derive_info: Optional[Dict[str, Dict[str, Any]]] = None,
         parent_file_paths: Optional[List[str]] = None,
     ):
@@ -110,7 +110,7 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
             ValueError: If the writer is not set or if the parent file's derive info is
                         missing or does not match the given info.
         """
-        self.derive_config = config or {}
+        self.derive_configs = configs or []
         self.parent_derive_info = parent_derive_info or {}
         self.parent_file_paths = parent_file_paths or self.parent_derive_info.keys()
         parent_uuids = []
@@ -156,7 +156,7 @@ class McapDeriveMetadataHandler(McapHandlerBasis):
                 {
                     "self": {
                         "uuid": self_uuid or uuid.uuid1().hex,
-                        "config": self.derive_config,
+                        "configs": self.derive_configs,
                     },
                     "parents": parent_uuids,
                 }

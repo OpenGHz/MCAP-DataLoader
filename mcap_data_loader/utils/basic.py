@@ -203,6 +203,14 @@ def file_hash(
     return hash_obj.hexdigest()
 
 
+def get_fully_qualified_class_name(obj_or_cls):
+    if isinstance(obj_or_cls, type):
+        cls = obj_or_cls
+    else:
+        cls = type(obj_or_cls)
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
