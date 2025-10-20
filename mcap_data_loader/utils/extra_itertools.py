@@ -1,24 +1,47 @@
-from itertools import chain, islice
+from itertools import chain, islice, tee
+from more_itertools import consume
 from collections import deque
-from collections.abc import Iterator
-from typing import Any, Iterable, Callable, TypeVar, Generic
-from typing_extensions import Self
+from collections.abc import Iterator, Generator
+from typing import Any, Iterable, Callable, TypeVar, Generic, Tuple
 
 
 T = TypeVar("T")
 
 
+def epairwise(
+    iterable: Iterable[T],
+    gap: int = 0,
+    fillvalue: Any = ...,
+    fill_with_last: bool = False,
+) -> Generator[Tuple[T, T]]:
+    a, b = tee(iterable)
+    consume(b, gap + 1)
+    if not fill_with_last:
+        if fillvalue is ...:
+            return zip(a, b)
+        return zip(a, chain(b, (fillvalue,) * (gap + 1)))
+
+    def fill_last_gen(it: Iterable[T]) -> Generator[T]:
+        for item in it:
+            yield item
+        while True:
+            yield item
+
+    return zip(a, fill_last_gen(b))
+
+
 def ewindowed(
-    seq: Iterable,
+    seq: Iterable[T],
     n: int,
     fillvalue: Any = None,
     step: int = 1,
     fill_with_last: bool = False,
-):
+) -> Generator[Tuple[T, ...]]:
     """Enhanced version of `more_itertools.windowed`: When `fill_with_last`
     is True, starting from the first element equal to `fillvalue`, it and
     all elements to its right are replaced with the left element of that element
     """
+    # TODO: optimize (ref to epairwise)
     if n < 0:
         raise ValueError("n must be >= 0")
     if n == 0:
@@ -152,9 +175,17 @@ if __name__ == "__main__":
     #     print(f"step: {cnt}/{max_steps}")
     #     start = time.perf_counter()
 
-    from itertools import pairwise
+    # from itertools import pairwise
 
-    iterable = (f"{i}" for i in range(10))
-    it_reusable = Reusablizer[str](pairwise)(iterable)
-    for item in it_reusable:
-        print(item)
+    # iterable = (f"{i}" for i in range(10))
+    # it_reusable = Reusablizer[str](pairwise)(iterable)
+    # for item in it_reusable:
+    #     print(item)
+
+    iterable = range(10)
+    for a, b in epairwise(iterable, 2, fill_with_last=True):
+        print(f"{a=}, {b=}")
+    for a, b in epairwise(iterable, 2, fill_with_last=False):
+        print(f"{a=}, {b=}")
+    for a, b in epairwise(iterable, 2, None):
+        print(f"{a=}, {b=}")
