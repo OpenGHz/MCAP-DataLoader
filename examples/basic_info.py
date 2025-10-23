@@ -14,6 +14,7 @@ if __name__ == "__main__":
             keys=["/follow/arm/joint_state/position", "log_stamps"],
         )
     )
+    dataset.load()
     print(f"All files: {dataset.all_files}")
     print(f"Dataset length: {len(dataset)}")
     for episode in dataset:

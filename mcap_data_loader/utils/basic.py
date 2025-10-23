@@ -1,8 +1,8 @@
-from typing import List, Union, Dict, TypeVar
+from typing import List, Union, Dict, TypeVar, Generic
+from typing_extensions import Annotated, TypedDict
 from enum import Enum
 from pathlib import Path
 from collections.abc import Iterable, Iterator
-from typing_extensions import Annotated
 from pydantic import PlainValidator
 import hashlib
 import time
@@ -29,6 +29,14 @@ NonIteratorIterable = Annotated[
 SlicesType = Union[List[tuple], tuple, int]
 DictableSlicesType = Union[Dict[str, SlicesType], SlicesType]
 DictableIndexesType = Union[Dict[str, List[int]], List[int]]
+
+
+class DataStamped(TypedDict, Generic[T]):
+    t: int
+    data: T
+
+
+DictDataStamped = Dict[str, DataStamped[T]]
 
 
 if sys.version_info >= (3, 10):

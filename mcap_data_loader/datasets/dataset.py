@@ -5,7 +5,6 @@ from typing import (
     Iterable,
     List,
     Optional,
-    Dict,
     Union,
 )
 from collections.abc import Generator
@@ -13,7 +12,12 @@ from pydantic import BaseModel, NonNegativeInt, computed_field
 from abc import ABC, abstractmethod
 from functools import cached_property, cache
 from logging import getLogger
-from mcap_data_loader.utils.basic import StrEnum, SlicesType, multi_slices_to_indexes
+from mcap_data_loader.utils.basic import (
+    StrEnum,
+    multi_slices_to_indexes,
+    DictableSlicesType,
+    DictableIndexesType,
+)
 from enum import auto
 from more_itertools import peekable, nth, ilen
 from pathlib import Path
@@ -32,9 +36,6 @@ except ImportError as e:
         "torch.utils.data is not available, some features may not work. "
         "Please install PyTorch to use these features."
     )
-
-DictableSlicesType = Union[Dict[str, SlicesType], SlicesType]
-DictableIndexesType = Union[Dict[str, List[int]], List[int]]
 
 
 class RearrangeType(StrEnum):

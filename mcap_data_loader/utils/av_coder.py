@@ -9,6 +9,7 @@ from turbojpeg import TurboJPEG
 from logging import getLogger
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
+from mcap_data_loader.utils.basic import DataStamped
 
 
 class AvCoder:
@@ -295,7 +296,7 @@ class AvCoder:
         mismatch_tolerance: int = 0,
         ensure_base_stamp: bool = False,
         target_time_base: int = int(1e9),
-    ) -> Generator[Union[tuple[np.ndarray, int], np.ndarray]]:
+    ) -> Generator[Union[DataStamped[np.ndarray], np.ndarray]]:
         """
         Generator to decode frames from a video file. This method yields frames one by one.
         Args:
@@ -322,7 +323,7 @@ class AvCoder:
             np_frame = frame.to_ndarray(format=frame_format)
             if target_time_base:
                 abs_stamp = (base_stamp + frame.pts) * time_factor
-                yield np_frame, abs_stamp
+                yield {"data": np_frame, "t": abs_stamp}
             else:
                 yield np_frame
         mismatch = frame_cnt - cnt
@@ -333,7 +334,7 @@ class AvCoder:
                 )
                 for _ in range(mismatch):
                     if target_time_base:
-                        yield np_frame, abs_stamp
+                        yield {"data": np_frame, "t": abs_stamp}
                     else:
                         yield np_frame
             else:

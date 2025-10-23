@@ -1,7 +1,6 @@
-import os
 import numpy as np
 from pathlib import Path
-from typing import Any, List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union
 from functools import cached_property
 from collections.abc import Generator
 from pydantic import field_validator
@@ -10,6 +9,7 @@ from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
     file_hash,
+    DictDataStamped,
     # zip,
     # DictableSlicesType,
     # DictableIndexesType,
@@ -23,6 +23,8 @@ from mcap_data_loader.datasets.dataset import (
 
 
 SampleType = Dict[str, np.ndarray]
+SampleStamped = DictDataStamped[np.ndarray]
+SampleUnion = Union[SampleType, SampleStamped]
 
 
 class McapDatasetConfig(IterableDatasetConfig):
@@ -33,6 +35,7 @@ class McapDatasetConfig(IterableDatasetConfig):
     keys: List[str] = []
     topics: Optional[List[str]] = []
     attachments: Optional[List[str]] = []
+    with_timestamp: bool = True
     strict: bool = True
 
     @field_validator("data_root")
@@ -82,17 +85,22 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         """
         self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
 
-    def read_stream(self) -> Generator[Dict[str, Any]]:
+    def read_stream(self) -> Generator[SampleUnion]:
         """
         Read MCAP file and return message stream.
         """
-        yield from self.reader.iter_samples(
+        samples_iter = self.reader.iter_samples(
             self.config.keys,
             self.config.topics,
             self.config.attachments,
             self.config.rearrange.episode == RearrangeType.REVERSE,
             self.config.strict,
         )
+        if self.config.with_timestamp:
+            yield from samples_iter
+        else:
+            for sample in samples_iter:
+                yield {key: value["data"] for key, value in sample.items()}
 
     def __del__(self):
         if self.reader:
@@ -106,7 +114,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         return super().__iter__()
 
 
-EpisodeStreamElementType = Union[McapFlatBuffersSampleDataset, SampleType]
+EpisodeStreamElementType = Union[McapFlatBuffersSampleDataset, SampleUnion]
 
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):

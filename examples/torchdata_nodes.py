@@ -44,8 +44,8 @@ if __name__ == "__main__":
         # if used judiciously.
         return np.concatenate(
             [
-                sample["/follow/arm/joint_state/position"],
-                sample["/follow/eef/joint_state/position"],
+                sample["/follow/arm/joint_state/position"]["data"],
+                sample["/follow/eef/joint_state/position"]["data"],
             ]
         )
 
