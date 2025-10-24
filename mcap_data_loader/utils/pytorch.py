@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 
+
 numpy_to_torch_dtype_dict = {
     np.bool: torch.bool,
     np.uint8: torch.uint8,
@@ -14,3 +15,5 @@ numpy_to_torch_dtype_dict = {
     np.complex64: torch.complex64,
     np.complex128: torch.complex128,
 }
+
+torch_to_numpy_dtype_dict = {v: k for k, v in numpy_to_torch_dtype_dict.items()}
