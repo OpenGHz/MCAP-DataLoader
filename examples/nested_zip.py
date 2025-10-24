@@ -1,5 +1,5 @@
 if __name__ == "__main__":
-    from mcap_data_loader.piplines import NestedZipConfig, NestedZip
+    from mcap_data_loader.pipelines import NestedZipConfig, NestedZip
     from mcap_data_loader.datasets.mcap_dataset import (
         McapFlatBuffersEpisodeDataset,
         McapFlatBuffersEpisodeDatasetConfig,

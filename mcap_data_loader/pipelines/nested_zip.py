@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Tuple
 from collections.abc import Generator
-from mcap_data_loader.piplines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
 class NestedZipConfig(BaseModel):

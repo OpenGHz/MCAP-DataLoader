@@ -1,12 +1,5 @@
 import random
-from typing import (
-    Any,
-    Callable,
-    Iterable,
-    List,
-    Optional,
-    Union,
-)
+from typing import Any, Callable, Iterable, List, Optional, Union, Generic, TypeVar
 from collections.abc import Generator
 from pydantic import BaseModel, NonNegativeInt, computed_field
 from abc import ABC, abstractmethod
@@ -36,6 +29,9 @@ except ImportError as e:
         "torch.utils.data is not available, some features may not work. "
         "Please install PyTorch to use these features."
     )
+
+
+T = TypeVar("T")
 
 
 class RearrangeType(StrEnum):
@@ -177,7 +173,7 @@ class IterableDatasetConfig(BaseModel):
     cache: bool = False
 
 
-class IterableDatasetABC(IterableDataset, ABC):
+class IterableDatasetABC(IterableDataset, ABC, Generic[T]):
     """
     Generic iterable dataset template.
     Subclasses only need to implement `_read_stream()` to generate samples.
@@ -196,7 +192,7 @@ class IterableDatasetABC(IterableDataset, ABC):
             self._indexed_stream = peekable(self.read_stream())
 
     @abstractmethod
-    def read_stream(self) -> Iterable[Any]:
+    def read_stream(self) -> Iterable[T]:
         """
         Returns an **iterable object**, each element is a stream item.
         Subclasses read files, databases, network streams, etc. based on data_root.
@@ -207,7 +203,7 @@ class IterableDatasetABC(IterableDataset, ABC):
         """
         raise NotImplementedError
 
-    def _shard_stream(self, stream: Iterable[Any]) -> Generator[Any]:
+    def _shard_stream(self, stream: Iterable[T]) -> Generator[T]:
         """
         Shard the data stream based on worker and distributed rank, ensuring each sample is processed only once.
         """
@@ -224,7 +220,7 @@ class IterableDatasetABC(IterableDataset, ABC):
             if idx % total_parts == part_id:
                 yield sample
 
-    def _skip_samples(self, stream: Iterable[Any]) -> Generator[Any]:
+    def _skip_samples(self, stream: Iterable[T]) -> Generator[T]:
         """
         Skip samples before resume_from_sample.
         """
@@ -235,11 +231,11 @@ class IterableDatasetABC(IterableDataset, ABC):
             if idx > self.config.resume_from_sample:
                 yield sample
 
-    def _shuffle_stream(self, stream: Iterable[Any]) -> Generator[Any]:
+    def _shuffle_stream(self, stream: Iterable[T]) -> Generator[T]:
         """
         Use fixed-size buffer for streaming shuffle.
         """
-        buf: List[Any] = []
+        buf: List[T] = []
         for sample in stream:
             buf.append(sample)
             if len(buf) >= self.config.shuffle_buffer_size:
@@ -252,7 +248,7 @@ class IterableDatasetABC(IterableDataset, ABC):
     def get_logger(self):
         return getLogger(self.__class__.__name__)
 
-    def __getitem__(self, index: int) -> Any:
+    def __getitem__(self, index: int) -> T:
         """
         Get a specific sample by index.
         This is not efficient for large datasets, use with caution.
@@ -280,7 +276,7 @@ class IterableDatasetABC(IterableDataset, ABC):
             # do not pass self which may cause infinite recursion
             return ilen(self.__iter__())
 
-    def __iter__(self) -> Generator[Any]:
+    def __iter__(self) -> Generator[T]:
         # TODO: really consider how to handle multi-process/multi-node sharding
         # 1. Get the original stream
         stream = self.read_stream()

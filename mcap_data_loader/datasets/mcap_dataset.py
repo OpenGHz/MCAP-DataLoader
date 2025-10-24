@@ -2,7 +2,6 @@ import numpy as np
 from pathlib import Path
 from typing import List, Optional, Dict, Union
 from functools import cached_property
-from collections.abc import Generator
 from pydantic import field_validator
 from functools import cache
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
@@ -64,7 +63,7 @@ class McapDatasetConfig(IterableDatasetConfig):
         )
 
 
-class McapFlatBuffersSampleDataset(IterableDatasetABC):
+class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     """
     Iterable dataset for reading a MCAP file.
     """
@@ -85,7 +84,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         """
         self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
 
-    def read_stream(self) -> Generator[SampleUnion]:
+    def read_stream(self):
         """
         Read MCAP file and return message stream.
         """
@@ -110,19 +109,11 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC):
         """Get the total number of messages in the MCAP file."""
         return len(self.reader) if self.reader else 0
 
-    def __iter__(self) -> Generator[SampleType]:
-        return super().__iter__()
-
-
-EpisodeStreamElementType = Union[McapFlatBuffersSampleDataset, SampleUnion]
-
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
     """
     Episodic dataset configuration for reading MCAP files.
     """
-
-    flatten: bool = False
 
     @field_validator("data_root")
     def validate_data_root(cls, v) -> List[Path]:
@@ -144,15 +135,17 @@ class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
         )
 
 
-class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
+class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleDataset]):
     """
     Episodic dataset for reading MCAP files.
     """
 
     def __init__(self, config: McapFlatBuffersEpisodeDatasetConfig):
+        # TODO: should not support for multiple dataset roots?
         super().__init__(config)
         self.config = config
         dataset_files = {}
+        dataset_file_list = []
         DataRearrangeConfig.rearrange(
             self.config.data_root, self.config.rearrange.dataset, self._rng
         )
@@ -167,6 +160,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
                 # slice the files by indexes
                 files = np.array(files)[indexes].tolist()
             dataset_files[root] = files
+            dataset_file_list.extend(files)
             file_cnt += len(files)
         if file_cnt == 0:
             raise ValueError(
@@ -174,25 +168,26 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
             )
         self._file_cnt = file_cnt
         self._dataset_files = dataset_files
+        self._dataset_file_list = dataset_file_list
+        self._sample_ds_cfg = self.config.model_dump(exclude={"data_root"})
 
-    def read_stream(self) -> Generator[EpisodeStreamElementType]:
+    def read_stream(self):
         """
         Read MCAP files and return episodic message stream.
         Each episode corresponds to one MCAP file.
         """
-        cfg_dict = self.config.model_dump()
-        cfg_dict.pop("data_root")
         for dataset_root, file_paths in self._dataset_files.items():
             self.get_logger().debug("Reading dataset root: %s", dataset_root)
             for file_path in file_paths:
-                sample_ds = McapFlatBuffersSampleDataset(
-                    McapDatasetConfig(data_root=file_path, **cfg_dict)
-                )
-                sample_ds.load()
-                if self.config.flatten:
-                    yield from sample_ds
-                else:
-                    yield sample_ds
+                sample_ds = self._create_sample_dataset(file_path)
+                yield sample_ds
+
+    def _create_sample_dataset(self, file_path: str) -> McapFlatBuffersSampleDataset:
+        sample_ds = McapFlatBuffersSampleDataset(
+            McapDatasetConfig(data_root=file_path, **self._sample_ds_cfg)
+        )
+        sample_ds.load()
+        return sample_ds
 
     @property
     def all_files(self) -> Dict[str, List[str]]:
@@ -213,13 +208,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC):
     @cache
     def __len__(self) -> int:
         """Get the total number of episodes across all dataset roots."""
-        if not self.config.flatten:
-            return self._file_cnt
-        else:
-            return super().__len__()
+        return self._file_cnt
 
-    def __iter__(self) -> Generator[McapFlatBuffersSampleDataset]:
-        return super().__iter__()
-
-    def __getitem__(self, index) -> EpisodeStreamElementType:
-        return super().__getitem__(index)
+    def __getitem__(self, index: int):
+        return self._create_sample_dataset(self._dataset_file_list[index])

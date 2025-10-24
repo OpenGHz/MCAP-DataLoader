@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from collections.abc import Mapping, Generator
 from collections import ChainMap
-from mcap_data_loader.piplines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
 class MergeConfig(BaseModel):
