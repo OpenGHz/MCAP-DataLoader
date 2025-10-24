@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import List, Optional, Dict, Union
 from functools import cached_property
 from pydantic import field_validator
-from functools import cache
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
@@ -205,7 +204,6 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
             file_hashes[dataset] = hashs
         return file_hashes
 
-    @cache
     def __len__(self) -> int:
         """Get the total number of episodes across all dataset roots."""
         return self._file_cnt
