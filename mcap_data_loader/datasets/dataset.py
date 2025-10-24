@@ -160,7 +160,7 @@ class IterableDatasetConfig(BaseModel):
         - `transform` and `filter_fn` for sample-level transformation and filtering
     """
 
-    data_root: Union[Path, List[Path]]
+    data_root: Path
     shuffle_buffer_size: NonNegativeInt = 0
     seed: Optional[int] = None
     world_size: NonNegativeInt = 1

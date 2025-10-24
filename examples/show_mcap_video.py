@@ -1,6 +1,8 @@
 from mcap_data_loader.datasets.mcap_dataset import (
     McapFlatBuffersEpisodeDataset,
     McapFlatBuffersEpisodeDatasetConfig,
+    DataRearrangeConfig,
+    RearrangeType,
 )
 import cv2
 import argparse
@@ -26,11 +28,13 @@ dataset = McapFlatBuffersEpisodeDataset(
         keys=[],
         topics=[],
         attachments=None,
+        rearrange=DataRearrangeConfig(dataset=RearrangeType.SORT),
     )
 )
 dataset.load()
 
-for index, episode in enumerate(dataset):
+for index in range(1):
+    episode = dataset[index]
     logger.info(f"Episode {index}: {episode.config.data_root}")
     ep_reader = episode.reader
     all_attachments = ep_reader.all_attachment_names()

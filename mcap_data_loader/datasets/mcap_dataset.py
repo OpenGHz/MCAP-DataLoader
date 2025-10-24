@@ -36,6 +36,12 @@ class McapDatasetConfig(IterableDatasetConfig):
     with_timestamp: bool = True
     strict: bool = True
 
+
+class McapFlatBuffersSampleDatasetConfig(McapDatasetConfig):
+    """
+    Sample dataset configuration for reading a MCAP file.
+    """
+
     @field_validator("data_root")
     def validate_data_root(cls, v) -> Path:
         if not isinstance(v, Path):
@@ -67,7 +73,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     Iterable dataset for reading a MCAP file.
     """
 
-    def __init__(self, config: McapDatasetConfig):
+    def __init__(self, config: McapFlatBuffersSampleDatasetConfig):
         super().__init__(config)
         self.config = config
         self.reader = None
@@ -115,14 +121,11 @@ class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
     """
 
     @field_validator("data_root")
-    def validate_data_root(cls, v) -> List[Path]:
-        if isinstance(v, Path):
-            v = [v]
-        for directory in v:
-            if not directory.is_dir():
-                raise ValueError(
-                    f"data_root {directory.absolute()} must be a directory containing MCAP files"
-                )
+    def validate_data_root(cls, v: Path) -> List[Path]:
+        if not v.is_dir():
+            raise ValueError(
+                f"data_root {v.absolute()} must be a directory containing MCAP files"
+            )
         return v
 
     def model_post_init(self, context):
@@ -140,34 +143,20 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
     """
 
     def __init__(self, config: McapFlatBuffersEpisodeDatasetConfig):
-        # TODO: should not support for multiple dataset roots?
         super().__init__(config)
         self.config = config
-        dataset_files = {}
-        dataset_file_list = []
-        DataRearrangeConfig.rearrange(
-            self.config.data_root, self.config.rearrange.dataset, self._rng
-        )
-        file_cnt = 0
-        for root in self.config.data_root:
-            files = get_items_by_ext(root, ".mcap")
-            DataRearrangeConfig.rearrange(
-                files, self.config.rearrange.episode, self._rng
-            )
-            indexes = self.config.slices.dataset_indexes.get(root, None)
-            if indexes:
-                # slice the files by indexes
-                files = np.array(files)[indexes].tolist()
-            dataset_files[root] = files
-            dataset_file_list.extend(files)
-            file_cnt += len(files)
-        if file_cnt == 0:
+        root = self.config.data_root
+        files = get_items_by_ext(root, ".mcap")
+        DataRearrangeConfig.rearrange(files, self.config.rearrange.dataset, self._rng)
+        indexes = self.config.slices.dataset_indexes.get(root, None)
+        if indexes:
+            # slice the files by indexes
+            files = np.array(files)[indexes].tolist()
+        if not files:
             raise ValueError(
                 f"No MCAP files found in {self.config.data_root}, please check the path."
             )
-        self._file_cnt = file_cnt
-        self._dataset_files = dataset_files
-        self._dataset_file_list = dataset_file_list
+        self._episode_files = files
         self._sample_ds_cfg = self.config.model_dump(exclude={"data_root"})
 
     def read_stream(self):
@@ -175,11 +164,9 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         Read MCAP files and return episodic message stream.
         Each episode corresponds to one MCAP file.
         """
-        for dataset_root, file_paths in self._dataset_files.items():
-            self.get_logger().debug("Reading dataset root: %s", dataset_root)
-            for file_path in file_paths:
-                sample_ds = self._create_sample_dataset(file_path)
-                yield sample_ds
+        for file_path in self._episode_files:
+            sample_ds = self._create_sample_dataset(file_path)
+            yield sample_ds
 
     def _create_sample_dataset(self, file_path: str) -> McapFlatBuffersSampleDataset:
         sample_ds = McapFlatBuffersSampleDataset(
@@ -189,24 +176,18 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         return sample_ds
 
     @property
-    def all_files(self) -> Dict[str, List[str]]:
-        """Get all dataset files corresponding to each dataset root."""
-        return self._dataset_files
+    def all_files(self) -> List[str]:
+        """Get all episode files."""
+        return self._episode_files
 
     @cached_property
-    def all_file_hashes(self) -> Dict[str, List[str]]:
-        """Get the hash values of all dataset files corresponding to each dataset root."""
-        file_hashes = {}
-        for dataset, file_paths in self._dataset_files.items():
-            hashs = []
-            for file_path in file_paths:
-                hashs.append(file_hash(file_path))
-            file_hashes[dataset] = hashs
-        return file_hashes
+    def all_file_hashes(self) -> List[str]:
+        """Get the hash values of all episode files."""
+        return [file_hash(file_path) for file_path in self._episode_files]
 
     def __len__(self) -> int:
         """Get the total number of episodes across all dataset roots."""
-        return self._file_cnt
+        return len(self._episode_files)
 
     def __getitem__(self, index: int):
-        return self._create_sample_dataset(self._dataset_file_list[index])
+        return self._create_sample_dataset(self._episode_files[index])
