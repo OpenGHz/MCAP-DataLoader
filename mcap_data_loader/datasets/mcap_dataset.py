@@ -35,6 +35,7 @@ class McapDatasetConfig(IterableDatasetConfig):
     attachments: Optional[List[str]] = []
     with_timestamp: bool = True
     strict: bool = True
+    media_configs: List = []
 
 
 class McapFlatBuffersSampleDatasetConfig(McapDatasetConfig):
@@ -99,6 +100,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
             self.config.attachments,
             self.config.rearrange.episode == RearrangeType.REVERSE,
             self.config.strict,
+            self.config.media_configs,
         )
         if self.config.with_timestamp:
             yield from samples_iter
@@ -157,7 +159,9 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
                 f"No MCAP files found in {self.config.data_root}, please check the path."
             )
         self._episode_files = files
-        self._sample_ds_cfg = self.config.model_dump(exclude={"data_root"})
+        self._sample_ds_cfg = self.config.model_dump(
+            exclude={"data_root", "media_configs"}
+        )
 
     def read_stream(self):
         """
@@ -170,7 +174,11 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
 
     def _create_sample_dataset(self, file_path: str) -> McapFlatBuffersSampleDataset:
         sample_ds = McapFlatBuffersSampleDataset(
-            McapDatasetConfig(data_root=file_path, **self._sample_ds_cfg)
+            McapDatasetConfig(
+                data_root=file_path,
+                media_configs=self.config.media_configs,
+                **self._sample_ds_cfg,
+            )
         )
         sample_ds.load()
         return sample_ds

@@ -10,7 +10,7 @@ from enum import Enum
 from functools import cache
 from mcap_data_loader.schemas.airbot_fbs import FloatArray
 from mcap_data_loader.utils.basic import zip, DictDataStamped
-from mcap_data_loader.utils.av_coder import AvCoder
+from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig
 from pathlib import Path
 import json
 import numpy as np
@@ -270,6 +270,9 @@ class McapFlatBuffersWriter:
         return self._img_enc_mapping[channels][image.dtype.type]
 
 
+CONFIG_TYPE_TO_MEDIA_TYPE = {DecodeConfig: "video/mp4"}
+
+
 class McapFlatBuffersReader:
     """Class to handle reading MCAP files with FlatBuffers schemas."""
 
@@ -381,9 +384,15 @@ class McapFlatBuffersReader:
         self,
         names: Optional[Iterable[str]] = None,
         reverse: bool = False,
+        configs: Optional[list] = None,
     ) -> Generator[Union[DictDataStamped, Any]]:
         """Iterate over target attachments in the MCAP file."""
         assert not reverse, "Reverse iteration is not supported for attachments yet."
+        media_config = (
+            {CONFIG_TYPE_TO_MEDIA_TYPE[type(config)]: config for config in configs}
+            if configs
+            else {}
+        )
         if names is None:
             names = self.all_attachment_names()
         else:
@@ -394,21 +403,18 @@ class McapFlatBuffersReader:
             )
 
         attch_names: List[str] = []
-        iters: List[Generator] = []
+        iters: List[Iterable] = []
         for attachment in self.reader.iter_attachments():
             name = attachment.name
             if name in names:
                 media_type = attachment.media_type
+                cfg = media_config.get(media_type, None)
                 if media_type == "video/mp4":
                     coder = AvCoder()
-                    attach_iter = coder.iter_decode(
-                        attachment.data,
-                        # FIXME: check whether now no mismatching
-                        mismatch_tolerance=5,
-                        ensure_base_stamp=True,
-                    )
+                    # FIXME: check whether now no mismatching
+                    attach_iter = coder.iter_decode(attachment.data, cfg)
                 elif media_type == "application/json":
-                    attach_iter = iter(json.loads(attachment.data))
+                    attach_iter = json.loads(attachment.data)
                 else:
                     raise ValueError(f"Unsupported media type: {media_type}")
                 attch_names.append(name)
@@ -437,6 +443,7 @@ class McapFlatBuffersReader:
         attachments: Optional[Iterable[str]] = None,
         reverse: bool = False,
         strict: bool = True,
+        configs: Optional[list] = None,
     ) -> Generator[DictDataStamped[np.ndarray]]:
         """Iterate over messages and attachments in the MCAP file.
         Args:
@@ -486,7 +493,7 @@ class McapFlatBuffersReader:
             self.iter_message_samples(topics, reverse) if topics else empty_iter()
         )
         attachment_iter = (
-            self.iter_attachment_samples(attachments, reverse)
+            self.iter_attachment_samples(attachments, reverse, configs)
             if attachments
             else empty_iter()
         )

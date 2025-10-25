@@ -4,6 +4,7 @@ from mcap_data_loader.datasets.mcap_dataset import (
     DataRearrangeConfig,
     RearrangeType,
 )
+from mcap_data_loader.utils.av_coder import DecodeConfig
 import cv2
 import argparse
 import logging
@@ -25,10 +26,8 @@ path = args.path
 dataset = McapFlatBuffersEpisodeDataset(
     McapFlatBuffersEpisodeDatasetConfig(
         data_root=path,
-        keys=[],
-        topics=[],
-        attachments=None,
         rearrange=DataRearrangeConfig(dataset=RearrangeType.SORT),
+        media_configs=[DecodeConfig(mismatch_tolerance=5)],
     )
 )
 dataset.load()
@@ -39,7 +38,11 @@ for index in range(1):
     ep_reader = episode.reader
     all_attachments = ep_reader.all_attachment_names()
     color_topics = [att for att in all_attachments if "color" in att]
-    for sample in ep_reader.iter_attachment_samples(color_topics):
+    # re-configure dataset to load color keys
+    episode.config.keys = color_topics
+    print(episode.config)
+    for sample in episode:
+        # print(sample)
         for key, value in sample.items():
             cv2.imshow(key, value["data"])
         if cv2.waitKey(0) in [27, ord("q")]:

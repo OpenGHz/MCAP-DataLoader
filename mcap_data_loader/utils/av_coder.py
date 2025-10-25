@@ -10,6 +10,15 @@ from logging import getLogger
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from mcap_data_loader.utils.basic import DataStamped
+from pydantic import BaseModel
+
+
+class DecodeConfig(BaseModel, frozen=True):
+    thread_type: str = "AUTO"
+    frame_format: str = "bgr24"
+    mismatch_tolerance: int = 0
+    ensure_base_stamp: bool = False
+    target_time_base: int = int(1e9)
 
 
 class AvCoder:
@@ -291,11 +300,7 @@ class AvCoder:
     def iter_decode(
         cls,
         video: Union[bytes, str],
-        thread_type: str = "AUTO",
-        frame_format: str = "bgr24",
-        mismatch_tolerance: int = 0,
-        ensure_base_stamp: bool = False,
-        target_time_base: int = int(1e9),
+        config: Optional[DecodeConfig] = None,
     ) -> Generator[Union[DataStamped[np.ndarray], np.ndarray]]:
         """
         Generator to decode frames from a video file. This method yields frames one by one.
@@ -312,40 +317,43 @@ class AvCoder:
             Union[tuple[np.ndarray, int], np.ndarray]: A tuple of the frame and its absolute timestamp
                 if target_time_base > 0, otherwise just the frame.
         """
+        config = config or DecodeConfig()
         container, video_stream, base_stamp, frame_cnt = cls._init_decode(
-            video, thread_type, ensure_base_stamp
+            video, config.thread_type, config.ensure_base_stamp
         )
         # cls.get_logger().info(f"Decoding video with {frame_cnt} frames.")
         cnt = 0
-        time_factor = fractions.Fraction(target_time_base, 1) * video_stream.time_base
+        time_factor = (
+            fractions.Fraction(config.target_time_base, 1) * video_stream.time_base
+        )
         for frame in container.decode(video=0):
             cnt += 1
-            np_frame = frame.to_ndarray(format=frame_format)
-            if target_time_base:
+            np_frame = frame.to_ndarray(format=config.frame_format)
+            if config.target_time_base:
                 abs_stamp = (base_stamp + frame.pts) * time_factor
                 yield {"data": np_frame, "t": abs_stamp}
             else:
                 yield np_frame
         mismatch = frame_cnt - cnt
         if mismatch > 0:
-            if mismatch <= mismatch_tolerance:
+            if mismatch <= config.mismatch_tolerance:
                 cls.get_logger().warning(
                     f"Missing {mismatch} frames in video. Filling with last frame."
                 )
                 for _ in range(mismatch):
-                    if target_time_base:
+                    if config.target_time_base:
                         yield {"data": np_frame, "t": abs_stamp}
                     else:
                         yield np_frame
             else:
                 raise ValueError(
                     f"Frame count mismatch: {cnt} != {frame_cnt}; "
-                    f"mismatch tolerance: {mismatch_tolerance}"
+                    f"mismatch tolerance: {config.mismatch_tolerance}"
                 )
         elif mismatch < 0:
             raise ValueError(
                 f"Frame count mismatch: {cnt} != {frame_cnt}; "
-                f"mismatch tolerance: {mismatch_tolerance}"
+                f"mismatch tolerance: {config.mismatch_tolerance}"
             )
 
     @classmethod
@@ -397,21 +405,3 @@ class AvCoder:
                 frame.pts,
             )
         cls.get_logger().info("Total frames processed:", frame_cnt)
-
-
-if __name__ == "__main__":
-    from more_itertools import ilen
-    from itertools import tee
-
-    av_coder = AvCoder(async_encode=False, log_level=av.logging.VERBOSE)
-
-    video_path = "/home/ghz/Work/airbot/DISCOVERSE/data/pick_jujube/001/cam_0.mp4"
-
-    iters = tee(av_coder.iter_decode(video_path), 2)
-
-    for frame, stamp in iters[0]:
-        # print(frame.shape)
-        # print(stamp)
-        pass
-
-    print(ilen(iters[1]))
