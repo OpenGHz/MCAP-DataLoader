@@ -176,10 +176,10 @@ def get_items_by_ext(directory: Union[str, Path], extension: str) -> List[Path]:
         List[str]: A list of file or directory names that match the extension.
     """
     directory = Path(directory)
-    if not directory.is_dir():
-        raise ValueError(f"{directory} is not a directory")
     if not directory.exists():
         return []
+    if not directory.is_dir():
+        raise ValueError(f"{directory} is not a directory")
     entries = directory.iterdir()
     if extension == ".":
         return [entry for entry in entries if entry.is_file()]
