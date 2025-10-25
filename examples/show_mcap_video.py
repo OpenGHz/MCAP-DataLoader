@@ -40,10 +40,10 @@ for index in range(1):
     color_topics = [att for att in all_attachments if "color" in att]
     # re-configure dataset to load color keys
     episode.config.keys = color_topics
-    print(episode.config)
     for sample in episode:
         # print(sample)
         for key, value in sample.items():
+            # t = value["t"]
             cv2.imshow(key, value["data"])
         if cv2.waitKey(0) in [27, ord("q")]:
             break

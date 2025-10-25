@@ -330,7 +330,7 @@ class AvCoder:
             cnt += 1
             np_frame = frame.to_ndarray(format=config.frame_format)
             if config.target_time_base:
-                abs_stamp = (base_stamp + frame.pts) * time_factor
+                abs_stamp = int((base_stamp + frame.pts) * time_factor)
                 yield {"data": np_frame, "t": abs_stamp}
             else:
                 yield np_frame
