@@ -123,6 +123,11 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.config.data_root})"
 
+    @property
+    def stem(self) -> str:
+        """Get the stem of the MCAP file."""
+        return self.config.data_root.stem
+
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
     """
