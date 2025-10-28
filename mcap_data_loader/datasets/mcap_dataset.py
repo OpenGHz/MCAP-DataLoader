@@ -1,6 +1,7 @@
 import numpy as np
 from pathlib import Path
 from typing import List, Optional, Dict, Union
+from typing_extensions import Self
 from functools import cached_property
 from pydantic import field_validator
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
@@ -115,6 +116,9 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     def __len__(self) -> int:
         """Get the total number of messages in the MCAP file."""
         return len(self.reader) if self.reader else 0
+
+    def __lt__(self, other: Self) -> bool:
+        return self.config.data_root < other.config.data_root
 
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):

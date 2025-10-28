@@ -2,7 +2,7 @@ from itertools import chain, islice, tee
 from more_itertools import consume
 from collections import deque
 from collections.abc import Iterator, Generator
-from typing import Any, Iterable, Callable, TypeVar, Generic, Tuple
+from typing import Any, Iterable, Callable, TypeVar, Generic, Tuple, List
 
 
 T = TypeVar("T")
@@ -146,8 +146,29 @@ class Reusablizer(Generic[T]):
         return self.gen_func(*self.args, **self.kwargs)
 
 
+def take_skip(
+    lst: Iterable[T], N: int, M: int, sort: bool = False
+) -> Tuple[List[T], List[T]]:
+    """Take N elements, skip M elements, repeat until the list is exhausted.
+    Return two lists: taken elements and skipped elements.
+    If sort is True, sort the two lists before returning.
+    """
+    if N <= 0 or M < 0:
+        raise ValueError("N must be positive and M must be non-negative.")
+    taken = []
+    skipped = []
+    for i in range(N):
+        taken.extend(lst[i :: N + M])
+    for j in range(M):
+        skipped.extend(lst[N + j :: N + M])
+    if sort:
+        taken.sort()
+        skipped.sort()
+    return taken, skipped
+
+
 if __name__ == "__main__":
-    import time
+    # import time
 
     # iterables = [range(2), [1, None], [None], chain(range(4), [None] * 10)]
 
@@ -182,10 +203,13 @@ if __name__ == "__main__":
     # for item in it_reusable:
     #     print(item)
 
-    iterable = range(10)
-    for a, b in epairwise(iterable, 2, fill_with_last=True):
-        print(f"{a=}, {b=}")
-    for a, b in epairwise(iterable, 2, fill_with_last=False):
-        print(f"{a=}, {b=}")
-    for a, b in epairwise(iterable, 2, None):
-        print(f"{a=}, {b=}")
+    # iterable = range(10)
+    # for a, b in epairwise(iterable, 2, fill_with_last=True):
+    #     print(f"{a=}, {b=}")
+    # for a, b in epairwise(iterable, 2, fill_with_last=False):
+    #     print(f"{a=}, {b=}")
+    # for a, b in epairwise(iterable, 2, None):
+    #     print(f"{a=}, {b=}")
+
+    lis = range(17)
+    print(take_skip(lis, 2, 3, True))  # Example usage
