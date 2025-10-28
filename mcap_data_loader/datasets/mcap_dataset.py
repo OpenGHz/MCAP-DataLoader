@@ -1,6 +1,6 @@
 import numpy as np
 from pathlib import Path
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Sequence
 from typing_extensions import Self
 from functools import cached_property
 from pydantic import field_validator
@@ -211,3 +211,37 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
 
     def __getitem__(self, index: int):
         return self._create_sample_dataset(self._episode_files[index])
+
+
+def get_config_and_class_type(data_root: Path):
+    """
+    Get the appropriate dataset configuration and class type based on the data root.
+    """
+    if not data_root.exists():
+        raise ValueError(f"data_root {data_root} does not exist.")
+    if data_root.is_file():
+        return McapFlatBuffersSampleDatasetConfig, McapFlatBuffersSampleDataset
+    else:
+        return McapFlatBuffersEpisodeDatasetConfig, McapFlatBuffersEpisodeDataset
+
+
+def get_first_sample(
+    dataset: Union[McapFlatBuffersSampleDataset, McapFlatBuffersEpisodeDataset],
+    keys: Optional[List[str]] = None,
+) -> SampleUnion:
+    """
+    Get the first sample from the dataset for the specified keys.
+    """
+    if not isinstance(dataset, McapFlatBuffersSampleDataset):
+        # get the first episode dataset
+        dataset = dataset[0]
+    sample = next(iter(dataset.read_stream()))
+    if keys is not None:
+        sample = {key: sample[key] for key in keys}
+    return sample
+
+
+def to_episodic_sequence(dataset) -> Sequence[McapFlatBuffersSampleDataset]:
+    if isinstance(dataset, McapFlatBuffersSampleDataset):
+        return [dataset]
+    return dataset
