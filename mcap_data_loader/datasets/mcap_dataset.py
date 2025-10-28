@@ -156,7 +156,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         self.config = config
         root = self.config.data_root
         files = get_items_by_ext(root, ".mcap")
-        DataRearrangeConfig.rearrange(files, self.config.rearrange.dataset, self._rng)
+        RearrangeType.rearrange(files, self.config.rearrange.dataset, self._rng)
         indexes = self.config.slices.dataset_indexes.get(root, None)
         if indexes:
             # slice the files by indexes

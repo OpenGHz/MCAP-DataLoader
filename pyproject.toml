@@ -20,9 +20,9 @@ dependencies = [
     "foxglove-schemas-flatbuffer",
     "mcap",
     "pymcap",
-    "flatten-dict",
     "av",
     "PyTurboJPEG",
+    "natsort",
 ]
 
 [tool.setuptools.packages.find]

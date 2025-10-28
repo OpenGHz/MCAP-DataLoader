@@ -1,5 +1,6 @@
 import random
-from typing import Any, Callable, Iterable, List, Optional, Union, Generic, TypeVar
+from typing import Any, Callable, Iterable, List, Optional, Generic, TypeVar
+from typing_extensions import Self
 from collections.abc import Generator
 from pydantic import BaseModel, NonNegativeInt, computed_field
 from abc import ABC, abstractmethod
@@ -14,6 +15,7 @@ from mcap_data_loader.utils.basic import (
 from enum import auto
 from more_itertools import peekable, nth, ilen
 from pathlib import Path
+from natsort import natsort_keygen
 
 
 try:
@@ -36,10 +38,48 @@ T = TypeVar("T")
 
 class RearrangeType(StrEnum):
     NONE = auto()
+    """ No rearrangement."""
     SORT = auto()
+    """ Sort the data in ascending order."""
     SORT_STEM_DIGITAL = auto()
+    """ Sort the data by the numeric value of the stem (filename without extension)."""
+    NATSORT = auto()
+    """ Sort the data using natural order (e.g., '2' before '10')."""
     SHUFFLE = auto()
+    """ Shuffle the data randomly."""
     REVERSE = auto()
+    """ Reverse the order of the data."""
+
+    @staticmethod
+    def rearrange(
+        data: List[Any],
+        strategy: Self,
+        random_generator: Optional[random.Random] = None,
+    ) -> None:
+        """
+        Rearrange the data based on the specified strategy and random generator.
+        Args:
+            data (List[Any]): The data to rearrange.
+            strategy (RearrangeType): The rearrangement strategy to apply.
+            random_generator (Optional[random.Random]): Optional random generator for shuffling.
+        Raises:
+            ValueError: If an unsupported rearrangement strategy is provided.
+        """
+        if strategy is RearrangeType.SORT:
+            data.sort()
+        elif strategy is RearrangeType.SORT_STEM_DIGITAL:
+            data.sort(key=lambda p: int(p.stem))
+        elif strategy is RearrangeType.NATSORT:
+            data.sort(key=natsort_keygen())
+        elif strategy is RearrangeType.REVERSE:
+            data.reverse()
+        elif strategy is RearrangeType.SHUFFLE:
+            if random_generator is None:
+                random.shuffle(data)
+            else:
+                random_generator.shuffle(data)
+        elif strategy is not RearrangeType.NONE:
+            raise ValueError(f"Unsupported rearrangement strategy: {strategy}")
 
 
 class DataSlicesConfig(BaseModel):
@@ -103,37 +143,6 @@ class DataRearrangeConfig(BaseModel):
     sample: RearrangeType = RearrangeType.NONE
     episode: RearrangeType = RearrangeType.NONE
     dataset: RearrangeType = RearrangeType.NONE
-
-    @staticmethod
-    def rearrange(
-        data: List[Any],
-        strategy: RearrangeType,
-        random_generator: Optional[random.Random] = None,
-    ) -> None:
-        """
-        Rearrange the data based on the specified strategy and random generator.
-        Args:
-            data (List[Any]): The data to rearrange.
-            strategy (RearrangeType): The rearrangement strategy to apply.
-            random_generator (Optional[random.Random]): Optional random generator for shuffling.
-        Raises:
-            ValueError: If an unsupported rearrangement strategy is provided.
-        Description:
-            - "sort": Sort the data in ascending order.
-            - "shuffle": Shuffle the data randomly using the provided random generator.
-            - "none": No rearrangement is applied.
-        """
-        if strategy == RearrangeType.SORT:
-            data.sort()
-        elif strategy == RearrangeType.SORT_STEM_DIGITAL:
-            data.sort(key=lambda p: int(p.stem))
-        elif strategy == RearrangeType.SHUFFLE:
-            if random_generator is None:
-                random.shuffle(data)
-            else:
-                random_generator.shuffle(data)
-        elif strategy != RearrangeType.NONE:
-            raise ValueError(f"Unsupported rearrangement strategy: {strategy}")
 
 
 class IterableDatasetConfig(BaseModel):

@@ -10,7 +10,7 @@ if __name__ == "__main__":
         RearrangeType,
     )
 
-    for re in (RearrangeType.SORT, RearrangeType.SORT_STEM_DIGITAL):
+    for re in RearrangeType:
         dataset = McapFlatBuffersEpisodeDataset(
             McapFlatBuffersEpisodeDatasetConfig(
                 data_root="data/example",
