@@ -37,6 +37,7 @@ T = TypeVar("T")
 class RearrangeType(StrEnum):
     NONE = auto()
     SORT = auto()
+    SORT_STEM_DIGITAL = auto()
     SHUFFLE = auto()
     REVERSE = auto()
 
@@ -124,6 +125,8 @@ class DataRearrangeConfig(BaseModel):
         """
         if strategy == RearrangeType.SORT:
             data.sort()
+        elif strategy == RearrangeType.SORT_STEM_DIGITAL:
+            data.sort(key=lambda p: int(p.stem))
         elif strategy == RearrangeType.SHUFFLE:
             if random_generator is None:
                 random.shuffle(data)

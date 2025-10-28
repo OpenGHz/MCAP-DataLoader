@@ -120,6 +120,9 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     def __lt__(self, other: Self) -> bool:
         return self.config.data_root < other.config.data_root
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.config.data_root})"
+
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
     """
