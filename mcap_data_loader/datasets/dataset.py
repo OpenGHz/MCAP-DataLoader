@@ -132,15 +132,16 @@ class DataSlicesConfig(BaseModel):
 class DataRearrangeConfig(BaseModel):
     """Configuration for rearranging data.
     This class defines how to rearrange samples, episodes, and datasets.
-    Args:
-        sample: Rearrangement strategy for each sample (rarely used).
-        episode: Rearrangement strategy for each episode (e.g. reverse a trajectory).
-        dataset: Rearrangement strategy for the dataset.
     """
 
     sample: RearrangeType = RearrangeType.NONE
+    """Rearrangement strategy for each sample (rarely used)."""
     episode: RearrangeType = RearrangeType.NONE
+    """Rearrangement strategy for each episode (e.g. reverse a trajectory)."""
     dataset: RearrangeType = RearrangeType.NONE
+    """Rearrangement strategy for the dataset."""
+    seed: Optional[int] = None
+    """Random seed for shuffling, if applicable."""
 
 
 class IterableDatasetConfig(BaseModel):

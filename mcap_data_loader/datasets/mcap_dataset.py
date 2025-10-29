@@ -1,4 +1,5 @@
 import numpy as np
+import random
 from pathlib import Path
 from typing import List, Optional, Dict, Union, Sequence
 from typing_extensions import Self
@@ -167,7 +168,11 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         self.config = config
         root = self.config.data_root
         files = get_items_by_ext(root, ".mcap")
-        RearrangeType.rearrange(files, self.config.rearrange.dataset, self._rng)
+        RearrangeType.rearrange(
+            files,
+            self.config.rearrange.dataset,
+            random.Random(self.config.rearrange.seed),
+        )
         indexes = self.config.slices.dataset_indexes.get(root, None)
         if indexes:
             # slice the files by indexes
