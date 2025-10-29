@@ -20,8 +20,6 @@ if __name__ == "__main__":
             McapFlatBuffersEpisodeDatasetConfig(data_root=data_root, keys=keys[1:])
         ),
     )
-    for dataset in datasets:
-        dataset.load()
     nested = NestedZip(NestedZipConfig(depth=1))(datasets)
     for episodes in nested:
         merged = Merge[dict](MergeConfig(method="auto"))(episodes)

@@ -31,7 +31,6 @@ if __name__ == "__main__":
     dataset = McapFlatBuffersEpisodeDataset(
         McapFlatBuffersEpisodeDatasetConfig(data_root=data_root, keys=keys)
     )
-    dataset.load()
     start = time.perf_counter()
     for episode in dataset:
         start = time.perf_counter()

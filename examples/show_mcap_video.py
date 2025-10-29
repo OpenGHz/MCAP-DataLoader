@@ -30,7 +30,6 @@ dataset = McapFlatBuffersEpisodeDataset(
         media_configs=[DecodeConfig(mismatch_tolerance=5)],
     )
 )
-dataset.load()
 
 for index in range(1):
     episode = dataset[index]

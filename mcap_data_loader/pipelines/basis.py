@@ -1,6 +1,6 @@
 from mcap_data_loader.utils.basic import NonIteratorIterable
 from pydantic import validate_call
-from typing import List, TypeVar, Generic, final
+from typing import Any, TypeVar, Generic, final
 from typing_extensions import Self
 from collections.abc import Generator
 from abc import ABC, abstractmethod
@@ -14,7 +14,7 @@ class Pipeline(ABC, Generic[T]):
 
     @final
     @validate_call
-    def __call__(self, iterables: List[NonIteratorIterable]) -> Self:
+    def __call__(self, iterables: NonIteratorIterable[Any]) -> Self:
         self._iterables = iterables
         return self
 

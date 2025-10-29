@@ -62,7 +62,6 @@ if __name__ == "__main__":
             cache=True,
         )
     )
-    dataset.load()
     print(dataset.all_files)
     print(f"Dataset length: {len(dataset)}")
     pprint(dataset[0].keys())

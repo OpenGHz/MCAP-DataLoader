@@ -31,7 +31,6 @@ dataset = McapFlatBuffersEpisodeDataset(
         strict=False,
     )
 )
-dataset.load()
 
 # for index, sample in enumerate(dataset.reader.iter_attachment_samples(color_topics)):
 #     # print(f"Sample {index}: {sample.keys()}")

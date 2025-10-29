@@ -21,8 +21,6 @@ if __name__ == "__main__":
             McapFlatBuffersEpisodeDatasetConfig(data_root=data_root, keys=keys[1:])
         ),
     )
-    for dataset in datasets:
-        dataset.load()
     depth = 2
     nested = NestedZip(NestedZipConfig(depth=depth))(datasets)
     for items in nested:

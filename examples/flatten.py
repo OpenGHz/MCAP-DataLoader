@@ -15,7 +15,6 @@ if __name__ == "__main__":
             keys=["/follow/arm/joint_state/position", "log_stamps"],
         )
     )
-    dataset.load()
 
     for sample in Flatten(FlattenConfig())(dataset):
         print(sample)

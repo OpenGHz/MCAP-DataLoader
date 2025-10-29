@@ -14,7 +14,6 @@ if __name__ == "__main__":
             keys=["/follow/arm/joint_state/position", "log_stamps"],
         )
     )
-    dataset.load()
 
     for i in range(2):
         episode = dataset[i]

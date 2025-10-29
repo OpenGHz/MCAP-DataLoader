@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Union, Sequence
 from typing_extensions import Self
 from functools import cached_property
-from pydantic import field_validator
+from pydantic import field_validator, ConfigDict
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
@@ -16,6 +16,7 @@ from mcap_data_loader.utils.basic import (
 from mcap_data_loader.datasets.dataset import (
     IterableDatasetABC,
     IterableDatasetConfig,
+    DataSlicesConfig,
     DataRearrangeConfig,
     RearrangeType,
 )
@@ -30,6 +31,8 @@ class McapDatasetConfig(IterableDatasetConfig):
     """
     MCAP dataset configuration.
     """
+
+    model_config = ConfigDict(validate_assignment=True)
 
     keys: List[str] = []
     topics: Optional[List[str]] = []
@@ -55,19 +58,19 @@ class McapFlatBuffersSampleDatasetConfig(McapDatasetConfig):
             raise ValueError(f"data_root {v} must be an existing `.mcap` file")
         return v
 
-    def model_post_init(self, context):
-        assert not self.slices.sample, "not implemented yet"
-        assert not self.slices.episode, "not implemented yet"
-        assert isinstance(self.slices.dataset, dict), "dataset slices must be a dict"
-        assert self.rearrange.sample == RearrangeType.NONE, (
-            "sample rearrangement is not supported"
-        )
-        assert self.rearrange.episode in {RearrangeType.NONE, RearrangeType.REVERSE}, (
-            "episode rearrangement must be NONE or REVERSE"
-        )
-        assert self.rearrange.dataset == RearrangeType.NONE, (
-            "dataset rearrangement is not supported"
-        )
+    @field_validator("slices")
+    def validate_slices(cls, v: DataSlicesConfig) -> DataSlicesConfig:
+        if v != DataSlicesConfig():
+            raise ValueError("slices are not supported now")
+        return v
+
+    @field_validator("rearrange")
+    def validate_rearrange(cls, v: DataRearrangeConfig) -> DataRearrangeConfig:
+        if (v.sample, v.dataset) != (RearrangeType.NONE, RearrangeType.NONE):
+            raise ValueError("sample and dataset rearrangement are not supported")
+        if v.episode not in {RearrangeType.NONE, RearrangeType.REVERSE}:
+            raise ValueError("episode rearrangement must be NONE or REVERSE")
+        return v
 
 
 class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
@@ -79,10 +82,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         super().__init__(config)
         self.config = config
         self.reader = None
-
-    def load(self):
         self._init_reader()
-        return super().load()
 
     def _init_reader(self):
         """
@@ -99,7 +99,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
             self.config.keys,
             self.config.topics,
             self.config.attachments,
-            self.config.rearrange.episode == RearrangeType.REVERSE,
+            self.config.rearrange.episode is RearrangeType.REVERSE,
             self.config.strict,
             self.config.media_configs,
         )
@@ -142,13 +142,19 @@ class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
             )
         return v
 
-    def model_post_init(self, context):
-        assert not self.slices.sample, "not implemented yet"
-        assert not self.slices.episode, "not implemented yet"
-        assert isinstance(self.slices.dataset, dict), "dataset slices must be a dict"
-        assert self.rearrange.sample == RearrangeType.NONE, (
-            "sample rearrangement is not supported"
-        )
+    @field_validator("slices")
+    def validate_slices(cls, v: DataSlicesConfig) -> DataSlicesConfig:
+        if isinstance(v.dataset, dict):
+            raise ValueError("slices.dataset can not be a dict")
+        if v.sample or v.episode:
+            raise ValueError("slices.sample and slices.episode must be empty")
+        return v
+
+    @field_validator("rearrange")
+    def validate_rearrange(cls, v: DataRearrangeConfig) -> DataRearrangeConfig:
+        if v.sample != RearrangeType.NONE:
+            raise ValueError("sample rearrangement is not supported")
+        return v
 
 
 class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleDataset]):
@@ -181,19 +187,16 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         Each episode corresponds to one MCAP file.
         """
         for file_path in self._episode_files:
-            sample_ds = self._create_sample_dataset(file_path)
-            yield sample_ds
+            yield self._create_sample_dataset(file_path)
 
     def _create_sample_dataset(self, file_path: str) -> McapFlatBuffersSampleDataset:
-        sample_ds = McapFlatBuffersSampleDataset(
+        return McapFlatBuffersSampleDataset(
             McapDatasetConfig(
                 data_root=file_path,
                 media_configs=self.config.media_configs,
                 **self._sample_ds_cfg,
             )
         )
-        sample_ds.load()
-        return sample_ds
 
     @property
     def all_files(self) -> List[str]:

@@ -18,5 +18,4 @@ if __name__ == "__main__":
                 rearrange=DataRearrangeConfig(dataset=re),
             )
         )
-        dataset.load()
         print(re, dataset.all_files)
