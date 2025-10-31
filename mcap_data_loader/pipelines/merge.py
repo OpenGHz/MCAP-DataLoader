@@ -34,7 +34,7 @@ class Merge(Pipeline[T]):
 
     def __iter__(self) -> Generator[T]:
         if self.config.method == "auto":
-            first = next(zip(*self._iterables))
+            first = next(zip(*self._iterable))
             item_type = type(first[0])
             if not all(isinstance(item, item_type) for item in first):
                 raise ValueError(
@@ -54,7 +54,7 @@ class Merge(Pipeline[T]):
                 f"Unsupported merge method {self.config.method}. "
                 f"Supported methods are: {list(self._methods.keys())}."
             )
-        for items in zip(*self._iterables):
+        for items in zip(*self._iterable):
             yield self._methods[self.config.method](items)
 
 

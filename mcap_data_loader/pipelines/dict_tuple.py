@@ -22,7 +22,7 @@ class DictTuple(Pipeline[Tuple[Item]]):
         self.config = config
 
     def __iter__(self) -> Generator[Item]:
-        for item in self._iterables:
+        for item in self._iterable:
             yield self._process(item)
 
     def _process(self, tp: Tuple[Item]) -> Item:

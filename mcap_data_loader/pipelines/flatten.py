@@ -14,7 +14,7 @@ class Flatten(Pipeline[T]):
         self.config = config
 
     def __iter__(self) -> Generator[T]:
-        for item in self._iterables:
+        for item in self._iterable:
             yield from self._flatten(item, 0)
 
     def _flatten(self, iterable: T, current_depth: int) -> Generator[T]:

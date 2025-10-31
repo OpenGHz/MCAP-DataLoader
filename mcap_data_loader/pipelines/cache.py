@@ -20,12 +20,12 @@ class Cache(Pipeline[T]):
     def __iter__(self) -> Generator[T]:
         if self._length is None:
             index = -1
-            for index, item in enumerate(self._iterables):
+            for index, item in enumerate(self._iterable):
                 self._cache.append(item)
                 yield item
             self._length = index + 1
         else:
-            iterator = iter(self._iterables)
+            iterator = iter(self._iterable)
             for _ in range(self._length - len(self._cache)):
                 yield next(iterator)
             for item in self._cache:

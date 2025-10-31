@@ -15,7 +15,7 @@ class Pipeline(ABC, Generic[T]):
     @final
     @validate_call
     def __call__(self, iterables: NonIteratorIterable[Any]) -> Self:
-        self._iterables = iterables
+        self._iterable = iterables
         return self
 
     @abstractmethod
