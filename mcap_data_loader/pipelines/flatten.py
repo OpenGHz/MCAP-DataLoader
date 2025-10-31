@@ -7,7 +7,7 @@ class FlattenConfig(BaseModel):
     depth: NonNegativeInt = 1
 
 
-class Flatten(Pipeline):
+class Flatten(Pipeline[T]):
     """Flatten nested iterables up to a specified depth."""
 
     def __init__(self, config: FlattenConfig) -> None:

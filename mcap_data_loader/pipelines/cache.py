@@ -9,7 +9,7 @@ class CacheConfig(BaseModel):
     maxlen: Optional[NonNegativeInt] = None
 
 
-class Cache(Pipeline):
+class Cache(Pipeline[T]):
     """Cache items from an iterable up to a specified maximum length."""
 
     def __init__(self, config: CacheConfig) -> None:
