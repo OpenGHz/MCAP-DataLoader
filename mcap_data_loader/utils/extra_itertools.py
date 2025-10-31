@@ -100,13 +100,13 @@ def ewindowed(
 
 
 def past_future(
-    iterable: Iterable,
+    iterable: Iterable[T],
     past_num: int,
     future_num: int,
     fillvalue: Any = None,
     step: int = 1,
     fill_with_last: bool = False,
-):
+) -> Generator[Tuple[Tuple[T, ...], Tuple[T, ...]]]:
     """Generate pairs of (past, future) windows from the iterable.
     Each past window contains `past_num + 1` elements (including the current element),
     and each future window contains `future_num` elements. The total iteration steps
