@@ -1,5 +1,5 @@
 from mcap_data_loader.utils.extra_itertools import epairwise
-from pydantic import BaseModel, NonNegativeInt
+from pydantic import BaseModel, NonNegativeInt, Field
 from mcap_data_loader.pipelines.basis import Pipeline, T
 from typing import Any, Tuple
 from collections.abc import Generator
@@ -7,7 +7,7 @@ from collections.abc import Generator
 
 class PairWiseConfig(BaseModel):
     gap: NonNegativeInt = 0
-    fillvalue: Any = ...
+    fillvalue: Any = Field(default_factory=lambda: ...)
     fill_with_last: bool = False
 
 

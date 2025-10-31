@@ -17,6 +17,10 @@ class DictTupleConfig(BaseModel):
     A positive integer means flattening up to that depth, which requires
     the depth to be the same for all items and is faster.
     """
+    separator: str = "/"
+    """Separator used when concatenating prefixes."""
+    separate_key: bool = True
+    """Whether to separate the prefix and the dict key with a separator."""
 
 
 class DictTuple(Pipeline[Tuple[Item]]):
@@ -25,6 +29,7 @@ class DictTuple(Pipeline[Tuple[Item]]):
     def __init__(self, config: DictTupleConfig) -> None:
         self.config = config
         self._func = self._process_auto if config.depth == 0 else self._process_depth
+        self._last_sep = config.separator if config.separate_key else ""
 
     def __iter__(self) -> Generator[Item]:
         for item in self._iterable:
@@ -43,11 +48,13 @@ class DictTuple(Pipeline[Tuple[Item]]):
     def _process_depth(self, tp: Tuple[Item], prefix: str, depth: int) -> Item:
         if depth > 1:
             for i, value in enumerate(tp):
-                self._process_depth(value, f"{prefix}{i}/", depth - 1)
+                self._process_depth(
+                    value, f"{prefix}{i}{self.config.separator}", depth - 1
+                )
         else:
             for i, value in enumerate(tp):
                 for k, v in value.items():
-                    self._tuple_dict[f"{prefix}{i}/{k}"] = v
+                    self._tuple_dict[f"{prefix}{i}{self._last_sep}{k}"] = v
         return self._tuple_dict
 
 
@@ -61,7 +68,7 @@ if __name__ == "__main__":
         ({"a": 1}, ({"b": 2}, {"c": 3})),
         ({"a": 1}, ({"b": 2}, ({"c": 3}, {"d": 4}))),
     ]:
-        dict_tuple = DictTuple(DictTupleConfig(depth=0))([tuple_dict])
+        dict_tuple = DictTuple(DictTupleConfig())([tuple_dict])
         start = time.perf_counter()
         result = next(iter(dict_tuple))
         print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
@@ -71,11 +78,13 @@ if __name__ == "__main__":
 
     for index, tuple_dict in enumerate(
         [
-            ({"a": 1}, {"b": 2}),
-            (({"a": 1}, {"b": 2}), ({"c": 3}, {"d": 4}, {"e": 5})),
+            ({"/a": 1}, {"/b": 2}),
+            (({"/a": 1}, {"/b": 2}), ({"/c": 3}, {"/d": 4}, {"/e": 5})),
         ]
     ):
-        dict_tuple = DictTuple(DictTupleConfig(depth=index + 1))([tuple_dict])
+        dict_tuple = DictTuple(
+            DictTupleConfig(depth=index + 1, separator=".", separate_key=False)
+        )([tuple_dict])
         start = time.perf_counter()
         result = next(iter(dict_tuple))
         print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
