@@ -1,7 +1,11 @@
-from more_itertools import peekable, always_iterable
+import timeit
 
-p = peekable([1, 2, 3, 4])
-print(p[0])
-print(p[0])
-print(p[3])
-print(p[0])
+# 测试 bool 判断
+time_bool = timeit.timeit('if flag: pass', setup='flag = True', number=10_000_000)
+
+# 测试 isinstance
+time_isinstance = timeit.timeit('isinstance(x, dict)', setup='x = {}', number=10_000_000)
+
+print(f"Bool check:     {time_bool:.3f} s")
+print(f"isinstance:     {time_isinstance:.3f} s")
+print(f"isinstance is ~{time_isinstance / time_bool:.1f}x slower")
