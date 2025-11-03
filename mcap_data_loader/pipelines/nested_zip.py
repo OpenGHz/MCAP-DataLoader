@@ -15,11 +15,10 @@ class NestedZip(Pipeline[Tuple[T, ...]]):
     def __iter__(self) -> Generator[Tuple[T, ...]]:
         yield from self._recursive_iter(self._iterable, self.config.depth)
 
-    def _recursive_iter(self, iterables, level) -> Generator[Tuple[T, ...]]:
-        if level > 0:
-            # print(level, next(iter(iterables)))
+    def _recursive_iter(self, iterables, depth) -> Generator[Tuple[T, ...]]:
+        if depth > 0:
             for items in zip(*iterables):
-                yield from self._recursive_iter(items, level - 1)
+                yield from self._recursive_iter(items, depth - 1)
         else:
             yield iterables
 

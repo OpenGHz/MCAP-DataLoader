@@ -1,5 +1,5 @@
 from itertools import chain, islice, tee
-from more_itertools import consume
+from more_itertools import consume, first
 from collections import deque
 from collections.abc import Iterator, Generator
 from typing import Any, Iterable, Callable, TypeVar, Generic, Tuple, List
@@ -167,6 +167,18 @@ def take_skip(
     return taken, skipped
 
 
+def first_recursive(iterable: Iterable, depth: int = 1) -> Any:
+    """Get the first element from a nested iterable structure up to a specified depth."""
+    current = iterable
+    if depth < 0:
+        while isinstance(current, Iterable):
+            current = first(current)
+    else:
+        for _ in range(depth):
+            current = first(current)
+    return current
+
+
 if __name__ == "__main__":
     # import time
 
@@ -211,5 +223,13 @@ if __name__ == "__main__":
     # for a, b in epairwise(iterable, 2, None):
     #     print(f"{a=}, {b=}")
 
-    lis = range(17)
-    print(take_skip(lis, 2, 3, True))  # Example usage
+    # lis = range(17)
+    # print(take_skip(lis, 2, 3, True))  # Example usage
+
+    nested = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    print(
+        first_recursive(nested, depth=0)
+    )  # Output: [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    print(first_recursive(nested, depth=1))  # Output: [[1, 2], [3, 4]]
+    print(first_recursive(nested, depth=2))  # Output: [1, 2]
+    print(first_recursive(nested, depth=-1))  # Output: 1
