@@ -1,5 +1,5 @@
 from itertools import chain, islice, tee
-from more_itertools import consume, first
+from more_itertools import consume, first, first_true
 from collections import deque
 from collections.abc import Iterator, Generator
 from typing import Any, Iterable, Callable, TypeVar, Generic, Tuple, List
@@ -179,6 +179,14 @@ def first_recursive(iterable: Iterable, depth: int = 1) -> Any:
     return current
 
 
+def first_recursive_true(iterable: Iterable, pred: Callable[[Any], bool]) -> Any:
+    """Get the first element from a nested iterable structure that satisfies the predicate."""
+    current = iterable
+    while not pred(current):
+        current = first(current)
+    return current
+
+
 if __name__ == "__main__":
     # import time
 
@@ -233,3 +241,4 @@ if __name__ == "__main__":
     print(first_recursive(nested, depth=1))  # Output: [[1, 2], [3, 4]]
     print(first_recursive(nested, depth=2))  # Output: [1, 2]
     print(first_recursive(nested, depth=-1))  # Output: 1
+    print(first_recursive_true(nested, lambda x: isinstance(x, int)))  # Output: 1
