@@ -41,7 +41,6 @@ def ewindowed(
     is True, starting from the first element equal to `fillvalue`, it and
     all elements to its right are replaced with the left element of that element
     """
-    # TODO: optimize (ref to epairwise)
     if n < 0:
         raise ValueError("n must be >= 0")
     if n == 0:
@@ -65,20 +64,19 @@ def ewindowed(
                 if item != fillvalue:
                     window.extend(item for _ in range(index))
                     break
-                last_val = window.pop()
+                window.pop()
 
     if len(window) < n:
         # Use last value for padding if requested
         if fill_with_last:
-            last_val = window[-1]
-            yield tuple(window) + ((last_val,) * (n - len(window)))
+            yield tuple(window) + ((window[-1],) * (n - len(window)))
         else:
             yield tuple(window) + ((fillvalue,) * (n - len(window)))
         return
     yield tuple(window)
 
     def iter_wrapper():
-        last_val = None
+        last_val = window[-1]
         for item in iterable:
             if fill_with_last and item == fillvalue:
                 yield last_val
@@ -106,6 +104,7 @@ def past_future(
     fillvalue: Any = None,
     step: int = 1,
     fill_with_last: bool = False,
+    gap: int = 0,
 ) -> Generator[Tuple[Tuple[T, ...], Tuple[T, ...]]]:
     """Generate pairs of (past, future) windows from the iterable.
     Each past window contains `past_num + 1` elements (including the current element),
@@ -119,15 +118,15 @@ def past_future(
     except StopIteration:
         return ()
 
-    padded = chain([first] * past_num, iterable, [None] * future_num)
+    padded = chain([first] * past_num, iterable, [None] * (future_num + gap))
 
     windows = ewindowed(
-        padded, past_num + future_num + 1, fillvalue, step, fill_with_last
+        padded, past_num + gap + future_num + 1, fillvalue, step, fill_with_last
     )
 
     for win in windows:
         past = win[: past_num + 1]
-        future = win[past_num:]
+        future = win[past_num + gap :]
         yield past, future
 
 
@@ -188,21 +187,21 @@ def first_recursive_true(iterable: Iterable, pred: Callable[[Any], bool]) -> Any
 
 
 if __name__ == "__main__":
-    # import time
+    import time
 
-    # iterables = [range(2), [1, None], [None], chain(range(4), [None] * 10)]
+    iterables = [range(2), [1, None], [None], chain(range(4), [None] * 10)]
 
-    # for iterable in iterables:
-    #     start = time.perf_counter()
-    #     rounds = 3
-    #     for window in windowed(iterable, 3, None, 1, True):
-    #         print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
-    #         print(window)
-    #         start = time.perf_counter()
-    #         rounds -= 1
-    #         if rounds == 0:
-    #             break
-    #     print("===" * 10)
+    for iterable in iterables:
+        start = time.perf_counter()
+        rounds = 3
+        for window in ewindowed(iterable, 3, None, 1, True):
+            print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
+            print(window)
+            start = time.perf_counter()
+            rounds -= 1
+            if rounds == 0:
+                break
+        print("===" * 10)
 
     # max_steps = 20
     # iterable = range(10)
@@ -234,11 +233,11 @@ if __name__ == "__main__":
     # lis = range(17)
     # print(take_skip(lis, 2, 3, True))  # Example usage
 
-    nested = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
-    print(
-        first_recursive(nested, depth=0)
-    )  # Output: [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
-    print(first_recursive(nested, depth=1))  # Output: [[1, 2], [3, 4]]
-    print(first_recursive(nested, depth=2))  # Output: [1, 2]
-    print(first_recursive(nested, depth=-1))  # Output: 1
-    print(first_recursive_true(nested, lambda x: isinstance(x, int)))  # Output: 1
+    # nested = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    # print(
+    #     first_recursive(nested, depth=0)
+    # )  # Output: [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    # print(first_recursive(nested, depth=1))  # Output: [[1, 2], [3, 4]]
+    # print(first_recursive(nested, depth=2))  # Output: [1, 2]
+    # print(first_recursive(nested, depth=-1))  # Output: 1
+    # print(first_recursive_true(nested, lambda x: isinstance(x, int)))  # Output: 1
