@@ -15,6 +15,7 @@ class Pipeline(ABC, Generic[T]):
     @final
     @validate_call
     def __call__(self, iterables: NonIteratorIterable[Any]) -> Self:
+        """Initialize the pipeline with the given iterable."""
         self._iterable = iterables
         return self
 
