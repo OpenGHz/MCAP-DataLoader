@@ -16,7 +16,7 @@ class DictTupleConfig(BaseModel):
     which is useful for varying depth of tuples or the depth is unknown.
     A positive integer means flattening up to that depth, which requires
     the depth to be the same for all items and is faster. 0 means the items
-    are already a flattened dictionary.
+    are already a flattened dictionary thus no further action will be taken.
     """
     separator: str = "/"
     """Separator used when concatenating prefixes."""

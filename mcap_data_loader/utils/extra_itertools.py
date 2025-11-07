@@ -1,5 +1,5 @@
 from itertools import chain, islice, tee
-from more_itertools import consume, first, first_true
+from more_itertools import consume, first
 from collections import deque
 from collections.abc import Iterator, Generator
 from typing import Any, Iterable, Callable, TypeVar, Generic, Tuple, List

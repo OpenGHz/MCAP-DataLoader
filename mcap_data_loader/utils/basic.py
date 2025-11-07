@@ -219,6 +219,52 @@ def get_fully_qualified_class_name(obj_or_cls):
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
+def float_range(start: float, stop: float, step: int = 1):
+    """
+    Generates a sequence of floating-point numbers from start (inclusive) to stop (exclusive),
+    with a step size determined by `step` (1 means 0.1, 2 means 0.2, etc.).
+    Requires that `start` and `stop` share the same "prefix" (i.e., floor(start * 10) == floor(stop * 10));
+    otherwise, raises a ValueError.
+
+    Args:
+        start (float): The starting value.
+        stop (float): The ending value (not included).
+        step (int): Step size in units of 0.1 (default is 1).
+
+    Examples:
+        float_range(1.0, 1.5, 1) -> [1.0, 1.1, 1.2, 1.3, 1.4]
+        float_range(1.0, 1.5, 2) -> [1.0, 1.2, 1.4]
+        float_range(1.2, 2.1) -> ValueError
+    """
+    if step <= 0:
+        raise ValueError("Step must be a positive integer.")
+
+    # Convert input to "tenths" (integer representation scaled by 10)
+    def to_tenth(x: float) -> int:
+        tenth = int(x * 10)
+        if abs(x * 10 - tenth) > 1e-9:
+            raise ValueError(f"Input {x} has more than one decimal place.")
+        return tenth
+
+    start_tenth = to_tenth(start)
+    stop_tenth = to_tenth(stop)
+
+    # Check if both values lie within the same "tenths decade" (i.e., same prefix)
+    if start_tenth // 10 != stop_tenth // 10:
+        raise ValueError(
+            f"Start ({start}) and stop ({stop}) have inconsistent prefixes."
+        )
+
+    result = []
+    current = start_tenth
+    while current < stop_tenth:
+        value = current / 10.0
+        result.append(round(value, 1))
+        current += step
+
+    return result
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
@@ -230,6 +276,13 @@ if __name__ == "__main__":
     #     range(8, 10)
     # )
 
-    print(get_items_by_ext("data/example", ".mcap"))
-    print(get_items_by_ext("data/example", ""))
-    print(get_items_by_ext("data/example", "."))
+    # print(get_items_by_ext("data/example", ".mcap"))
+    # print(get_items_by_ext("data/example", ""))
+    # print(get_items_by_ext("data/example", "."))
+
+    print(float_range(1.0, 1.5))  # Default step = 0.1: [1.0, 1.1, 1.2, 1.3, 1.4]
+    print(float_range(1.0, 1.5, 2))  # Step = 0.2: [1.0, 1.2, 1.4]
+    print(float_range(1.0, 1.6, 3))  # Step = 0.3: [1.0, 1.3] (1.6 is excluded)
+    # print(float_range(1.0, 1.62, 3))  # Step = 0.3: [1.0, 1.3, 1.6] (1.62 is truncated to 1.6; 1.6 is excluded)
+    # print(float_range(1.0, 2.1))         # ValueError: prefix 1 vs 2 mismatch
+    # print(float_range(1.0, 1.5, -1))     # ValueError: Step must be a positive integer.
