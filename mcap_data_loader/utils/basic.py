@@ -3,13 +3,28 @@ from typing_extensions import Annotated, TypedDict
 from enum import Enum
 from pathlib import Path
 from collections.abc import Iterable, Iterator
-from pydantic import PlainValidator
+from pydantic import PlainValidator, validate_call
+from functools import wraps
 import hashlib
 import time
 import sys
 
 
-T = TypeVar("T")
+def validate_call_once(func):
+    validated_func = validate_call(func)
+    called = False
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        nonlocal called
+        if not called:
+            called = True
+            return validated_func(*args, **kwargs)
+        else:
+            # 后续调用直接使用原始函数，不验证
+            return func(*args, **kwargs)
+
+    return wrapper
 
 
 def validate_iterable_not_iterator(value: Iterable) -> Iterable:
@@ -20,6 +35,7 @@ def validate_iterable_not_iterator(value: Iterable) -> Iterable:
     return value
 
 
+T = TypeVar("T")
 NonIteratorIterable = Annotated[
     Iterable[T],
     PlainValidator(validate_iterable_not_iterator),

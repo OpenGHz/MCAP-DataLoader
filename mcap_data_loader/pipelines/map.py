@@ -16,6 +16,9 @@ class Map(Pipeline[T]):
         self.config = config
 
     def __iter__(self) -> Generator[T]:
+        # TODO: should we reset the callable if it has a reset method?
+        # if hasattr(self.config.callable, "reset"):
+        #     self.config.callable.reset()
         yield from map(self.config.callable, self._iterable)
 
 
