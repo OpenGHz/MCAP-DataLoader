@@ -23,6 +23,8 @@ dependencies = [
     "av",
     "PyTurboJPEG",
     "natsort",
+    "array-api-compat",
+    "types-array-api",
 ]
 
 [tool.setuptools.packages.find]
