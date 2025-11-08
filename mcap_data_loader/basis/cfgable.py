@@ -9,7 +9,7 @@ from pydantic import BaseModel
 ConfigType = Optional[Union[BaseModel, Type[BaseModel]]]
 
 
-class ConfigurableBasis(ABC):
+class InitConfigMixin:
     def __init__(self, config: ConfigType = None, **kwargs) -> None:
         """Base class for configurable components.
         Args:
@@ -47,6 +47,12 @@ class ConfigurableBasis(ABC):
     def on_init(self) -> None:
         """Callback to be called when initializing"""
 
+    @classmethod
+    def get_logger(cls):
+        return getLogger(cls.__name__)
+
+
+class ConfigurableBasis(ABC, InitConfigMixin):
     @final
     def configure(self) -> bool:
         if self._configured:
@@ -63,10 +69,6 @@ class ConfigurableBasis(ABC):
     def on_configure(self) -> bool:
         """Callback to be called when configuring"""
         raise NotImplementedError
-
-    @classmethod
-    def get_logger(cls):
-        return getLogger(cls.__name__)
 
     @final
     @property
@@ -94,3 +96,23 @@ class ConfigurableBasis(ABC):
                 cfg_dict = asdict(self.config)
             com_keys = cfg_dict.keys() & sig.parameters.keys()
             self.interface = class_type(**{key: cfg_dict[key] for key in com_keys})
+
+
+if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+
+    class MyConfig(BaseModel):
+        param1: int = 10
+        param2: str = "default"
+
+    class MyComponent(ConfigurableBasis):
+        config: MyConfig
+
+        def on_configure(self) -> bool:
+            self.get_logger().info(f"Configuring with {self.config}")
+            return True
+
+    comp = MyComponent(param1=20)
+    comp.configure()
