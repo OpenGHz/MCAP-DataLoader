@@ -15,6 +15,7 @@ from mcap_data_loader.utils.array_like import (
     Tensor,
 )
 from mcap_data_loader.callers.basis import CallerBasis
+from threading import Lock
 
 
 NormStackValue = List[List[str]]
@@ -66,17 +67,14 @@ class BatchStacker(CallerBasis):
                 )
         self.keys_info: Dict[str, dict] = keys_info
         self._first_call = True
+        self._lock = Lock()
+        return True
 
     def _determine_functions(self, backend_in: str, dtype_in, device_in):
         # input process
-        assert backend_in != "auto"
-        xp_in = get_namespace_by_name(backend_in)
-        # TODO: for torch, the device may should be the input tensor's device since
-        # there may be potential time-consuming data copying between different devices
-        # during the data filling stage.
-        self.empty_func = lambda data: xp_in.empty(
-            data, dtype=dtype_in, device=device_in
-        )
+        self._xp_in = get_namespace_by_name(backend_in)
+        self._dtype_in = dtype_in
+        self._device_in = device_in
         # output process
         config = self.config
         backend_out = backend_in if config.backend_out == "same" else config.backend_out
@@ -142,17 +140,22 @@ class BatchStacker(CallerBasis):
     def _to_list(self, data: Union[NDArray, Tensor]) -> list:
         return data.tolist()
 
-    def _reset_buffers(self):
+    def _reset_buffers(self, batch_size: int):
+        batch_stack = {}
         for cat_key, shape in self._batch_stack_shape.items():
-            self._batch_stack[cat_key] = self.empty_func(shape)
+            batch_stack[cat_key] = self._xp_in.empty(
+                (batch_size,) + shape, dtype=self._dtype_in, device=self._device_in
+            )
+        batch_list: Dict[str, list] = {}
         for key in self._keys_no_stack:
-            self._batch_list[key] = []
+            batch_list[key] = []
+        return batch_stack, batch_list
 
-    def __call__(self, batched_samples: List[SampleStamped]) -> DictBatch:
-        batch_size = len(batched_samples)
-        if self._first_call:
+    def _init_info(self, first_sample: SampleStamped):
+        with self._lock:
+            if not self._first_call:
+                return
             batch_stack_shape = {}
-            first_sample = batched_samples[0]
             for cat_key, list_keys in self.stack.items():
                 first_row = list_keys[0]
                 row_num = len(list_keys)
@@ -163,7 +166,6 @@ class BatchStacker(CallerBasis):
                     c2slice.append((bias, bias + inc))
                     bias += inc
                 batch_stack_shape[cat_key] = (
-                    batch_size,
                     row_num,
                     *first_sample[key]["data"].shape[:-1],
                     bias,
@@ -178,27 +180,28 @@ class BatchStacker(CallerBasis):
             )
             self._determine_functions(backend_in, one_value.dtype, one_value.device)
             self._batch_stack_shape = batch_stack_shape
-            self._batch_stack = {}
             self._keys_no_stack = first_sample.keys() - self.keys_to_stack
-            self._batch_list: Dict[str, list] = {}
             self._first_call = False
+
+    def __call__(self, batched_samples: List[SampleStamped]) -> DictBatch:
+        if self._first_call:
+            self._init_info(batched_samples[0])
         # allocate memory
-        self._reset_buffers()
+        batch_size = len(batched_samples)
+        batch_stack, batch_list = self._reset_buffers(batch_size)
         # fill in data
         for i, sample in enumerate(batched_samples):
             for cat_key, keys_dict in self.keys_info.items():
                 for key, config in keys_dict.items():
                     (start, stop), r = config
-                    self._batch_stack[cat_key][i, r, ..., start:stop] = sample[key][
-                        "data"
-                    ]
+                    batch_stack[cat_key][i, r, ..., start:stop] = sample[key]["data"]
             for key in self._keys_no_stack:
-                self._batch_list[key].append(sample[key]["data"])
+                batch_list[key].append(sample[key]["data"])
         # stack and move to device
         # TODO: use multi-treaded pin_memory and use a new cuda stream to copy asynchronously
         # TODO: test the performance vs tensor-dict
         final_batched = {}
-        for catkey, data in self._batch_stack.items():
+        for catkey, data in batch_stack.items():
             final_batched[catkey] = self.convert_func(data)
         # keep the remaining batched dict unstacked
-        return ChainMap(final_batched, self._batch_list, {"batch_size": batch_size})
+        return ChainMap(final_batched, batch_list, {"batch_size": batch_size})
