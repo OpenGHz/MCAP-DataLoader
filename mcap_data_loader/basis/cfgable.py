@@ -1,8 +1,8 @@
 import inspect
 from abc import ABC, abstractmethod
-from dataclasses import asdict, replace
+from dataclasses import asdict, replace, is_dataclass
 from logging import getLogger
-from typing import Union, Optional, Type, final
+from typing import Union, Optional, Type, Dict, Any, Literal, final
 from pydantic import BaseModel
 
 
@@ -51,6 +51,21 @@ class InitConfigMixin:
     def get_logger(cls):
         return getLogger(cls.__name__)
 
+    def dump(self, mode: Literal["python", "json"] = "python") -> Dict[str, Any]:
+        """Dump the config to a dictionary.
+        Args:
+            mode: The mode to dump the config. "python" for standard dict, "json" (only applicable when the config is the `BaseModel` of pydantic) for JSON serializable dict.
+        Returns:
+            A dictionary representing the config with a "_target_" key indicating the class path.
+        """
+        if isinstance(self.config, BaseModel):
+            config = self.config.model_dump(mode=mode)
+        else:  # dataclass
+            config = asdict(self.config)
+        cls = self.__class__
+        config["_target_"] = f"{cls.__module__}.{cls.__qualname__}"
+        return config
+
 
 class ConfigurableBasis(ABC, InitConfigMixin):
     @final
@@ -98,8 +113,28 @@ class ConfigurableBasis(ABC, InitConfigMixin):
             self.interface = class_type(**{key: cfg_dict[key] for key in com_keys})
 
 
+def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], str]:
+    """Dump the config if the object is a ConfigurableBasis, otherwise return the repr.
+    Args:
+        obj: The object to dump or repr.
+    Returns:
+        A dictionary representing the config or the repr string.
+    """
+    if callable(getattr(obj, "dump", None)):
+        return obj.dump()
+    else:
+        config = getattr(obj, "config", None)
+        if config is not None:
+            if isinstance(config, BaseModel):
+                return config.model_dump()
+            elif is_dataclass(config):
+                return asdict(config)
+        return repr(obj)
+
+
 if __name__ == "__main__":
     import logging
+    from pydantic import ConfigDict
 
     logging.basicConfig(level=logging.INFO)
 
@@ -114,5 +149,15 @@ if __name__ == "__main__":
             self.get_logger().info(f"Configuring with {self.config}")
             return True
 
+    class MyCompsConfig(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
+        comps: list[MyComponent]
+
     comp = MyComponent(param1=20)
     comp.configure()
+    print(comp.dump())
+
+    comps_config = MyCompsConfig(comps=[comp])
+    print(comps_config)
+    print(comps_config.model_dump(mode="json", fallback=lambda x: x.dump()))
