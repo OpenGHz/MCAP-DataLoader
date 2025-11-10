@@ -14,20 +14,24 @@ class CallerChain(CallerEnsembleBasis):
 
     config: CallerChainConfig
 
+    def on_init(self):
+        self._callables = self.config.callables
+        self._single_input = self.config.single_input
+
     def reset(self):
         self.output_chain = []
         return super().reset()
 
     def _single_call(self, input):
         output = input
-        for caller in self.config.callables:
+        for caller in self._callables:
             output = caller(output)
             self.output_chain.append(output)
         return output
 
     def _multi_call(self, *args, **kwds):
         first = True
-        for caller in self.config.callables:
+        for caller in self._callables:
             if first:
                 output = caller(*args, **kwds)
                 first = False
@@ -37,7 +41,7 @@ class CallerChain(CallerEnsembleBasis):
         return output
 
     def __call__(self, *args, **kwds):
-        if self.config.single_input:
+        if self._single_input:
             return self._single_call(*args, **kwds)
         else:
             return self._multi_call(*args, **kwds)

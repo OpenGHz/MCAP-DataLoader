@@ -65,7 +65,7 @@ def for_config_bms():
 
 
 if __name__ == "__main__":
-    rounds = 10000000
+    rounds = 10_000_000
     print("for_list:", timeit.timeit(for_list, number=rounds))
     print("for_config_dcs:", timeit.timeit(for_config_dcs, number=rounds))
     print("for_config_dc:", timeit.timeit(for_config_dc, number=rounds))

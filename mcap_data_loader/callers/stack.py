@@ -186,22 +186,25 @@ class BatchStacker(CallerBasis):
     def __call__(self, batched_samples: List[SampleStamped]) -> DictBatch:
         if self._first_call:
             self._init_info(batched_samples[0])
+        keys_info = self.keys_info
+        keys_no_stack = self._keys_no_stack
+        convert_func = self.convert_func
         # allocate memory
         batch_size = len(batched_samples)
         batch_stack, batch_list = self._reset_buffers(batch_size)
         # fill in data
         for i, sample in enumerate(batched_samples):
-            for cat_key, keys_dict in self.keys_info.items():
+            for cat_key, keys_dict in keys_info.items():
                 for key, config in keys_dict.items():
                     (start, stop), r = config
                     batch_stack[cat_key][i, r, ..., start:stop] = sample[key]["data"]
-            for key in self._keys_no_stack:
+            for key in keys_no_stack:
                 batch_list[key].append(sample[key]["data"])
         # stack and move to device
         # TODO: use multi-treaded pin_memory and use a new cuda stream to copy asynchronously
         # TODO: test the performance vs tensor-dict
         final_batched = {}
         for catkey, data in batch_stack.items():
-            final_batched[catkey] = self.convert_func(data)
+            final_batched[catkey] = convert_func(data)
         # keep the remaining batched dict unstacked
         return ChainMap(final_batched, batch_list, {"batch_size": batch_size})

@@ -12,6 +12,7 @@ class Flatten(Pipeline[T]):
 
     def __init__(self, config: FlattenConfig) -> None:
         self.config = config
+        self._depth = config.depth
 
     def __iter__(self) -> Generator[T]:
         for item in self._iterable:
@@ -19,7 +20,7 @@ class Flatten(Pipeline[T]):
 
     def _flatten(self, iterable: T, current_depth: int) -> Generator[T]:
         """Recursively flatten items up to the specified depth."""
-        if current_depth < self.config.depth:
+        if current_depth < self._depth:
             for sub_item in iterable:
                 yield from self._flatten(sub_item, current_depth + 1)
         else:

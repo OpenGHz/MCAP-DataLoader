@@ -38,10 +38,11 @@ class DictTuple(CallerBasis[Item]):
             else lambda tp, prefix, depth: tp
         )
         self._last_sep = config.separator if config.separate_key else ""
+        self._depth = config.depth
 
     def __call__(self, data: Tuple[Item]):
         self._tuple_dict: Item = {}
-        self._func(data, "", self.config.depth)
+        self._func(data, "", self._depth)
         return self._tuple_dict
 
     def _process_auto(self, tp: Tuple[Item], prefix: str, depth: int = 0):
