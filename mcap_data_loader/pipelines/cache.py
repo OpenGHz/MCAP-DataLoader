@@ -6,7 +6,10 @@ from typing import Optional
 
 
 class CacheConfig(BaseModel):
+    """Configuration for Cache pipeline."""
+
     maxlen: Optional[NonNegativeInt] = None
+    """Maximum length of the cache. If None, the cache can grow indefinitely."""
 
 
 class Cache(Pipeline[T]):

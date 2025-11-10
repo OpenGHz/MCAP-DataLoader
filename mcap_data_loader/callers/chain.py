@@ -5,6 +5,8 @@ from mcap_data_loader.callers.basis import (
 
 
 class CallerChainConfig(CallerEnsembleConfig):
+    """Configuration for CallerChain caller."""
+
     single_input: bool = False
     """Whether the input to the chain is a single value or are args & kwargs."""
 

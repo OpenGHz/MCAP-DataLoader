@@ -4,7 +4,11 @@ from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
 class FlattenConfig(BaseModel):
+    """Configuration for Flatten pipeline."""
+
     depth: NonNegativeInt = 1
+    """Depth to which to flatten nested iterables.
+    A depth of 0 means no flattening, 1 means flattening one level, and so on."""
 
 
 class Flatten(Pipeline[T]):

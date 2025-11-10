@@ -5,7 +5,10 @@ from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
 class MergeConfig(BaseModel):
+    """Configuration for Merge pipeline."""
+
     method: str = "auto"
+    """Method to use for merging items."""
 
 
 class Merge(Pipeline[T]):

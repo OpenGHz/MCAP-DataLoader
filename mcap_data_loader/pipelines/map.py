@@ -6,7 +6,10 @@ from collections.abc import Callable
 
 
 class MapConfig(BaseModel, Generic[T]):
+    """Configuration for Map pipeline."""
+
     callable: Callable[..., T]
+    """Callable to apply to each item in the iterable."""
 
 
 class Map(Pipeline[T]):

@@ -27,6 +27,8 @@ DictBatch = ChainMap[str, Union[Array, List[Array], int]]
 
 
 class BatchStackerConfig(BaseModel):
+    """Configuration for BatchStacker caller."""
+
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     stack: StackType

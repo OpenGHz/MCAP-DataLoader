@@ -5,7 +5,11 @@ from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
 class NestedZipConfig(BaseModel):
+    """Configuration for NestedZip pipeline."""
+
     depth: int = 1
+    """Depth of nesting for zipping. A depth of 0 means no zipping, 
+    1 means a single level of zipping, and so on."""
 
 
 class NestedZip(Pipeline[Tuple[T, ...]]):
