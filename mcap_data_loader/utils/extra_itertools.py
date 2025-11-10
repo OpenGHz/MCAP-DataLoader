@@ -75,26 +75,31 @@ def ewindowed(
         return
     yield tuple(window)
 
+    step_minus_one = step - 1
+    pad_count = n - 1 if step >= n else step_minus_one
+    append_window = window.append
+    use_last = fill_with_last
+
     def iter_wrapper():
         last_val = window[-1]
         for item in iterable:
-            if fill_with_last and item == fillvalue:
+            if use_last and item == fillvalue:
                 yield last_val
             else:
                 last_val = item
                 yield item
-        if fill_with_last:
-            fillval = last_val
+        fillval = last_val if use_last else fillvalue
+        for _ in range(pad_count):
+            yield fillval
+
+    counter = step_minus_one
+    for value in iter_wrapper():
+        append_window(value)
+        if counter == 0:
+            yield tuple(window)
+            counter = step_minus_one
         else:
-            fillval = fillvalue
-        padding = (fillval for _ in range(n - 1 if step >= n else step - 1))
-        for pad_val in padding:
-            yield pad_val
-
-    filler = map(window.append, iter_wrapper())
-
-    for _ in islice(filler, step - 1, None, step):
-        yield tuple(window)
+            counter -= 1
 
 
 def past_future(
@@ -123,11 +128,8 @@ def past_future(
     windows = ewindowed(
         padded, past_num + gap + future_num + 1, fillvalue, step, fill_with_last
     )
-
     for win in windows:
-        past = win[: past_num + 1]
-        future = win[past_num + gap :]
-        yield past, future
+        yield win[: past_num + 1], win[past_num + gap :]
 
 
 class Reusablizer(Generic[T]):
@@ -188,6 +190,10 @@ def first_recursive_true(iterable: Iterable, pred: Callable[[Any], bool]) -> Any
 
 if __name__ == "__main__":
     import time
+    import timeit
+
+    # long = range(100000)
+    # print(timeit.timeit(lambda: ewindowed(long, 25, None, 1, True), number=100 * 3000))
 
     iterables = [range(2), [1, None], [None], chain(range(4), [None] * 10)]
 
