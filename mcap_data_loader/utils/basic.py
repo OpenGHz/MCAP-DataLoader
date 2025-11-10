@@ -1,10 +1,11 @@
-from typing import List, Union, Dict, TypeVar, Generic
+from typing import List, Union, Dict, TypeVar, Generic, Any, Type
 from typing_extensions import Annotated, TypedDict
 from enum import Enum
 from pathlib import Path
 from collections.abc import Iterable, Iterator
 from pydantic import PlainValidator, validate_call
 from functools import wraps
+from inspect import isclass
 import hashlib
 import time
 import sys
@@ -279,6 +280,11 @@ def float_range(start: float, stop: float, step: int = 1):
         current += step
 
     return result
+
+
+def get_full_class_name(obj: Union[Any, Type]) -> str:
+    cls = obj if isclass(obj) else obj.__class__
+    return f"{cls.__module__}.{cls.__qualname__}"
 
 
 if __name__ == "__main__":
