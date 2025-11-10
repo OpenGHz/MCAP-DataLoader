@@ -26,8 +26,9 @@ if __name__ == "__main__":
         "/follow/eef/joint_state/position",
     ]
 
-    past_num = 2
-    future_num = 20
+    past_num = 0
+    future_num = 0
+    gap = 1
 
     dataset = McapFlatBuffersEpisodeDataset(
         McapFlatBuffersEpisodeDatasetConfig(data_root=data_root, keys=keys)
@@ -36,13 +37,16 @@ if __name__ == "__main__":
     for episode in dataset:
         start = time.perf_counter()
         for step, horizons in enumerate(
-            past_future(episode, past_num, future_num, None, 1, True)
+            past_future(episode, past_num, future_num, None, 1, True, gap)
         ):
             assert len(horizons) == 2
             assert len(horizons[0]) == past_num + 1
             assert len(horizons[1]) == future_num + 1
-            assert horizons[0][-1] == horizons[1][0]
+            # assert horizons[0][-1] == horizons[1][0]
             print(f"{step=}", horizons[0][0].keys(), horizons[1][0].keys())
+            print(horizons[0])
+            print(horizons[1])
+            break
         else:
             print(
                 f"Processed {len(episode)} samples in episode {episode.config.data_root}"

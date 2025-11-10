@@ -35,7 +35,7 @@ class Horizon(Pipeline[T]):
 if __name__ == "__main__":
     iterable = range(5)
     gap = 2
-    for past_num, future_num in [(0, 2), (2, 0), (1, 2), (2, 2)]:
+    for past_num, future_num in [(0, 0), (0, 2), (2, 0), (1, 2), (2, 2)]:
         print(f"\n--- past_num={past_num}, future_num={future_num} ---")
         config = HorizonConfig(
             past_num=past_num, future_num=future_num, fill_with_last=True, gap=gap
