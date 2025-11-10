@@ -1,11 +1,39 @@
 from itertools import chain, islice, tee
-from more_itertools import consume, first
+from more_itertools import take
 from collections import deque
-from collections.abc import Iterator, Generator
-from typing import Any, Iterable, Callable, TypeVar, Generic, Tuple, List
+from collections.abc import Iterator, Generator, Callable
+from typing import Any, Iterable, Optional, TypeVar, Generic, Tuple, List
 
 
 T = TypeVar("T")
+_marker = object()
+
+
+def first(iterable: Iterable, default: Any = _marker):
+    """Return the first item of an iterable or raise StopIteration if empty."""
+    item = next(iter(iterable), default)
+    if item is _marker:
+        raise ValueError(
+            "first() was called on an empty iterable, "
+            "and no default value was provided."
+        )
+    return item
+
+
+def consume_and_return(
+    iterator: Iterator[T], n: Optional[int] = None, strict: bool = False
+) -> T:
+    """"""
+    # Use functions that consume iterators at C speed.
+    if n is None:
+        # feed the entire iterator into a zero-length deque
+        que = deque(iterator, maxlen=1)
+        return que.pop()
+    else:
+        taken = take(n, iterator)
+        if strict and len(taken) < n:
+            raise ValueError("not enough values to consume")
+        return taken[-1]
 
 
 def epairwise(
@@ -13,21 +41,22 @@ def epairwise(
     gap: int = 0,
     fillvalue: Any = ...,
     fill_with_last: bool = False,
+    strict: bool = False,
 ) -> Generator[Tuple[T, T]]:
     a, b = tee(iterable)
-    consume(b, gap + 1)
+    last = consume_and_return(b, gap + 1, strict)
     if not fill_with_last:
         if fillvalue is ...:
             return zip(a, b)
         return zip(a, chain(b, (fillvalue,) * (gap + 1)))
 
-    def fill_last_gen(it: Iterable[T]) -> Generator[T]:
+    def fill_last_gen(it: Iterable[T], item) -> Generator[T]:
         for item in it:
             yield item
         while True:
             yield item
 
-    return zip(a, fill_last_gen(b))
+    return zip(a, fill_last_gen(b, last))
 
 
 def ewindowed(
@@ -192,22 +221,37 @@ if __name__ == "__main__":
     import time
     import timeit
 
+    iterable = range(5)
+    assert first(iterable) == 0
+    assert first([], default=42) == 42
+    try:
+        first([])
+    except ValueError as e:
+        print(f"Caught expected exception: {e}")
+
+    # assert consume_and_return(iter(iterable), 3) == 2
+    # assert consume_and_return(iter(iterable)) == 4
+    # assert consume_and_return(iter(iterable), 10) == 4
+    # try:
+    #     consume_and_return(iter(iterable), 10, True)  # should raise
+    # except ValueError as e:
+    #     print(f"Caught expected exception: {e}")
+
     # long = range(100000)
     # print(timeit.timeit(lambda: ewindowed(long, 25, None, 1, True), number=100 * 3000))
 
-    iterables = [range(2), [1, None], [None], chain(range(4), [None] * 10)]
-
-    for iterable in iterables:
-        start = time.perf_counter()
-        rounds = 3
-        for window in ewindowed(iterable, 3, None, 1, True):
-            print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
-            print(window)
-            start = time.perf_counter()
-            rounds -= 1
-            if rounds == 0:
-                break
-        print("===" * 10)
+    # iterables = [range(2), [1, None], [None], chain(range(4), [None] * 10)]
+    # for iterable in iterables:
+    #     start = time.perf_counter()
+    #     rounds = 3
+    #     for window in ewindowed(iterable, 3, None, 1, True):
+    #         print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
+    #         print(window)
+    #         start = time.perf_counter()
+    #         rounds -= 1
+    #         if rounds == 0:
+    #             break
+    #     print("===" * 10)
 
     # max_steps = 20
     # iterable = range(10)

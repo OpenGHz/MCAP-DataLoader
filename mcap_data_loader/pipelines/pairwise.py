@@ -30,7 +30,7 @@ class PairWise(Pipeline[T]):
 if __name__ == "__main__":
     iterable = range(5)
 
-    config = PairWiseConfig(gap=3, fill_with_last=True)
+    config = PairWiseConfig(gap=10, fill_with_last=True)
     paired = PairWise(config)(iterable)
 
     for item in paired:
