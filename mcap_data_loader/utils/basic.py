@@ -295,6 +295,27 @@ def get_class_type(class_path: str) -> Type:
     return cls
 
 
+def remove_util(string: str, stop: str, include_stop: bool = True) -> str:
+    """Remove part of the string before the stop string (including or excluding the stop string).
+    Args:
+        string (str): The original string.
+        stop (str): The stop string.
+        include_stop (bool, optional): Whether to include the stop string in the result. Defaults to True.
+    Returns:
+        str: The modified string.
+    Raises:
+        ValueError: if stop string is empty.
+    Examples:
+        remove_util("123.abc", ".", False) -> "abc"
+    """
+    if not stop:
+        raise ValueError("stop string cannot be empty")
+    index = string.find(stop)
+    bias = 0 if include_stop else len(stop)
+    result = string[index + bias :] if index != -1 else string
+    return result
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
@@ -310,9 +331,20 @@ if __name__ == "__main__":
     # print(get_items_by_ext("data/example", ""))
     # print(get_items_by_ext("data/example", "."))
 
-    print(float_range(1.0, 1.5))  # Default step = 0.1: [1.0, 1.1, 1.2, 1.3, 1.4]
-    print(float_range(1.0, 1.5, 2))  # Step = 0.2: [1.0, 1.2, 1.4]
-    print(float_range(1.0, 1.6, 3))  # Step = 0.3: [1.0, 1.3] (1.6 is excluded)
+    # print(float_range(1.0, 1.5))  # Default step = 0.1: [1.0, 1.1, 1.2, 1.3, 1.4]
+    # print(float_range(1.0, 1.5, 2))  # Step = 0.2: [1.0, 1.2, 1.4]
+    # print(float_range(1.0, 1.6, 3))  # Step = 0.3: [1.0, 1.3] (1.6 is excluded)
     # print(float_range(1.0, 1.62, 3))  # Step = 0.3: [1.0, 1.3, 1.6] (1.62 is truncated to 1.6; 1.6 is excluded)
     # print(float_range(1.0, 2.1))         # ValueError: prefix 1 vs 2 mismatch
     # print(float_range(1.0, 1.5, -1))     # ValueError: Step must be a positive integer.
+
+    result = remove_util("123.abc", ".", False)
+    assert result == "abc", result
+    result = remove_util("123.abc", ".", True)
+    assert result == ".abc", result
+    result = remove_util("123abc", "123", False)
+    assert result == "abc", result
+    result = remove_util("12ab34", "ab")
+    assert result == "ab34", result
+    assert remove_util("12ab34", "567") == "12ab34"
+
