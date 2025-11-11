@@ -2,7 +2,7 @@ from mcap_data_loader.datasets.mcap_dataset import SampleStamped
 from mcap_data_loader.utils.basic import float_range
 from typing import Tuple, List, Dict, Union, Literal
 from collections import ChainMap
-from pydantic import BaseModel, PositiveInt, ConfigDict
+from pydantic import BaseModel, PositiveInt, ConfigDict, field_validator
 from mcap_data_loader.utils.array_like import (
     get_device_auto,
     get_ns_name_by_array,
@@ -32,7 +32,7 @@ class BatchStackerConfig(BaseModel):
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     stack: StackType
-    """Configuration for stacking keys."""
+    """Configuration for stacking keys, normalized to a consistent format automatically."""
     dtype: Union[Literal["same"], str] = "same"
     """Data type for the stacked arrays. If `same`, keep the original dtype.
     If empty, use the default dtype of the backend."""
@@ -44,6 +44,29 @@ class BatchStackerConfig(BaseModel):
     backend_out: Literal["torch", "numpy", "list", "same"] = "same"
     """The output data backend."""
 
+    @field_validator("stack", mode="after")
+    def validate_stack(cls, v: StackType) -> StackType:
+        return cls.normalize_stack_config(v)
+
+    @staticmethod
+    def normalize_stack_config(stack: StackType) -> Dict[str, NormStackValue]:
+        def process_value(config):
+            if isinstance(config, tuple):
+                keys, prefixes = config
+                if len(prefixes) == 3 and isinstance(prefixes[2], int):
+                    # range style
+                    start, stop, step = prefixes
+                    prefixes = float_range(start, stop, step)
+                return [[f"{p}{k}" for k in keys] for p in prefixes]
+            else:
+                first = config[0]
+                if isinstance(first, str):
+                    return [config]
+                else:
+                    return config
+
+        return {k: process_value(v) for k, v in stack.items()}
+
 
 class BatchStacker(CallerBasis):
     """A caller that stacks specified keys from batched samples."""
@@ -51,23 +74,23 @@ class BatchStacker(CallerBasis):
     config: BatchStackerConfig
 
     def on_configure(self):
-        self.stack = self._normalize_stack_config(self.config.stack)
+        self._stack = self.config.stack
         keys_info = {}
-        self.keys_to_stack = set()
-        for cat_key, list_keys in self.stack.items():
+        self._keys_to_stack = set()
+        for cat_key, list_keys in self._stack.items():
             keys_info[cat_key] = {}
             col_num = len(list_keys[0])
             cur_keys = []
             for c in range(col_num):
                 for r, keys in enumerate(list_keys):
                     keys_info[cat_key][keys[c]] = [c, r]
-                    self.keys_to_stack.add(keys[c])
+                    self._keys_to_stack.add(keys[c])
                     cur_keys.append(keys[c])
             if len(cur_keys) != len(keys_info[cat_key]):
                 raise ValueError(
                     f"Duplicate keys found in stacking config for category '{cat_key}': {cur_keys}"
                 )
-        self.keys_info: Dict[str, dict] = keys_info
+        self._keys_info: Dict[str, dict] = keys_info
         self._first_call = True
         self._lock = Lock()
         return True
@@ -109,24 +132,6 @@ class BatchStacker(CallerBasis):
         else:
             self.convert_func = self._np_to_torch
 
-    def _normalize_stack_config(self, stack: StackType) -> Dict[str, NormStackValue]:
-        def process_value(config):
-            if isinstance(config, tuple):
-                keys, prefixes = config
-                if len(prefixes) == 3 and isinstance(prefixes[2], int):
-                    # range style
-                    start, stop, step = prefixes
-                    prefixes = float_range(start, stop, step)
-                return [[f"{p}{k}" for k in keys] for p in prefixes]
-            else:
-                first = config[0]
-                if isinstance(first, str):
-                    return [config]
-                else:
-                    return config
-
-        return {k: process_value(v) for k, v in stack.items()}
-
     def _np_to_torch(self, array: NDArray) -> Tensor:
         # no need to check dtype here, as the empty_func already creates the correct dtype
         return self._xp_out.from_numpy(array).to(
@@ -158,7 +163,7 @@ class BatchStacker(CallerBasis):
             if not self._first_call:
                 return
             batch_stack_shape = {}
-            for cat_key, list_keys in self.stack.items():
+            for cat_key, list_keys in self._stack.items():
                 first_row = list_keys[0]
                 row_num = len(list_keys)
                 c2slice = []
@@ -172,7 +177,7 @@ class BatchStacker(CallerBasis):
                     *first_sample[key]["data"].shape[:-1],
                     bias,
                 )
-                for key, config in self.keys_info[cat_key].items():
+                for key, config in self._keys_info[cat_key].items():
                     config[0] = c2slice[config[0]]
             one_value = first_sample[key]["data"]
             backend_in = (
@@ -182,13 +187,13 @@ class BatchStacker(CallerBasis):
             )
             self._determine_functions(backend_in, one_value.dtype, one_value.device)
             self._batch_stack_shape = batch_stack_shape
-            self._keys_no_stack = first_sample.keys() - self.keys_to_stack
+            self._keys_no_stack = first_sample.keys() - self._keys_to_stack
             self._first_call = False
 
     def __call__(self, batched_samples: List[SampleStamped]) -> DictBatch:
         if self._first_call:
             self._init_info(batched_samples[0])
-        keys_info = self.keys_info
+        keys_info = self._keys_info
         keys_no_stack = self._keys_no_stack
         convert_func = self.convert_func
         # allocate memory

@@ -41,7 +41,7 @@ config = BatchStackerConfig(stack=stack_config, backend_out="torch")
 print(config)
 processor = BatchStacker(config)
 processor.configure()
-pprint(processor.stack)
+pprint(processor.config.stack)
 
 batched = processor(batched_samples)
 # ===========================================================
