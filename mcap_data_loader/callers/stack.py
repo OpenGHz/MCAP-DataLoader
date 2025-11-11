@@ -1,8 +1,8 @@
 from mcap_data_loader.datasets.mcap_dataset import SampleStamped
 from mcap_data_loader.utils.basic import float_range
-from typing import Tuple, List, Dict, Union, Literal
+from typing import Tuple, List, Dict, Union, Literal, Annotated
 from collections import ChainMap
-from pydantic import BaseModel, PositiveInt, ConfigDict, field_validator
+from pydantic import BaseModel, PositiveInt, ConfigDict, AfterValidator
 from mcap_data_loader.utils.array_like import (
     get_device_auto,
     get_ns_name_by_array,
@@ -18,12 +18,34 @@ from mcap_data_loader.callers.basis import CallerBasis
 from threading import Lock
 
 
+DictBatch = ChainMap[str, Union[Array, List[Array], int]]
 NormStackValue = List[List[str]]
-StackType = Dict[
+StackTypeRaw = Dict[
     str,
     Union[NormStackValue, List[str], Tuple[List[str], List[Union[float, PositiveInt]]]],
 ]
-DictBatch = ChainMap[str, Union[Array, List[Array], int]]
+
+
+def _normalize_stack_config(stack: StackTypeRaw) -> Dict[str, NormStackValue]:
+    def process_value(config):
+        if isinstance(config, tuple):
+            keys, prefixes = config
+            if len(prefixes) == 3 and isinstance(prefixes[2], int):
+                # range style
+                start, stop, step = prefixes
+                prefixes = float_range(start, stop, step)
+            return [[f"{p}{k}" for k in keys] for p in prefixes]
+        else:
+            first = config[0]
+            if isinstance(first, str):
+                return [config]
+            else:
+                return config
+
+    return {k: process_value(v) for k, v in stack.items()}
+
+
+StackType = Annotated[StackTypeRaw, AfterValidator(_normalize_stack_config)]
 
 
 class BatchStackerConfig(BaseModel):
@@ -44,31 +66,9 @@ class BatchStackerConfig(BaseModel):
     backend_out: Literal["torch", "numpy", "list", "same"] = "same"
     """The output data backend."""
 
-    @field_validator("stack", mode="after")
-    def validate_stack(cls, v: StackType) -> StackType:
-        return cls.normalize_stack_config(v)
-
-    @staticmethod
-    def normalize_stack_config(stack: StackType) -> Dict[str, NormStackValue]:
-        def process_value(config):
-            if isinstance(config, tuple):
-                keys, prefixes = config
-                if len(prefixes) == 3 and isinstance(prefixes[2], int):
-                    # range style
-                    start, stop, step = prefixes
-                    prefixes = float_range(start, stop, step)
-                return [[f"{p}{k}" for k in keys] for p in prefixes]
-            else:
-                first = config[0]
-                if isinstance(first, str):
-                    return [config]
-                else:
-                    return config
-
-        return {k: process_value(v) for k, v in stack.items()}
-
 
 class BatchStacker(CallerBasis):
+
     """A caller that stacks specified keys from batched samples."""
 
     config: BatchStackerConfig
