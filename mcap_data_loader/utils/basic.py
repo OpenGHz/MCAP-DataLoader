@@ -137,6 +137,9 @@ class Rate:
             time.sleep(sleep_time)
         self._last_time = time.perf_counter()
 
+    def reset(self):
+        self._last_time = time.perf_counter()
+
 
 def multi_slices_to_indexes(slices: SlicesType) -> List[int]:
     """Convert slices to a list of indexes.
