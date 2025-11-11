@@ -124,6 +124,20 @@ class StrEnum(str, ReprEnum):
         return self.value
 
 
+class Rate:
+    def __init__(self, rate_hz: float):
+        self._interval = 1.0 / rate_hz
+        self._last_time = time.perf_counter()
+
+    def sleep(self):
+        now = time.perf_counter()
+        elapsed = now - self._last_time
+        sleep_time = self._interval - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+        self._last_time = time.perf_counter()
+
+
 def multi_slices_to_indexes(slices: SlicesType) -> List[int]:
     """Convert slices to a list of indexes.
     Args:
@@ -347,4 +361,3 @@ if __name__ == "__main__":
     result = remove_util("12ab34", "ab")
     assert result == "ab34", result
     assert remove_util("12ab34", "567") == "12ab34"
-
