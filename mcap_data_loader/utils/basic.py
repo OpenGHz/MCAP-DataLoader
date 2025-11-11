@@ -9,6 +9,7 @@ from inspect import isclass
 import hashlib
 import time
 import sys
+import importlib
 
 
 def validate_call_once(func):
@@ -285,6 +286,13 @@ def float_range(start: float, stop: float, step: int = 1):
 def get_full_class_name(obj: Union[Any, Type]) -> str:
     cls = obj if isclass(obj) else obj.__class__
     return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def get_class_type(class_path: str) -> Type:
+    module_path, class_name = class_path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    cls = getattr(module, class_name)
+    return cls
 
 
 if __name__ == "__main__":

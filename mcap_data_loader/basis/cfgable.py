@@ -1,9 +1,15 @@
-import inspect
 from abc import ABC, abstractmethod
 from dataclasses import asdict, replace, is_dataclass
 from logging import getLogger
 from typing import Union, Optional, Type, Dict, Any, Literal, final
 from pydantic import BaseModel
+from pydantic_yaml import parse_yaml_file_as, to_yaml_file
+from pathlib import Path
+from mcap_data_loader.utils.basic import get_class_type
+import inspect
+import yaml
+import json
+import pickle
 
 
 ConfigType = Optional[Union[BaseModel, Type[BaseModel]]]
@@ -18,8 +24,11 @@ class InitConfigMixin:
         """
         # mainly used by yaml config, e.g. hydra
         if config is None or isinstance(config, type):
-            config_type = config or self.__annotations__.get("config", None)
+            config_type = config or self.get_config_annotation()
             if not config_type:
+                cls_path = kwargs.pop("_target_", None)
+                if cls_path is not None:
+                    config_type = get_class_type(cls_path)
                 raise ValueError(
                     "`config` must be annotated at the top level class if not provided as an arg."
                 )
@@ -33,6 +42,16 @@ class InitConfigMixin:
                         f"Extra fields {extra} found in config, which will be ignored."
                     )
         else:  # mainly used by instancing manually
+            if isinstance(config, dict):
+                config_type = self.get_config_annotation()
+                if not config_type:
+                    cls_path = config.pop("_target_", None)
+                    if cls_path is not None:
+                        config_type = get_class_type(cls_path)
+                    raise ValueError(
+                        "`config` must be annotated at the top level class if not provided as an arg."
+                    )
+                config = config_type(**config)
             if kwargs:  # rarely used
                 if isinstance(config, BaseModel):
                     config = config.model_copy(update=kwargs)
@@ -41,6 +60,7 @@ class InitConfigMixin:
                 else:  # dataclass
                     config = replace(config, **kwargs)
         self.config = config
+        self._config_type = type(config)
         self._configured = False
         self.on_init()
 
@@ -50,6 +70,11 @@ class InitConfigMixin:
     @classmethod
     def get_logger(cls):
         return getLogger(cls.__name__)
+
+    @classmethod
+    def get_config_annotation(cls) -> Optional[Type]:
+        """Get the config type from the class annotations."""
+        return cls.__annotations__.get("config", None)
 
     def dump(self, mode: Literal["python", "json"] = "python") -> Dict[str, Any]:
         """Dump the config to a dictionary.
@@ -65,6 +90,54 @@ class InitConfigMixin:
         cls = self.__class__
         config["_target_"] = f"{cls.__module__}.{cls.__qualname__}"
         return config
+
+    def save_config(
+        self, path: Union[str, Path], mode: Literal["yaml", "json", "pickle"] = "yaml"
+    ) -> None:
+        """Save the config to a yaml file.
+        Args:
+            path: The file path to save the config.
+            mode: The mode to save the config. "yaml" or "json".
+        """
+        with open(path, "w") as f:
+            if mode == "yaml":
+                if isinstance(self.config, BaseModel):
+                    to_yaml_file(f, self.config, add_comments=True)
+                else:  # dataclass
+                    yaml.dump(asdict(self.config), f)
+            elif mode == "json":
+                json.dump(self.dump(mode="json"), f, indent=4)
+            else:
+                pickle.dump(self.config, f)
+
+    @classmethod
+    def load_from_config_file(cls, path: Union[str, Path]) -> None:
+        """Load the config from a yaml or json file.
+        Args:
+            path: The file path to load the config from.
+        """
+        path = Path(path)
+        if path.suffix == ".pkl":
+            with open(path, "rb") as f:
+                config = pickle.load(f)
+                return cls(config)
+        else:  # yaml or json
+            config_type = cls.get_config_annotation()
+            if not config_type or is_dataclass(config_type):
+                with open(path, "r") as f:
+                    config_dict = yaml.safe_load(f)
+                    return cls(**config_dict)
+            elif issubclass(config_type, BaseModel):
+                config = parse_yaml_file_as(config_type, path)
+                return cls(config)
+            raise ValueError(
+                "`config` must be annotated as a pydantic BaseModel or a dataclass."
+            )
+
+    @property
+    def config_type(self) -> Type:
+        """Get the config type."""
+        return self._config_type
 
 
 class ConfigurableBasis(ABC, InitConfigMixin):
