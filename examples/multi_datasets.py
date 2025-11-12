@@ -1,13 +1,13 @@
 if __name__ == "__main__":
     from mcap_data_loader.datasets.mcap_dataset import (
-        McapMultiEpisodeDataset,
-        McapMultiEpisodeDatasetConfig,
+        McapMultiEpisodeDatasets,
+        McapMultiEpisodeDatasetsConfig,
         DataRearrangeConfig,
         RearrangeType,
     )
     from pprint import pprint
 
-    config = McapMultiEpisodeDatasetConfig(
+    config = McapMultiEpisodeDatasetsConfig(
         common={
             "strict": False,
             "rearrange": DataRearrangeConfig(episode=RearrangeType.SORT_STEM_DIGITAL),
@@ -21,7 +21,7 @@ if __name__ == "__main__":
         },
     )
     pprint(config.model_dump())
-    dataset = McapMultiEpisodeDataset(config)
+    dataset = McapMultiEpisodeDatasets(config)
     for idx, episodes in enumerate(dataset):
         for episode in episodes:
             pprint(
