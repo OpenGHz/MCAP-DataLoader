@@ -1,6 +1,6 @@
 from pydantic import BaseModel, PositiveInt
 from collections.abc import Callable
-from typing import Optional, Literal, TypeVar
+from typing import Optional, Literal, TypeVar, MutableSequence
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from mcap_data_loader.callers.basis import (
     CallerEnsembleConfig,
@@ -15,7 +15,8 @@ from mcap_data_loader.utils.array_like import (
 )
 
 
-T = TypeVar("T", bound=Callable)
+CallableT = TypeVar("CallableT", bound=Callable)
+T = TypeVar("T")
 
 
 class ScalarsToContainerConfig(BaseModel):
@@ -55,10 +56,8 @@ class MultiCallerConfig(CallerEnsembleConfig):
     container will be used."""
 
 
-class MultiCaller(CallerEnsembleBasis):
+class MultiCaller(CallerEnsembleBasis[MultiCallerConfig, MutableSequence[T]]):
     """A caller that calls multiple callables in sequence and aggregates their outputs."""
-
-    config: MultiCallerConfig
 
     def on_init(self):
         max_workers = self.config.num_workers or len(self.config.callables)

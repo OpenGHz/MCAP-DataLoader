@@ -8,9 +8,7 @@ class FrequencyReductionCallConfig(BaseModel):
     period: PositiveInt = 1
 
 
-class FrequencyReductionCall(CallerBasis[Array]):
-    config: FrequencyReductionCallConfig
-
+class FrequencyReductionCall(CallerBasis[FrequencyReductionCallConfig, Array]):
     def check_shape(self, output: Array):
         horizon = output.shape[1]
         period = self.config.period

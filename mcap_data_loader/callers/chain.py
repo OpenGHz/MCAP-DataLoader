@@ -1,6 +1,7 @@
 from mcap_data_loader.callers.basis import (
     CallerEnsembleBasis,
     CallerEnsembleConfig,
+    ReturnT,
 )
 
 
@@ -11,10 +12,8 @@ class CallerChainConfig(CallerEnsembleConfig):
     """Whether the input to the chain is a single value or are args & kwargs."""
 
 
-class CallerChain(CallerEnsembleBasis):
+class CallerChain(CallerEnsembleBasis[CallerChainConfig, ReturnT]):
     """A caller that chains multiple callers together."""
-
-    config: CallerChainConfig
 
     def on_init(self):
         self._callables = self.config.callables

@@ -1,9 +1,9 @@
 from pydantic import BaseModel
 from typing import Tuple, Dict, Union
-from mcap_data_loader.callers.basis import CallerBasis, T
+from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 
 
-Item = Dict[str, T]
+Item = Dict[str, ReturnT]
 
 
 class DictTupleConfig(BaseModel):
@@ -23,10 +23,8 @@ class DictTupleConfig(BaseModel):
     """Whether to separate the prefix and the dict key with a separator."""
 
 
-class DictTuple(CallerBasis[Item]):
+class DictTuple(CallerBasis[DictTupleConfig, Item]):
     """Convert a tuple of dictionaries into a single dictionary by flattening."""
-
-    config: DictTupleConfig
 
     def on_init(self):
         config = self.config

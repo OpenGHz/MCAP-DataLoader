@@ -2,14 +2,14 @@ from abc import abstractmethod
 from typing import Tuple, Literal, Generic, TypeVar, List
 from collections.abc import Callable
 from pydantic import BaseModel, Field
-from mcap_data_loader.basis.cfgable import ConfigurableBasis
+from mcap_data_loader.basis.cfgable import ConfigurableBasis, ConfigT
 
 
-T = TypeVar("T")
+ReturnT = TypeVar("T")
 CallT = TypeVar("CallT", bound=Callable)
 
 
-class CallerBasis(ConfigurableBasis, Generic[T]):
+class CallerBasis(ConfigurableBasis[ConfigT], Generic[ConfigT, ReturnT]):
     def reset(self) -> None:
         """Reset the internal state of the caller, if any."""
 
@@ -17,7 +17,7 @@ class CallerBasis(ConfigurableBasis, Generic[T]):
         return True
 
     @abstractmethod
-    def __call__(self, *args, **kwds) -> T:
+    def __call__(self, *args, **kwds) -> ReturnT:
         """Call the caller with the given inputs."""
 
 
@@ -31,10 +31,8 @@ class MockCallerConfig(BaseModel):
     horizon: HorizonConfig = HorizonConfig()
 
 
-class MockCaller(CallerBasis):
+class MockCaller(CallerBasis[MockCallerConfig, ReturnT]):
     """A mock caller that outputs a sequence of numbers based on the input."""
-
-    config: MockCallerConfig
 
     def on_configure(self):
         if self.config.output_type == "ndarray":
@@ -62,10 +60,11 @@ class CallerEnsembleConfig(BaseModel, Generic[CallT]):
     """Tuple of callers to be called in ensemble."""
 
 
-class CallerEnsembleBasis(CallerBasis):
-    """A caller that ensembles multiple callers' outputs."""
+CET = TypeVar("CEConfig", bound=CallerEnsembleConfig)
 
-    config: CallerEnsembleConfig
+
+class CallerEnsembleBasis(CallerBasis[CET, ReturnT]):
+    """A caller that ensembles multiple callers' outputs."""
 
     def on_configure(self):
         for func in self.config.callables:

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, NonNegativeInt
 from typing import Any
-from mcap_data_loader.callers.basis import CallerBasis
+from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 
 
 class PolicyEvaluationCallerConfig(BaseModel):
@@ -16,9 +16,7 @@ class PolicyEvaluationCallerConfig(BaseModel):
     call_method_name: str = ""
 
 
-class PolicyEvaluationCaller(CallerBasis):
-    config: PolicyEvaluationCallerConfig
-
+class PolicyEvaluationCaller(CallerBasis[PolicyEvaluationCallerConfig, ReturnT]):
     def on_configure(self):
         return True
 

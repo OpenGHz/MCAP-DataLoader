@@ -1,4 +1,17 @@
-from typing import List, Union, Dict, TypeVar, Generic, Any, Type
+from typing import (
+    List,
+    Union,
+    Dict,
+    TypeVar,
+    Generic,
+    Any,
+    Type,
+    Optional,
+    Protocol,
+    get_origin,
+    get_args,
+    runtime_checkable,
+)
 from typing_extensions import Annotated, TypedDict
 from enum import Enum
 from pathlib import Path
@@ -35,6 +48,14 @@ def validate_iterable_not_iterator(value: Iterable) -> Iterable:
     if isinstance(value, Iterator):
         raise ValueError("Value must not be an Iterator")
     return value
+
+
+@runtime_checkable
+class DataClassProto(Protocol):
+    """Protocol for dataclass types."""
+
+    @classmethod
+    def __dataclass_fields__(cls) -> Dict[str, Any]: ...
 
 
 T = TypeVar("T")
@@ -331,6 +352,40 @@ def remove_util(string: str, stop: str, include_stop: bool = True) -> str:
     bias = 0 if include_stop else len(stop)
     result = string[index + bias :] if index != -1 else string
     return result
+
+
+def resolve_generic_type(cls: Type, target_origin: Type) -> Optional[Type]:
+    """
+    Recursively resolves the concrete type argument corresponding to `target_origin`
+    in the generic base classes of `cls`.
+
+    Handles multi-level generic inheritance. For example:
+        class A(Generic[T]): ...
+        class B(A[int]): ...
+        class C(B): ...
+
+    In this case, calling `resolve_generic_type(C, A)` returns `int`.
+    """
+    if not hasattr(cls, "__orig_bases__"):
+        return None
+
+    for base in cls.__orig_bases__:
+        origin = get_origin(base)
+        args = get_args(base)
+        # Direct match with the target base class, e.g., Basis[str]
+        if origin is target_origin:
+            return args[0] if args else None
+        # If the base itself is a generic class (e.g., CustomBasis[dict])
+        if isinstance(origin, type) and issubclass(origin, Generic):
+            inner_type = resolve_generic_type(origin, target_origin)
+            if isinstance(inner_type, TypeVar):
+                # If the resolved type is a TypeVar (e.g., T), perform substitution
+                type_params = getattr(origin, "__parameters__", ())
+                mapping = dict(zip(type_params, args))
+                return mapping.get(inner_type, inner_type)
+            elif inner_type is not None:
+                return inner_type
+    return None
 
 
 if __name__ == "__main__":

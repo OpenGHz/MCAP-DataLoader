@@ -3,10 +3,10 @@ from mcap_data_loader.utils.array_like import (
     ArrayInfo,
     array_namespace,
 )
-from mcap_data_loader.callers.basis import CallerBasis
+from mcap_data_loader.callers.basis import CallerBasis, ConfigT
 
 
-class ArrayCallerBasis(CallerBasis[Array]):
+class ArrayCallerBasis(CallerBasis[ConfigT, Array]):
     """A caller that outputs array-like objects."""
 
     def on_init(self):

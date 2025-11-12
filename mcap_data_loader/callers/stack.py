@@ -67,11 +67,8 @@ class BatchStackerConfig(BaseModel):
     """The output data backend."""
 
 
-class BatchStacker(CallerBasis):
-
+class BatchStacker(CallerBasis[BatchStackerConfig, DictBatch]):
     """A caller that stacks specified keys from batched samples."""
-
-    config: BatchStackerConfig
 
     def on_configure(self):
         self._stack = self.config.stack
@@ -190,7 +187,7 @@ class BatchStacker(CallerBasis):
             self._keys_no_stack = first_sample.keys() - self._keys_to_stack
             self._first_call = False
 
-    def __call__(self, batched_samples: List[SampleStamped]) -> DictBatch:
+    def __call__(self, batched_samples: List[SampleStamped]):
         if self._first_call:
             self._init_info(batched_samples[0])
         keys_info = self._keys_info

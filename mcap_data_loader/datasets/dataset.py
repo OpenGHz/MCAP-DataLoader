@@ -18,19 +18,6 @@ from pathlib import Path
 from natsort import natsort_keygen
 
 
-try:
-    from torch.utils.data import IterableDataset
-except ImportError as e:
-
-    class IterableDataset:
-        pass
-
-    getLogger(__name__).warning(
-        "torch.utils.data is not available, some features may not work. "
-        "Please install PyTorch to use these features."
-    )
-
-
 T = TypeVar("T")
 
 
@@ -155,7 +142,7 @@ class IterableDatasetConfig(BaseModel):
     """Rearrangement strategy for samples, episodes and datasets."""
 
 
-class IterableDatasetABC(IterableDataset, ABC, Generic[T]):
+class IterableDatasetABC(ABC, Generic[T]):
     """
     Generic iterable dataset template.
     Subclasses only need to implement `read_stream()` to generate samples.
