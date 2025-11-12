@@ -3,7 +3,7 @@ from typing import Any, Iterable, List, Optional, Generic, TypeVar
 from typing_extensions import Self
 from collections.abc import Generator
 from pydantic import BaseModel, computed_field
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from functools import cached_property, cache
 from logging import getLogger
 from mcap_data_loader.utils.basic import (
@@ -12,6 +12,7 @@ from mcap_data_loader.utils.basic import (
     DictableSlicesType,
     DictableIndexesType,
 )
+from mcap_data_loader.basis.cfgable import InitConfigABCMixin
 from enum import auto
 from more_itertools import nth, ilen
 from pathlib import Path
@@ -142,15 +143,11 @@ class IterableDatasetConfig(BaseModel):
     """Rearrangement strategy for samples, episodes and datasets."""
 
 
-class IterableDatasetABC(ABC, Generic[T]):
+class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
     """
     Generic iterable dataset template.
     Subclasses only need to implement `read_stream()` to generate samples.
     """
-
-    def __init__(self, config: IterableDatasetConfig) -> None:
-        super().__init__()
-        self.config = config
 
     @abstractmethod
     def read_stream(self) -> Iterable[T]:

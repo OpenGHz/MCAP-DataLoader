@@ -1,10 +1,10 @@
 import numpy as np
 import random
 from pathlib import Path
-from typing import List, Optional, Dict, Union, Sequence
+from typing import List, Optional, Dict, Union, Sequence, Any
 from typing_extensions import Self
 from functools import cached_property
-from pydantic import field_validator, ConfigDict
+from pydantic import field_validator, ConfigDict, BaseModel, Field
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
@@ -80,7 +80,6 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     """
 
     def __init__(self, config: McapFlatBuffersSampleDatasetConfig):
-        super().__init__(config)
         self.config = config
         self.reader = None
         self._init_reader()
@@ -164,7 +163,6 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
     """
 
     def __init__(self, config: McapFlatBuffersEpisodeDatasetConfig):
-        super().__init__(config)
         self.config = config
         root = self.config.data_root
         files = get_items_by_ext(root, ".mcap")
@@ -253,3 +251,76 @@ def to_episodic_sequence(dataset) -> Sequence[McapFlatBuffersSampleDataset]:
     if isinstance(dataset, McapFlatBuffersSampleDataset):
         return [dataset]
     return dataset
+
+
+class McapMultiEpisodeDatasetsConfig(BaseModel):
+    """
+    Multi-episodic dataset configuration for reading MCAP files from multiple roots.
+    """
+
+    common: Dict[str, Any] = {}
+    """Common configuration for all dataset roots."""
+    roots: Dict[str, Union[Dict[str, Any], List[str]]] = Field(min_length=1)
+    """Dataset root specific configurations. The key is the root path, and the value is either a dict of configurations or a list of keys to read."""
+
+    @field_validator("roots")
+    def validate_roots(cls, v: Dict[str, Any]) -> dict:
+        for root in list(v.keys()):
+            cfg = v[root]
+            splited = root.split("//", 1)
+            if len(splited) == 2:
+                v.pop(root)
+                root = splited[1]
+                base_cfg = v.pop(root, {})
+            else:
+                base_cfg = {}
+            if isinstance(cfg, list):
+                if len(cfg) == 0:
+                    raise ValueError(f"root[{root}] keys must not be an empty list")
+                dict_cfg = {"keys": cfg}
+            else:
+                dict_cfg = cfg
+            # merge keys and overwrite the config
+            keys = base_cfg.get("keys", []) + dict_cfg.get("keys", [])
+            base_cfg.update(dict_cfg)
+            v[root] = base_cfg
+            if keys:
+                v[root]["keys"] = keys
+            # if not v[root]:
+            #     raise ValueError(f"root[{root}] configuration must not be empty")
+        return v
+
+
+class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]):
+    """
+    Multi-episodic dataset for reading MCAP files from multiple roots.
+    """
+
+    def __init__(self, config: McapMultiEpisodeDatasetsConfig):
+        self.config = config
+        self._episode_datasets: List[McapFlatBuffersEpisodeDataset] = []
+        self._init_episode_datasets()
+
+    def _init_episode_datasets(self):
+        """
+        Initialize episode datasets from multiple roots.
+        """
+        for root_str, cfg in self.config.roots.items():
+            merge_config = self.config.common.copy()
+            merge_config.update(cfg)
+            dataset_cfg = McapFlatBuffersEpisodeDatasetConfig(
+                data_root=root_str,
+                **merge_config,
+            )
+            episode_dataset = McapFlatBuffersEpisodeDataset(dataset_cfg)
+            self._episode_datasets.append(episode_dataset)
+
+    def read_stream(self):
+        """
+        Read MCAP files from multiple roots and return episodic message stream.
+        """
+        yield from self._episode_datasets
+
+    def __len__(self) -> int:
+        """Get the total number of episodes across all dataset roots."""
+        return len(self._episode_datasets)

@@ -8,9 +8,9 @@ from typing import (
     Dict,
     Any,
     Literal,
-    get_type_hints,
     TypeVar,
     final,
+    get_type_hints,
 )
 from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
