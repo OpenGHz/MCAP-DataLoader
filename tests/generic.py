@@ -15,7 +15,9 @@ class CConfig(PConfig):
 
 
 T = TypeVar("T")
+print(T.__bound__)
 TBound = TypeVar("TBound", bound=PConfig)
+print(f"{TBound.__bound__=}")
 
 
 class PBase(Generic[TBound]):
@@ -29,17 +31,28 @@ class CBase(PBase[CConfig]):
 
 
 class Basis(Generic[T]):
-    def __init__(self, first: T) -> None:
-        self.first = first
+    config: T
+
+    def __init__(self, config: T) -> None:
+        self.config = config
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls._generic_type = resolve_generic_type(cls, Basis)
-        if cls._generic_type and not isinstance(cls._generic_type, TypeVar):
-            print(f"Registered generic type for {cls.__name__}: {cls._generic_type}")
+        generic_type = resolve_generic_type(cls, Basis)
+        generic_type = (
+            generic_type.__bound__
+            if isinstance(generic_type, TypeVar)
+            else generic_type
+        )
+        if generic_type:
+            print(f"Registered generic type for {cls.__name__}: {generic_type}")
+        cls._generic_type = generic_type
 
 
-class StringPair(ABC, Basis[str]):
+StringBound = TypeVar("StringBound", bound=str)
+
+
+class StringPair(ABC, Basis[StringBound]):
     pass
 
 
@@ -59,7 +72,34 @@ class CustomDict(CustomBasis[dict]):
     pass
 
 
+class CustomDictSame(CustomDict):
+    pass
+
+
 class CustomDictChild(CustomDict, Basis[float]):
+    def print(self):
+        print(self._generic_type)
+        print(f"Config: {self.config}")
+
+
+# class CustomDictChild(CustomDict):
+#     config: float
+
+#     def print(self):
+#         print(self._generic_type)
+#         print(f"Config: {self.config}")
+
+
+child = CustomDictChild(config=3.14)
+child.print()
+
+
+class CustomDictChildFisrt(Basis[float], CustomDict):
+    def print(self):
+        print(f"Config: {self.config}")
+
+
+class CustomDictChildDeep(CustomDictChild, Basis[int]):
     pass
 
 

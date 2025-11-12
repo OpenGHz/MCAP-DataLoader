@@ -29,7 +29,7 @@ class InitConfigMixin(Generic[ConfigT]):
         """
         # mainly used by yaml config, e.g. hydra
         if config is None or isinstance(config, type):
-            config_type = config or self._generic_type
+            config_type = config or self.resolve_config_type()
             if (not config_type) or isinstance(config_type, TypeVar):
                 cls_path = kwargs.pop("_target_", None)
                 if cls_path is not None:
@@ -48,7 +48,7 @@ class InitConfigMixin(Generic[ConfigT]):
                     )
         else:  # mainly used by instancing manually
             if isinstance(config, dict):
-                config_type = self.get_config_annotation()
+                config_type = self.resolve_config_type()
                 if not config_type:
                     cls_path = config.pop("_target_", None)
                     if cls_path is not None:
@@ -77,9 +77,12 @@ class InitConfigMixin(Generic[ConfigT]):
         return getLogger(cls.__name__)
 
     @classmethod
-    def get_config_annotation(cls) -> Optional[Type]:
-        """Get the config type from the class annotations."""
-        return cls.__annotations__.get("config", None)
+    def resolve_config_type(cls) -> Optional[Type]:
+        return cls.get_annotation("config") or cls._generic_type
+
+    @classmethod
+    def get_annotation(cls, name: str) -> Optional[Type]:
+        return getattr(cls, "__annotations__", {}).get(name, None)
 
     def dump(self, mode: Literal["python", "json"] = "python") -> Dict[str, Any]:
         """Dump the config to a dictionary.
@@ -127,7 +130,7 @@ class InitConfigMixin(Generic[ConfigT]):
                 config = pickle.load(f)
                 return cls(config)
         else:  # yaml or json
-            config_type = cls.get_config_annotation()
+            config_type = cls.resolve_config_type()
             if not config_type or is_dataclass(config_type):
                 with open(path, "r") as f:
                     config_dict = yaml.safe_load(f)
@@ -146,11 +149,17 @@ class InitConfigMixin(Generic[ConfigT]):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls._generic_type = resolve_generic_type(cls, InitConfigMixin)
-        if cls._generic_type and not isinstance(cls._generic_type, TypeVar):
+        generic_type = resolve_generic_type(cls, InitConfigMixin)
+        generic_type = (
+            generic_type.__bound__
+            if isinstance(generic_type, TypeVar)
+            else generic_type
+        )
+        if generic_type:
             cls.get_logger().debug(
-                f"Registered generic type for {cls.__name__}: {cls._generic_type}"
+                f"Registered generic type for {cls.__name__}: {generic_type}"
             )
+        cls._generic_type = generic_type
 
 
 class ConfigurableBasis(ABC, InitConfigMixin[ConfigT]):
@@ -158,7 +167,7 @@ class ConfigurableBasis(ABC, InitConfigMixin[ConfigT]):
     def configure(self) -> bool:
         if self._configured:
             raise RuntimeError("Already configured")
-        itf_type = getattr(self, "__annotations__", {}).get("interface", None)
+        itf_type = self.get_annotation("interface")
         self.interface = None if itf_type is None else self._create_interface(itf_type)
         self._configured = self.on_configure()
         return self._configured
