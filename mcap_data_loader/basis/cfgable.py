@@ -175,8 +175,8 @@ class ConfigurableBasis(InitConfigABCMixin):
     def configure(self) -> bool:
         if self._configured:
             raise RuntimeError("Already configured")
-        itf_type = InitConfigMeta.get_annotation(self, "interface")
-        self.interface = None if itf_type is None else self._create_interface(itf_type)
+        itf_type = InitConfigMeta.get_annotation(self.__class__, "interface")
+        self.interface = self._create_interface(itf_type)
         self._configured = self.on_configure()
         return self._configured
 
@@ -190,13 +190,15 @@ class ConfigurableBasis(InitConfigABCMixin):
     def configured(self) -> bool:
         return self._configured
 
-    def _create_interface(self, class_type: Type):
+    def _create_interface(self, class_type: Optional[Type]):
         """Create the interface instance based on the config and the class type annotation.
         The subclasses can override this method if needed.
         """
+        if class_type is None:
+            return None
         sig = inspect.signature(class_type)
         if "config" in sig.parameters.keys():
-            self.interface = class_type(config=self.config)
+            interface = class_type(config=self.config)
         else:
             # convert the first level config to dict
             if isinstance(self.config, BaseModel):
@@ -210,7 +212,8 @@ class ConfigurableBasis(InitConfigABCMixin):
                 # TODO: error when using nested dataclass
                 cfg_dict = asdict(self.config)
             com_keys = cfg_dict.keys() & sig.parameters.keys()
-            self.interface = class_type(**{key: cfg_dict[key] for key in com_keys})
+            interface = class_type(**{key: cfg_dict[key] for key in com_keys})
+        return interface
 
 
 def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], str]:
