@@ -8,10 +8,14 @@ class FrequencyReductionCallConfig(BaseModel):
     period: PositiveInt = 1
 
 
-class FrequencyReductionCall(CallerBasis[FrequencyReductionCallConfig, Array]):
+class FrequencyReductionCall(CallerBasis[Array]):
+    def __init__(self, config: FrequencyReductionCallConfig):
+        self._period = config.period
+        self.reset()
+
     def check_shape(self, output: Array):
         horizon = output.shape[1]
-        period = self.config.period
+        period = self._period
         if horizon < period:
             raise ValueError(
                 f"output horizon: {horizon} can not be shorter than period: {period}"
@@ -26,7 +30,7 @@ class FrequencyReductionCall(CallerBasis[FrequencyReductionCallConfig, Array]):
         if self._first:
             self._outputs = self.check_shape(array)
             self._first = False
-        target_t = self._t % self.config.period
+        target_t = self._t % self._period
         if target_t == 0:
             self._outputs = array
         self._t += 1

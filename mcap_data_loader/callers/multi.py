@@ -56,15 +56,17 @@ class MultiCallerConfig(CallerEnsembleConfig):
     container will be used."""
 
 
-class MultiCaller(CallerEnsembleBasis[MultiCallerConfig, MutableSequence[T]]):
+class MultiCaller(CallerEnsembleBasis[MutableSequence[T]]):
     """A caller that calls multiple callables in sequence and aggregates their outputs."""
 
-    def on_init(self):
-        max_workers = self.config.num_workers or len(self.config.callables)
+    def __init__(self, config: MultiCallerConfig):
+        self.config = config
+        self._callables = config.callables
+        max_workers = config.num_workers or len(config.callables)
         if max_workers > 1:
             self._executor = (
                 ThreadPoolExecutor(max_workers)
-                if self.config.mode == "thread"
+                if config.mode == "thread"
                 else ProcessPoolExecutor(max_workers)
             )
             self._call = self._call_in_parallel
@@ -75,7 +77,7 @@ class MultiCaller(CallerEnsembleBasis[MultiCallerConfig, MutableSequence[T]]):
     def _first_setup(self, *args, **kwds):
         info_set = set()
         has_scalar = False
-        for func in self.config.callables:
+        for func in self._callables:
             output = func(*args, **kwds)
             if isinstance(output, (int, float)):
                 has_scalar = True
@@ -83,7 +85,7 @@ class MultiCaller(CallerEnsembleBasis[MultiCallerConfig, MutableSequence[T]]):
                 info_set.add(ArrayInfo.from_array(output))
         if len(info_set) > 1:
             print(f"The outputs of the callables have different array info: {info_set}")
-        num_calls = len(self.config.callables)
+        num_calls = len(self._callables)
         scalar_cfg = self.config.scalar_container
         if len(info_set) > 1 or (has_scalar and scalar_cfg.xp == "list"):
             self._p_outputs = [None] * num_calls
@@ -106,7 +108,7 @@ class MultiCaller(CallerEnsembleBasis[MultiCallerConfig, MutableSequence[T]]):
             )
 
     def _call_in_sequence(self, *args, **kwds):
-        for i, func in enumerate(self.config.callables):
+        for i, func in enumerate(self._callables):
             output = func(*args, **kwds)
             self._p_outputs[i] = output
         return self._p_outputs
@@ -114,7 +116,7 @@ class MultiCaller(CallerEnsembleBasis[MultiCallerConfig, MutableSequence[T]]):
     def _call_in_parallel(self, *args, **kwds):
         future_to_index = {
             self._executor.submit(func, *args, **kwds): idx
-            for idx, func in enumerate(self.config.callables)
+            for idx, func in enumerate(self._callables)
         }
         for future in as_completed(future_to_index):
             idx = future_to_index[future]

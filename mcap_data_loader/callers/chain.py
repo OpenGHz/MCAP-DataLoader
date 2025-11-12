@@ -12,12 +12,12 @@ class CallerChainConfig(CallerEnsembleConfig):
     """Whether the input to the chain is a single value or are args & kwargs."""
 
 
-class CallerChain(CallerEnsembleBasis[CallerChainConfig, ReturnT]):
+class CallerChain(CallerEnsembleBasis[ReturnT]):
     """A caller that chains multiple callers together."""
 
-    def on_init(self):
-        self._callables = self.config.callables
-        self._single_input = self.config.single_input
+    def __init__(self, config: CallerChainConfig):
+        self._callables = config.callables
+        self._single_input = config.single_input
 
     def reset(self):
         self.output_chain = []

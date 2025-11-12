@@ -67,13 +67,18 @@ class BatchStackerConfig(BaseModel):
     """The output data backend."""
 
 
-class BatchStacker(CallerBasis[BatchStackerConfig, DictBatch]):
+class BatchStacker(CallerBasis[DictBatch]):
     """A caller that stacks specified keys from batched samples."""
 
-    def on_configure(self):
-        self._stack = self.config.stack
-        keys_info = {}
+    def __init__(self, config: BatchStackerConfig):
+        self._stack = config.stack
+        self.config = config
         self._keys_to_stack = set()
+        self._first_call = True
+        self._lock = Lock()
+
+    def on_configure(self):
+        keys_info = {}
         for cat_key, list_keys in self._stack.items():
             keys_info[cat_key] = {}
             col_num = len(list_keys[0])
@@ -88,8 +93,6 @@ class BatchStacker(CallerBasis[BatchStackerConfig, DictBatch]):
                     f"Duplicate keys found in stacking config for category '{cat_key}': {cur_keys}"
                 )
         self._keys_info: Dict[str, dict] = keys_info
-        self._first_call = True
-        self._lock = Lock()
         return True
 
     def _determine_functions(self, backend_in: str, dtype_in, device_in):

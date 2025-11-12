@@ -16,7 +16,9 @@ class PolicyEvaluationCallerConfig(BaseModel):
     call_method_name: str = ""
 
 
-class PolicyEvaluationCaller(CallerBasis[PolicyEvaluationCallerConfig, ReturnT]):
+class PolicyEvaluationCaller(CallerBasis[ReturnT]):
+    config: PolicyEvaluationCallerConfig
+
     def on_configure(self):
         return True
 

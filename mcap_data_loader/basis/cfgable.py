@@ -1,15 +1,22 @@
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 from dataclasses import asdict, replace, is_dataclass
 from logging import getLogger
-from typing import Union, Optional, Type, Dict, Any, Literal, Generic, TypeVar, final
+from typing import (
+    Union,
+    Optional,
+    Type,
+    Dict,
+    Any,
+    Literal,
+    get_type_hints,
+    TypeVar,
+    final,
+)
 from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
 from pathlib import Path
-from mcap_data_loader.utils.basic import (
-    get_class_type,
-    resolve_generic_type,
-    DataClassProto,
-)
+from functools import cache
+from mcap_data_loader.utils.basic import get_class_type, DataClassProto
 import inspect
 import yaml
 import json
@@ -17,45 +24,40 @@ import pickle
 
 
 OtherCfgType = Optional[Union[Type[Union[DataClassProto, BaseModel]], Dict[str, Any]]]
-ConfigT = TypeVar("ConfigT", bound=Union[BaseModel, DataClassProto])
+ConfigType = Union[BaseModel, DataClassProto]
 
 
-class InitConfigMixin(Generic[ConfigT]):
-    def __init__(self, config: Union[ConfigT, OtherCfgType] = None, **kwargs) -> None:
-        """Base class for configurable components.
-        Args:
-            config: Configuration object, typically a pydantic BaseModel or a dataclass.
-            **kwargs: Additional keyword arguments to override config fields.
-        """
+class InitConfigMeta(type):
+    def __call__(cls, config: Union[ConfigType, OtherCfgType] = None, **kwargs):
+        error_msg = (
+            "`config` must be annotated in the `__init__` ."
+            "method or at the top level class if not provided as an arg."
+        )
         # mainly used by yaml config, e.g. hydra
         if config is None or isinstance(config, type):
-            config_type = config or self.resolve_config_type()
+            config_type = config or cls.resolve_config_type(cls)
             if (not config_type) or isinstance(config_type, TypeVar):
                 cls_path = kwargs.pop("_target_", None)
                 if cls_path is not None:
                     config_type = get_class_type(cls_path)
-                raise ValueError(
-                    "`config` must be annotated at the top level class if not provided as an arg."
-                )
+                raise ValueError(error_msg)
             # self.get_logger().info(f"{kwargs}")
             config = config_type(**kwargs)
             # check pydantic extra kwargs
             if isinstance(config, BaseModel):
                 extra = kwargs.keys() - config.__class__.model_fields.keys()
                 if extra:
-                    self.get_logger().warning(
+                    cls.get_logger().warning(
                         f"Extra fields {extra} found in config, which will be ignored."
                     )
         else:  # mainly used by instancing manually
             if isinstance(config, dict):
-                config_type = self.resolve_config_type()
+                config_type = cls.resolve_config_type(cls)
                 if not config_type:
                     cls_path = config.pop("_target_", None)
                     if cls_path is not None:
                         config_type = get_class_type(cls_path)
-                    raise ValueError(
-                        "`config` must be annotated at the top level class if not provided as an arg."
-                    )
+                    raise ValueError(error_msg)
                 config = config_type(**config)
             if kwargs:  # rarely used
                 if isinstance(config, BaseModel):
@@ -64,25 +66,42 @@ class InitConfigMixin(Generic[ConfigT]):
                     config = config.model_validate(config.model_dump(warnings="none"))
                 else:  # dataclass
                     config = replace(config, **kwargs)
-        self.config: ConfigT = config
-        self._config_type = type(self.config)
-        self._configured = False
-        self.on_init()
-
-    def on_init(self) -> None:
-        """Callback to be called when initializing"""
+        instance = super().__call__(config)
+        instance.config = config
+        instance._configured = False
+        return instance
 
     @classmethod
     def get_logger(cls):
         return getLogger(cls.__name__)
 
-    @classmethod
+    @staticmethod
+    @cache
     def resolve_config_type(cls) -> Optional[Type]:
-        return cls.get_annotation("config") or cls._generic_type
+        return InitConfigMeta.get_annotation(cls, "config") or get_type_hints(
+            cls.__init__
+        ).get("config", None)
 
-    @classmethod
+    @staticmethod
+    @cache
     def get_annotation(cls, name: str) -> Optional[Type]:
         return getattr(cls, "__annotations__", {}).get(name, None)
+
+
+class InitConfigABCMeta(InitConfigMeta, ABCMeta):
+    """A metaclass that combines InitConfigMeta and ABCMeta."""
+
+
+class InitConfigMixinBasis:
+    def __init__(self, config: ConfigType) -> None:
+        """Initialize with a config. It is only used for type hinting in the current class;
+        subclasses can override it at will."""
+        self.config = config
+        self._configured = False
+
+    @classmethod
+    def get_logger(cls):
+        return getLogger(cls.__name__)
 
     def dump(self, mode: Literal["python", "json"] = "python") -> Dict[str, Any]:
         """Dump the config to a dictionary.
@@ -130,7 +149,7 @@ class InitConfigMixin(Generic[ConfigT]):
                 config = pickle.load(f)
                 return cls(config)
         else:  # yaml or json
-            config_type = cls.resolve_config_type()
+            config_type = InitConfigMeta.resolve_config_type()
             if not config_type or is_dataclass(config_type):
                 with open(path, "r") as f:
                     config_dict = yaml.safe_load(f)
@@ -142,32 +161,21 @@ class InitConfigMixin(Generic[ConfigT]):
                 "`config` must be annotated as a pydantic BaseModel or a dataclass."
             )
 
-    @property
-    def config_type(self) -> Optional[Type[ConfigT]]:
-        """Get the config type."""
-        return self._config_type
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        generic_type = resolve_generic_type(cls, InitConfigMixin)
-        generic_type = (
-            generic_type.__bound__
-            if isinstance(generic_type, TypeVar)
-            else generic_type
-        )
-        if generic_type:
-            cls.get_logger().debug(
-                f"Registered generic type for {cls.__name__}: {generic_type}"
-            )
-        cls._generic_type = generic_type
+class InitConfigMixin(InitConfigMixinBasis, metaclass=InitConfigMeta):
+    """Mixin class for initializing with a config."""
 
 
-class ConfigurableBasis(ABC, InitConfigMixin[ConfigT]):
+class InitConfigABCMixin(InitConfigMixinBasis, metaclass=InitConfigABCMeta):
+    """Mixin class for initializing with a config and supporting abstract methods."""
+
+
+class ConfigurableBasis(InitConfigABCMixin):
     @final
     def configure(self) -> bool:
         if self._configured:
             raise RuntimeError("Already configured")
-        itf_type = self.get_annotation("interface")
+        itf_type = InitConfigMeta.get_annotation(self, "interface")
         self.interface = None if itf_type is None else self._create_interface(itf_type)
         self._configured = self.on_configure()
         return self._configured
@@ -236,7 +244,10 @@ if __name__ == "__main__":
         param1: int = 10
         param2: str = "default"
 
-    class MyComponent(ConfigurableBasis[MyConfig]):
+    class MyComponent(ConfigurableBasis):
+        def __init__(self, config: MyConfig):
+            self.config = config
+
         def on_configure(self) -> bool:
             self.get_logger().info(f"Configuring with {self.config}")
             return True

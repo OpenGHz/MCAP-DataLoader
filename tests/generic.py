@@ -2,6 +2,7 @@ from typing import Generic, TypeVar
 from abc import ABC
 from mcap_data_loader.utils.basic import resolve_generic_type
 from dataclasses import dataclass
+import inspect
 
 
 @dataclass
@@ -61,7 +62,12 @@ class CustomBasis(ABC, Basis[T]):
 
 
 class AnyCustom(CustomBasis):
-    pass
+    def __init__(self, config: int):
+        super().__init__(config)
+        self.config = config
+
+    def print(self):
+        print(self.config)
 
 
 print(AnyCustom._generic_type)  # T
@@ -77,6 +83,16 @@ class CustomDictSame(CustomDict):
 
 
 class CustomDictChild(CustomDict, Basis[float]):
+    def print(self):
+        print(self._generic_type)
+        print(f"Config: {self.config}")
+
+
+class CustomDictChild0(CustomDict, Basis[float]):
+    def __init__(self, config: float):
+        super().__init__(config)
+        self.config = config
+
     def print(self):
         print(self._generic_type)
         print(f"Config: {self.config}")

@@ -2,14 +2,14 @@ from abc import abstractmethod
 from typing import Tuple, Literal, Generic, TypeVar, List
 from collections.abc import Callable
 from pydantic import BaseModel, Field
-from mcap_data_loader.basis.cfgable import ConfigurableBasis, ConfigT
+from mcap_data_loader.basis.cfgable import ConfigurableBasis
 
 
-ReturnT = TypeVar("T")
+ReturnT = TypeVar("ReturnT")
 CallT = TypeVar("CallT", bound=Callable)
 
 
-class CallerBasis(ConfigurableBasis[ConfigT], Generic[ConfigT, ReturnT]):
+class CallerBasis(ConfigurableBasis, Generic[ReturnT]):
     def reset(self) -> None:
         """Reset the internal state of the caller, if any."""
 
@@ -31,8 +31,10 @@ class MockCallerConfig(BaseModel):
     horizon: HorizonConfig = HorizonConfig()
 
 
-class MockCaller(CallerBasis[MockCallerConfig, ReturnT]):
+class MockCaller(CallerBasis[ReturnT]):
     """A mock caller that outputs a sequence of numbers based on the input."""
+
+    config: MockCallerConfig
 
     def on_configure(self):
         if self.config.output_type == "ndarray":
@@ -60,14 +62,14 @@ class CallerEnsembleConfig(BaseModel, Generic[CallT]):
     """Tuple of callers to be called in ensemble."""
 
 
-CET = TypeVar("CEConfig", bound=CallerEnsembleConfig)
-
-
-class CallerEnsembleBasis(CallerBasis[CET, ReturnT]):
+class CallerEnsembleBasis(CallerBasis[ReturnT]):
     """A caller that ensembles multiple callers' outputs."""
 
+    def __init__(self, config: CallerEnsembleConfig):
+        self._callables = config.callables
+
     def on_configure(self):
-        for func in self.config.callables:
+        for func in self._callables:
             if isinstance(func, CallerBasis):
                 if not func.configure():
                     self.get_logger().error(f"Failed to configure callable: {func}")
@@ -76,6 +78,6 @@ class CallerEnsembleBasis(CallerBasis[CET, ReturnT]):
 
     def reset(self):
         """Reset the internal state of the caller, if any."""
-        for func in self.config.callables:
+        for func in self._callables:
             if isinstance(func, CallerBasis):
                 func.reset()

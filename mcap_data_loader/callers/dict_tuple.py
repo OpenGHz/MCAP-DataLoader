@@ -23,11 +23,10 @@ class DictTupleConfig(BaseModel):
     """Whether to separate the prefix and the dict key with a separator."""
 
 
-class DictTuple(CallerBasis[DictTupleConfig, Item]):
+class DictTuple(CallerBasis[Item]):
     """Convert a tuple of dictionaries into a single dictionary by flattening."""
 
-    def on_init(self):
-        config = self.config
+    def __init__(self, config: DictTupleConfig):
         self._func = (
             self._process_auto
             if config.depth < 0
@@ -35,6 +34,7 @@ class DictTuple(CallerBasis[DictTupleConfig, Item]):
             if config.depth > 0
             else lambda tp, prefix, depth: tp
         )
+        self._sep = config.separator
         self._last_sep = config.separator if config.separate_key else ""
         self._depth = config.depth
 
@@ -54,9 +54,7 @@ class DictTuple(CallerBasis[DictTupleConfig, Item]):
     def _process_depth(self, tp: Union[Tuple[Item], Item], prefix: str, depth: int):
         if depth > 1:
             for i, value in enumerate(tp):
-                self._process_depth(
-                    value, f"{prefix}{i}{self.config.separator}", depth - 1
-                )
+                self._process_depth(value, f"{prefix}{i}{self._sep}", depth - 1)
         else:
             for i, value in enumerate(tp):
                 for k, v in value.items():
