@@ -1,5 +1,5 @@
 import random
-from typing import Any, List, Optional, Generic, TypeVar, Protocol
+from typing import Any, List, Optional, Generic, TypeVar, Protocol, final
 from typing_extensions import Self, runtime_checkable
 from collections.abc import Iterator, Iterable
 from pydantic import BaseModel, computed_field
@@ -174,16 +174,22 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
     """
 
     @abstractmethod
-    def read_stream(self) -> Iterable[T]:
-        """
-        Returns an **iterable object**, each element is a stream item.
-        Subclasses read files, databases, network streams, etc. based on data_root.
-        Args:
-            flatten (bool): Whether to flatten the dataset, i.e., yield all samples in a single iterable.
-        Yields:
-            Iterable[Any]: An iterable of samples or episodes.
-        """
+    def read_stream(self) -> Iterator[T]:
+        """Returns an **iterator object**, each element is a stream item."""
         raise NotImplementedError
+
+    def write(self, *args, **kwargs) -> Any:
+        """Write anything to the dataset. For example, it can be used to insert,
+        append, and extend data into a data stream, or conversely, delete data,
+        or dynamically adjust the dataset configuration. Furthermore, this method
+        is essential for real-time data streams that require external control updates,
+        such as multimodal sensor data from robotic devices. However, in most cases,
+        the dataset is static and read-only, so this method is not mandatory and is
+        not implemented by default. Depending on the actual needs, this method can
+        accept arbitrary parameters and return any type of values."""
+        raise NotImplementedError(
+            "Write method not implemented for this dataset (read-only)."
+        )
 
     def get_logger(self):
         return getLogger(self.__class__.__name__)
@@ -203,5 +209,6 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
         """
         return ilen(self.read_stream())
 
+    @final
     def __iter__(self) -> Iterator[T]:
         yield from self.read_stream()
