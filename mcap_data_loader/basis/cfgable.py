@@ -16,7 +16,6 @@ from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
 from pathlib import Path
 from functools import cache
-from logging import getLogger
 from mcap_data_loader.utils.basic import get_class_type, DataClassProto
 import inspect
 import yaml

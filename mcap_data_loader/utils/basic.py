@@ -8,13 +8,14 @@ from typing import (
     Type,
     Optional,
     Protocol,
+    Hashable,
     get_origin,
     get_args,
 )
 from typing_extensions import Annotated, TypedDict, runtime_checkable
 from enum import Enum
 from pathlib import Path
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Callable
 from pydantic import PlainValidator, validate_call
 from functools import wraps
 from inspect import isclass
@@ -62,6 +63,9 @@ NonIteratorIterable = Annotated[
     Iterable[T],
     PlainValidator(validate_iterable_not_iterator),
 ]
+ReturnT = TypeVar("ReturnT")
+KeyT = TypeVar("KeyT", bound=Hashable)
+DataT = TypeVar("DataT")
 
 
 SlicesType = Union[List[tuple], tuple, int]
@@ -73,6 +77,18 @@ class DataStamped(TypedDict, Generic[T]):
     t: int
     data: T
 
+    @staticmethod
+    def map_dict(
+        data: Dict[KeyT, "DataStamped[DataT]"], func: Callable[[DataT], ReturnT]
+    ) -> Dict[KeyT, "DataStamped[ReturnT]"]:
+        result = {}
+        for key, stamped in data.items():
+            result[key] = {
+                "t": stamped["t"],
+                "data": func(stamped["data"]),
+            }
+        return result
+
 
 DictDataStamped = Dict[str, DataStamped[T]]
 
@@ -83,22 +99,6 @@ if sys.version_info >= (3, 10):
     zip = partial(zip, strict=True)
 else:
     from more_itertools import zip_equal as zip  # noqa: F401
-
-
-def get_stamp_ms() -> int:
-    return int(time.time() * 1e3)
-
-
-class bcolors:
-    MAGENTA = "\033[95m"
-    OKBLUE = "\033[94m"
-    OKCYAN = "\033[96m"
-    OKGREEN = "\033[92m"
-    WARNING = "\033[93m"
-    FAIL = "\033[91m"
-    ENDC = "\033[0m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
 
 
 class ReprEnum(Enum):
@@ -159,6 +159,14 @@ class Rate:
 
     def reset(self):
         self._last_time = time.perf_counter()
+
+
+class InputSleeper:
+    def reset(self):
+        pass
+
+    def sleep(self):
+        input("Press Enter to continue...")
 
 
 def multi_slices_to_indexes(slices: SlicesType) -> List[int]:
@@ -409,12 +417,26 @@ if __name__ == "__main__":
     # print(float_range(1.0, 2.1))         # ValueError: prefix 1 vs 2 mismatch
     # print(float_range(1.0, 1.5, -1))     # ValueError: Step must be a positive integer.
 
-    result = remove_util("123.abc", ".", False)
-    assert result == "abc", result
-    result = remove_util("123.abc", ".", True)
-    assert result == ".abc", result
-    result = remove_util("123abc", "123", False)
-    assert result == "abc", result
-    result = remove_util("12ab34", "ab")
-    assert result == "ab34", result
-    assert remove_util("12ab34", "567") == "12ab34"
+    # result = remove_util("123.abc", ".", False)
+    # assert result == "abc", result
+    # result = remove_util("123.abc", ".", True)
+    # assert result == ".abc", result
+    # result = remove_util("123abc", "123", False)
+    # assert result == "abc", result
+    # result = remove_util("12ab34", "ab")
+    # assert result == "ab34", result
+    # assert remove_util("12ab34", "567") == "12ab34"
+
+    import numpy as np
+    import time
+
+    data = {
+        "a": {"t": 1, "data": [1, 2]},
+        "b": {"t": 2, "data": [3, 4]},
+    }
+    start = time.perf_counter()
+    result = DataStamped.map_dict(data, np.array)
+    print("Time taken:", time.perf_counter() - start)
+    for value in result.values():
+        print(value["t"])
+        print(value["data"].shape)
