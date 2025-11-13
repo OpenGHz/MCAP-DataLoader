@@ -1,7 +1,7 @@
 import random
 from typing import Any, List, Optional, Generic, TypeVar, Protocol
 from typing_extensions import Self, runtime_checkable
-from collections.abc import Generator, Iterable
+from collections.abc import Iterator, Iterable
 from pydantic import BaseModel, computed_field
 from abc import abstractmethod
 from functools import cached_property, cache
@@ -152,21 +152,19 @@ class IterableDatasetProtocol(Protocol[T]):
     Subclasses only need to implement `__iter__()` to generate samples.
     """
 
-    def __iter__(self) -> Generator[T]:
-        """
-        Returns an **iterable object**, each element is a stream item.
-        Subclasses read files, databases, network streams, etc. based on data_root.
-        Yields:
-            Iterable[T]: An iterable of samples or episodes.
-        """
+    def __iter__(self) -> Iterator[T]:
+        """Return an iterator of samples or episodes."""
 
 
-class IterableMultiEpisodeDatasetsProtocol(IterableDatasetProtocol[MultiEpisodeT]):
+@runtime_checkable
+class IterableMultiEpisodeDatasetsProtocol(Protocol[MultiEpisodeT]):
     """
     Protocol for iterable multi-episode datasets.
     Subclasses only need to implement `__iter__()` to generate multiple datasets.
-    Each yielded item is an iterable of datasets.
     """
+
+    def __iter__(self) -> Iterator[MultiEpisodeT]:
+        """Return an iterator of episodes"""
 
 
 class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
@@ -205,5 +203,5 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
         """
         return ilen(self.read_stream())
 
-    def __iter__(self) -> Generator[T]:
+    def __iter__(self) -> Iterator[T]:
         yield from self.read_stream()
