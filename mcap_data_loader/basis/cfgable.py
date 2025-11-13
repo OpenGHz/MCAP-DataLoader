@@ -8,10 +8,10 @@ from typing import (
     Dict,
     Any,
     Literal,
-    TypeVar,
     final,
     get_type_hints,
 )
+from typing_extensions import get_args
 from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
 from pathlib import Path
@@ -23,24 +23,33 @@ import json
 import pickle
 
 
+class NoConfig:
+    """A placeholder config class indicating no configuration is needed."""
+
+
 OtherCfgType = Optional[Union[Type[Union[DataClassProto, BaseModel]], Dict[str, Any]]]
-ConfigType = Union[BaseModel, DataClassProto]
+ConfigType = Union[BaseModel, DataClassProto, NoConfig]
 
 
 class InitConfigMeta(type):
     def __call__(cls, config: Union[ConfigType, OtherCfgType] = None, **kwargs):
-        error_msg = (
-            "`config` must be annotated in the `__init__` ."
-            "method or at the top level class if not provided as an arg."
-        )
+        error_msg = """
+        `config` must be annotated as a subclass of `ConfigType` in the `__init__`
+        method or at the top level class if not provided as an arg. If a subclass 
+        truly does not require any configuration, you can pass an arbitrary (not None) 
+        instance parameter during instantiation, typically `...`, or you can mark the 
+        type as `NoConfig`."""
         # mainly used by yaml config, e.g. hydra
         if config is None or isinstance(config, type):
             config_type = config or cls.resolve_config_type(cls)
-            if (not config_type) or isinstance(config_type, TypeVar):
+            if not (
+                isinstance(config_type, type)
+                and issubclass(config_type, get_args(ConfigType))
+            ):
                 cls_path = kwargs.pop("_target_", None)
                 if cls_path is not None:
                     config_type = get_class_type(cls_path)
-                raise ValueError(error_msg)
+                raise ValueError(error_msg + f" Got type of {config_type}.")
             # self.get_logger().info(f"{kwargs}")
             config = config_type(**kwargs)
             # check pydantic extra kwargs
