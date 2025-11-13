@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
 from pathlib import Path
 from functools import cache
+from logging import getLogger
 from mcap_data_loader.utils.basic import get_class_type, DataClassProto
 import inspect
 import yaml
@@ -224,15 +225,17 @@ def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], st
         A dictionary representing the config or the repr string.
     """
     if callable(getattr(obj, "dump", None)):
-        return obj.dump()
-    else:
-        config = getattr(obj, "config", None)
-        if config is not None:
-            if isinstance(config, BaseModel):
-                return config.model_dump()
-            elif is_dataclass(config):
-                return asdict(config)
-        return repr(obj)
+        try:
+            return obj.dump()
+        except Exception as e:
+            getLogger(f"{dump_or_repr.__name__}").error(f"Failed to dump config: {e}")
+    config = getattr(obj, "config", None)
+    if config is not None:
+        if isinstance(config, BaseModel):
+            return config.model_dump()
+        elif is_dataclass(config):
+            return asdict(config)
+    return repr(obj)
 
 
 if __name__ == "__main__":

@@ -10,9 +10,8 @@ from typing import (
     Protocol,
     get_origin,
     get_args,
-    runtime_checkable,
 )
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import Annotated, TypedDict, runtime_checkable
 from enum import Enum
 from pathlib import Path
 from collections.abc import Iterable, Iterator
