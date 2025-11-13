@@ -173,6 +173,13 @@ class InputSleeper:
         input("Press Enter to continue...")
 
 
+def create_sleeper(rate_hz: float) -> Union[Rate, InputSleeper]:
+    if rate_hz == 0:
+        return InputSleeper()
+    else:
+        return Rate(rate_hz)
+
+
 def multi_slices_to_indexes(slices: SlicesType) -> List[int]:
     """Convert slices to a list of indexes.
     Args:
