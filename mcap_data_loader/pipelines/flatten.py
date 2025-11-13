@@ -1,14 +1,22 @@
-from pydantic import BaseModel, NonNegativeInt
+from pydantic import BaseModel
 from collections.abc import Generator
 from mcap_data_loader.pipelines.basis import Pipeline, T
+from typing import Optional, Tuple, Union
+from more_itertools import collapse
 
 
 class FlattenConfig(BaseModel):
     """Configuration for Flatten pipeline."""
 
-    depth: NonNegativeInt = 1
+    depth: int = -1
     """Depth to which to flatten nested iterables.
-    A depth of 0 means no flattening, 1 means flattening one level, and so on."""
+    A depth of 0 means no flattening. Negative values mean flatten all levels
+    (much slower but useful for non-single nested levels). Positive values mean
+    only flatten up to that depth."""
+    base_type: Optional[Union[Tuple[type, ...], type]] = None
+    """Binary and text strings are not considered iterable and
+    will not be collapsed. To avoid collapsing other types, specify it here.
+    This is only used when depth is negative."""
 
 
 class Flatten(Pipeline[T]):
@@ -17,10 +25,14 @@ class Flatten(Pipeline[T]):
     def __init__(self, config: FlattenConfig) -> None:
         self.config = config
         self._depth = config.depth
+        self._base_type = config.base_type
 
     def __iter__(self) -> Generator[T]:
-        for item in self._iterable:
-            yield from self._flatten(item, 0)
+        if self._depth < 0:
+            yield from collapse(self._iterable, base_type=self._base_type)
+        else:
+            for item in self._iterable:
+                yield from self._flatten(item, 0)
 
     def _flatten(self, iterable: T, current_depth: int) -> Generator[T]:
         """Recursively flatten items up to the specified depth."""
@@ -32,8 +44,12 @@ class Flatten(Pipeline[T]):
 
 
 if __name__ == "__main__":
-    nested_list = [[1, 2], [3, [4, 5]], [7, 8]]
-    flatten_iterable = Flatten(FlattenConfig())(nested_list)
+    import time
 
-    for item in flatten_iterable:
-        print(item)
+    nested_list = [[1, 2], [3, [4, 5]], ["123", {1: 2}]]
+
+    for depth in (-1, 0, 1):
+        flattene = Flatten(FlattenConfig(depth=depth, base_type=dict))
+        start = time.perf_counter()
+        flat = flattene(nested_list)
+        print(f"{depth=}", tuple(flat), time.perf_counter() - start)
