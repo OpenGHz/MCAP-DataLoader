@@ -235,6 +235,8 @@ def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], st
             return config.model_dump()
         elif is_dataclass(config):
             return asdict(config)
+        elif isinstance(config, dict):
+            return config
     return repr(obj)
 
 
