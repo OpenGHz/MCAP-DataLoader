@@ -6,14 +6,7 @@ from typing_extensions import Self
 from functools import cached_property
 from pydantic import field_validator, ConfigDict, BaseModel, Field
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
-from mcap_data_loader.utils.basic import (
-    get_items_by_ext,
-    file_hash,
-    DictDataStamped,
-    # zip,
-    # DictableSlicesType,
-    # DictableIndexesType,
-)
+from mcap_data_loader.utils.basic import get_items_by_ext, file_hash, DictDataStamped
 from mcap_data_loader.datasets.dataset import (
     IterableDatasetABC,
     IterableDatasetConfig,
@@ -306,13 +299,16 @@ class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]
         Initialize episode datasets from multiple roots.
         """
         for root_str, cfg in self.config.roots.items():
+            data_root = Path(root_str)
             merge_config = self.config.common.copy()
             merge_config.update(cfg)
-            dataset_cfg = McapFlatBuffersEpisodeDatasetConfig(
-                data_root=root_str,
+            config_cls, dataset_cls = get_config_and_class_type(data_root)
+            dataset_cfg = config_cls(
+                data_root=data_root,
                 **merge_config,
             )
-            episode_dataset = McapFlatBuffersEpisodeDataset(dataset_cfg)
+            episode_dataset = dataset_cls(dataset_cfg)
+            episode_dataset = to_episodic_sequence(episode_dataset)
             self._episode_datasets.append(episode_dataset)
 
     def read_stream(self):

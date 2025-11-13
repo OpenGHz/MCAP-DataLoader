@@ -1,7 +1,7 @@
 import random
-from typing import Any, Iterable, List, Optional, Generic, TypeVar
-from typing_extensions import Self
-from collections.abc import Generator
+from typing import Any, List, Optional, Generic, TypeVar, Protocol
+from typing_extensions import Self, runtime_checkable
+from collections.abc import Generator, Iterable
 from pydantic import BaseModel, computed_field
 from abc import abstractmethod
 from functools import cached_property, cache
@@ -20,6 +20,8 @@ from natsort import natsort_keygen
 
 
 T = TypeVar("T")
+MultiSampleT = TypeVar("MultiSampleT", bound=Iterable)
+MultiEpisodeT = TypeVar("MultiEpisodeT", bound=Iterable[Iterable])
 
 
 class RearrangeType(StrEnum):
@@ -141,6 +143,30 @@ class IterableDatasetConfig(BaseModel):
     """Slicing configuration for samples, episodes and datasets"""
     rearrange: DataRearrangeConfig = DataRearrangeConfig()
     """Rearrangement strategy for samples, episodes and datasets."""
+
+
+@runtime_checkable
+class IterableDatasetProtocol(Protocol[T]):
+    """
+    Protocol for iterable datasets.
+    Subclasses only need to implement `__iter__()` to generate samples.
+    """
+
+    def __iter__(self) -> Generator[T]:
+        """
+        Returns an **iterable object**, each element is a stream item.
+        Subclasses read files, databases, network streams, etc. based on data_root.
+        Yields:
+            Iterable[T]: An iterable of samples or episodes.
+        """
+
+
+class IterableMultiEpisodeDatasetsProtocol(IterableDatasetProtocol[MultiEpisodeT]):
+    """
+    Protocol for iterable multi-episode datasets.
+    Subclasses only need to implement `__iter__()` to generate multiple datasets.
+    Each yielded item is an iterable of datasets.
+    """
 
 
 class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
