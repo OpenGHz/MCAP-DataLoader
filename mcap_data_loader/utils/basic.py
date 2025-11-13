@@ -79,10 +79,14 @@ class DataStamped(TypedDict, Generic[T]):
 
     @staticmethod
     def map_dict(
-        data: Dict[KeyT, "DataStamped[DataT]"], func: Callable[[DataT], ReturnT]
+        data: Dict[KeyT, "DataStamped[DataT]"],
+        func: Callable[[DataT], ReturnT],
+        keys: Optional[Iterable[KeyT]] = None,
     ) -> Dict[KeyT, "DataStamped[ReturnT]"]:
         result = {}
-        for key, stamped in data.items():
+        keys = data.keys() if keys is None else keys
+        for key in keys:
+            stamped = data[key]
             result[key] = {
                 "t": stamped["t"],
                 "data": func(stamped["data"]),

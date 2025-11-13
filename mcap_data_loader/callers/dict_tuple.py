@@ -7,7 +7,7 @@ Item = Dict[str, ReturnT]
 
 
 class DictTupleConfig(BaseModel):
-    """Configuration for DictTuple pipeline."""
+    """Configuration for DictTuple caller."""
 
     depth: int = -1
     """Depth of tuple nesting to flatten.

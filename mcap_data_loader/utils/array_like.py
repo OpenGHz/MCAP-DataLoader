@@ -1,6 +1,6 @@
 from array_api_compat import array_namespace  # noqa: F401
 from pydantic import BaseModel, computed_field
-from typing import Any, Type, Tuple, Literal, Union
+from typing import Any, Type, Tuple, Literal, Union, Optional
 from typing_extensions import Self, TYPE_CHECKING
 import importlib
 
@@ -135,6 +135,150 @@ def get_default_device(ns: NameSpace) -> Any:
         return torch.get_default_device()
     else:
         raise ValueError(f"Unsupported namespace '{ns}' for default device retrieval.")
+
+
+InputBackend = Literal["torch", "numpy", "auto"]
+AllBackend = Union[InputBackend, Literal["list"]]
+
+
+class ArrayTransferConfig(BaseModel):
+    """Common configuration for ArrayTransfer."""
+
+    dtype: Union[Literal["same"], str] = "same"
+    """Data type for the output arrays. If `same`, keep the original dtype.
+    If empty, use the default dtype of the backend."""
+    device: Union[Literal["same", "auto"], str] = "auto"
+    """Device to move the output arrays to. If `same`, keep the original device.
+    If empty, use the default device of the backend. If `auto`, try to use a best compatible device."""
+    backend_in: InputBackend = "auto"
+    """The input data backend."""
+    backend_out: Union[AllBackend, Literal["same"]] = "same"
+    """The output data backend."""
+
+
+class ArrayTransferMixin:
+    """Utility class for transferring array-like objects between backends and devices."""
+
+    @staticmethod
+    def _get_backend_name(backend: str, array: Optional[Array] = None) -> str:
+        if backend == "auto":
+            if array is None:
+                raise ValueError("An array must be provided when backend is 'auto'.")
+            return get_ns_name_by_array(array)
+        return backend
+
+    def _determine_functions(
+        self,
+        backend_in: str,
+        dtype_in,
+        device_in,
+        backend_out: str,
+        dtype_out: str,
+        device_out: str,
+        array: Optional[Array] = None,
+    ):
+        # input process
+        backend_in = self._get_backend_name(backend_in, array)
+        self._xp_in = get_namespace_by_name(backend_in)
+        self._dtype_in = dtype_in
+        self._device_in = device_in
+        # output process
+        backend_out = self._get_backend_out(backend_in, backend_out)
+        self._init_xp_out(backend_out)
+        self._init_dtype_out(backend_out, dtype_in, dtype_out)
+        self._init_device_out(backend_out, device_in, device_out)
+        # determine output conversion function
+        self.convert_func = self._get_convert_func(backend_in, backend_out)
+
+    def _init_dtype_out(self, backend_out: str, dtype_in: str, dtype_out: str):
+        if dtype_out == "same" or dtype_in is None or dtype_equal(dtype_out, dtype_in):
+            dtype_out = None
+        elif not dtype_out:
+            dtype_out = get_default_dtype(backend_out)
+        else:
+            dtype_out = getattr(self._xp_out, dtype_out)
+        self._dtype_out = dtype_out
+
+    def _init_device_out(self, backend_out: str, device_in: str, device_out: str):
+        if device_out == "same":
+            device_out = str(device_in) if device_in else "cpu"
+        elif not device_out:
+            device_out = get_default_device(backend_out)
+        else:
+            device_out = "" if device_out == "auto" else device_out
+            device_out = get_device_auto(backend_out, device_out)
+        self._device_out = device_out
+
+    def _determine_from_array(
+        self,
+        array: Array,
+        backend_out: str,
+        dtype_out: str,
+        device_out: str,
+        backend_in: str = "auto",
+    ):
+        self._determine_functions(
+            backend_in,
+            array.dtype,
+            array.device,
+            backend_out,
+            dtype_out,
+            device_out,
+            array,
+        )
+
+    def _get_convert_func(self, backend_in: str, backend_out: str):
+        if backend_in == backend_out:
+            # TODO: we may still need to move to device and convert dtype?
+            if (
+                self._dtype_in == self._dtype_out
+                and self._device_in == self._device_out
+            ):
+                func = self._pass_through
+            else:
+                # TODO: for torch, use non_blocking=True
+                func = self._self_convert
+        elif backend_out == "list":
+            func = self._to_list
+        elif backend_out == "numpy":
+            func = self._torch_to_np
+        else:
+            func = self._np_to_torch
+        return func
+
+    def _list_to_output(self, data: list) -> Array:
+        return self._xp_out.asarray(
+            data, dtype=self._dtype_out, device=self._device_out
+        )
+
+    def _np_to_torch(self, array: NDArray) -> Tensor:
+        # no need to check dtype here, as the empty_func already creates the correct dtype
+        return self._xp_out.from_numpy(array).to(
+            device=self._device_out, non_blocking=True
+        )
+
+    def _torch_to_device(self, tensor: Tensor) -> Tensor:
+        return tensor.to(device=self._device_out, non_blocking=True)
+
+    def _torch_to_np(self, tensor: Tensor) -> NDArray:
+        return tensor.cpu().numpy()
+
+    def _to_list(self, data: Union[NDArray, Tensor]) -> list:
+        return data.tolist()
+
+    def _self_convert(self, data: Array):
+        return self._xp_out.astype(
+            data, self._dtype_out, copy=True, device=self._device_out
+        )
+
+    def _pass_through(self, data):
+        return data
+
+    def _get_backend_out(self, backend_in: str, backend_out: str) -> str:
+        return backend_in if backend_out == "same" else backend_out
+
+    def _init_xp_out(self, backend_out: str):
+        self._xp_out = get_namespace_by_name(backend_out)
 
 
 if __name__ == "__main__":

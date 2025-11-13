@@ -1,18 +1,12 @@
 from mcap_data_loader.datasets.mcap_dataset import SampleStamped
 from mcap_data_loader.utils.basic import float_range
-from typing import Tuple, List, Dict, Union, Literal, Annotated
+from typing import Tuple, List, Dict, Union, Annotated
 from collections import ChainMap
-from pydantic import BaseModel, PositiveInt, ConfigDict, AfterValidator
+from pydantic import PositiveInt, AfterValidator, ConfigDict
 from mcap_data_loader.utils.array_like import (
-    get_device_auto,
-    get_ns_name_by_array,
-    get_namespace_by_name,
-    dtype_equal,
-    get_default_dtype,
-    get_default_device,
     Array,
-    NDArray,
-    Tensor,
+    ArrayTransferMixin,
+    ArrayTransferConfig,
 )
 from mcap_data_loader.callers.basis import CallerBasis
 from threading import Lock
@@ -48,26 +42,16 @@ def _normalize_stack_config(stack: StackTypeRaw) -> Dict[str, NormStackValue]:
 StackType = Annotated[StackTypeRaw, AfterValidator(_normalize_stack_config)]
 
 
-class BatchStackerConfig(BaseModel):
+class BatchStackerConfig(ArrayTransferConfig):
     """Configuration for BatchStacker caller."""
 
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     stack: StackType
     """Configuration for stacking keys, normalized to a consistent format automatically."""
-    dtype: Union[Literal["same"], str] = "same"
-    """Data type for the stacked arrays. If `same`, keep the original dtype.
-    If empty, use the default dtype of the backend."""
-    device: Union[Literal["same", "auto"], str] = "auto"
-    """Device to move the stacked arrays to. If `same`, keep the original device.
-    If empty, use the default device of the backend. If `auto`, try to use a best compatible device."""
-    backend_in: Literal["torch", "numpy", "auto"] = "auto"
-    """The input data backend."""
-    backend_out: Literal["torch", "numpy", "list", "same"] = "same"
-    """The output data backend."""
 
 
-class BatchStacker(CallerBasis[DictBatch]):
+class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
     """A caller that stacks specified keys from batched samples."""
 
     def __init__(self, config: BatchStackerConfig):
@@ -94,58 +78,6 @@ class BatchStacker(CallerBasis[DictBatch]):
                 )
         self._keys_info: Dict[str, dict] = keys_info
         return True
-
-    def _determine_functions(self, backend_in: str, dtype_in, device_in):
-        # input process
-        self._xp_in = get_namespace_by_name(backend_in)
-        self._dtype_in = dtype_in
-        self._device_in = device_in
-        # output process
-        config = self.config
-        backend_out = backend_in if config.backend_out == "same" else config.backend_out
-        self._xp_out = get_namespace_by_name(backend_out)
-        dtype_out = config.dtype
-        if dtype_out == "same" or dtype_equal(dtype_out, dtype_in):
-            dtype_out = None
-        elif not dtype_out:
-            dtype_out = get_default_dtype(backend_out)
-        else:
-            dtype_out = getattr(self._xp_out, dtype_out)
-        self._dtype_out = dtype_out
-        device_out = config.device
-        if device_out == "same":
-            device_out = str(device_in)
-        elif not device_out:
-            device_out = get_default_device(backend_out)
-        else:
-            device_out = "" if device_out == "auto" else device_out
-            device_out = get_device_auto(backend_out, device_out)
-        self._device_out = device_out
-        # determine output conversion function
-        if backend_in == backend_out:
-            # TODO: for torch, we may still need to move to device?
-            self.convert_func = lambda x: x
-        elif backend_out == "list":
-            self.convert_func = self._to_list
-        elif backend_out == "numpy":
-            self.convert_func = self._torch_to_np
-        else:
-            self.convert_func = self._np_to_torch
-
-    def _np_to_torch(self, array: NDArray) -> Tensor:
-        # no need to check dtype here, as the empty_func already creates the correct dtype
-        return self._xp_out.from_numpy(array).to(
-            device=self._device_out, non_blocking=True
-        )
-
-    def _torch_to_device(self, tensor: Tensor) -> Tensor:
-        return tensor.to(device=self._device_out, non_blocking=True)
-
-    def _torch_to_np(self, tensor: Tensor) -> NDArray:
-        return tensor.cpu().numpy()
-
-    def _to_list(self, data: Union[NDArray, Tensor]) -> list:
-        return data.tolist()
 
     def _reset_buffers(self, batch_size: int):
         batch_stack = {}
@@ -180,12 +112,13 @@ class BatchStacker(CallerBasis[DictBatch]):
                 for key, config in self._keys_info[cat_key].items():
                     config[0] = c2slice[config[0]]
             one_value = first_sample[key]["data"]
-            backend_in = (
-                self.config.backend_in
-                if self.config.backend_in != "auto"
-                else get_ns_name_by_array(one_value)
+            self._determine_from_array(
+                one_value,
+                self.config.backend_out,
+                self.config.dtype,
+                self.config.device,
+                self.config.backend_in,
             )
-            self._determine_functions(backend_in, one_value.dtype, one_value.device)
             self._batch_stack_shape = batch_stack_shape
             self._keys_no_stack = first_sample.keys() - self._keys_to_stack
             self._first_call = False
