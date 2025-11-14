@@ -82,8 +82,9 @@ class DataStamped(TypedDict, Generic[T]):
         data: Dict[KeyT, "DataStamped[DataT]"],
         func: Callable[[DataT], ReturnT],
         keys: Optional[Iterable[KeyT]] = None,
+        output: Optional[dict] = None,
     ) -> Dict[KeyT, "DataStamped[ReturnT]"]:
-        result = {}
+        result = output if output is not None else {}
         keys = data.keys() if keys is None else keys
         for key in keys:
             stamped = data[key]

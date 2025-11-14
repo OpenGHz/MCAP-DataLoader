@@ -9,6 +9,8 @@ class MergeConfig(BaseModel):
 
     method: str = "auto"
     """Method to use for merging items."""
+    replace: bool = False
+    """Whether allow to replace existing items with new ones when merging."""
 
 
 class Merge(Pipeline[T]):
@@ -16,49 +18,66 @@ class Merge(Pipeline[T]):
 
     def __init__(self, config: MergeConfig) -> None:
         self.config = config
+        replace = config.replace
         self._methods = {
             "ChainMap": lambda items: ChainMap(*items),
-            "+": self._sum,
-            "|": self._or,
+            "+": self._sum_replace if replace else self._sum,
+            "|": self._or_replace if replace else self._or,
             "none": lambda items: items,
         }
+        self._method = config.method
+        self._first_call = True
 
-    def _sum(self, items):
+    def _sum_replace(self, items):
         base = items[0]
         for item in items[1:]:
             base += item
         return base
 
-    def _or(self, items):
+    def _sum(self, items):
+        base = self._item_type()
+        for item in items:
+            base += item
+        return base
+
+    def _or_replace(self, items):
         base = items[0]
         for item in items[1:]:
             base |= item
         return base
 
+    def _or(self, items):
+        base = self._item_type()
+        for item in items:
+            base |= item
+        return base
+
     def __iter__(self) -> Generator[T]:
-        if self.config.method == "auto":
+        if self._first_call and self._method == "auto":
             first = next(zip(*self._iterable))
-            item_type = type(first[0])
-            if not all(isinstance(item, item_type) for item in first):
+            self._item_type = type(first[0])
+            if not all(isinstance(item, self._item_type) for item in first):
                 raise ValueError(
-                    f"All items in the first iterable must be of type {item_type}, "
+                    f"All items in the first iterable must be of type {self._item_type}, "
                     f"but got {[type(item) for item in first]}."
                 )
-            if issubclass(item_type, Mapping):
-                self.config.method = "ChainMap"
-            elif issubclass(item_type, (list, tuple)):
-                self.config.method = "+"
-            elif issubclass(item_type, set):
-                self.config.method = "|"
+            # if issubclass(item_type, Mapping):
+            #     self._method = "ChainMap"
+            if issubclass(self._item_type, (list, tuple)):
+                self._method = "+"
+            elif issubclass(self._item_type, (set, Mapping)):
+                self._method = "|"
             else:
-                self.config.method = "none"
-        if self.config.method not in self._methods:
-            raise ValueError(
-                f"Unsupported merge method {self.config.method}. "
-                f"Supported methods are: {list(self._methods.keys())}."
-            )
+                self._method = "none"
+            if self._method not in self._methods:
+                raise ValueError(
+                    f"Unsupported merge method {self._method}. "
+                    f"Supported methods are: {list(self._methods.keys())}."
+                )
+            self._first_call = False
+        method = self._method
         for items in zip(*self._iterable):
-            yield self._methods[self.config.method](items)
+            yield self._methods[method](items)
 
 
 if __name__ == "__main__":

@@ -160,7 +160,7 @@ class ArrayTransferMixin:
     """Utility class for transferring array-like objects between backends and devices."""
 
     @staticmethod
-    def _get_backend_name(backend: str, array: Optional[Array] = None) -> str:
+    def get_backend_name(backend: str, array: Optional[Array] = None) -> str:
         if backend == "auto":
             if array is None:
                 raise ValueError("An array must be provided when backend is 'auto'.")
@@ -178,17 +178,20 @@ class ArrayTransferMixin:
         array: Optional[Array] = None,
     ):
         # input process
-        backend_in = self._get_backend_name(backend_in, array)
-        self._xp_in = get_namespace_by_name(backend_in)
-        self._dtype_in = dtype_in
-        self._device_in = device_in
+        backend_in = self.get_backend_name(backend_in, array)
+        self._init_in(backend_in, dtype_in, device_in)
         # output process
-        backend_out = self._get_backend_out(backend_in, backend_out)
+        backend_out = self.get_backend_out(backend_in, backend_out)
         self._init_xp_out(backend_out)
         self._init_dtype_out(backend_out, dtype_in, dtype_out)
         self._init_device_out(backend_out, device_in, device_out)
         # determine output conversion function
-        self.convert_func = self._get_convert_func(backend_in, backend_out)
+        self.convert_func = self.get_convert_func(backend_in, backend_out)
+
+    def _init_in(self, backend_in: str, dtype_in, device_in):
+        self._xp_in = get_namespace_by_name(backend_in)
+        self._dtype_in = dtype_in
+        self._device_in = device_in
 
     def _init_dtype_out(self, backend_out: str, dtype_in: str, dtype_out: str):
         if dtype_out == "same" or dtype_in is None or dtype_equal(dtype_out, dtype_in):
@@ -227,26 +230,25 @@ class ArrayTransferMixin:
             array,
         )
 
-    def _get_convert_func(self, backend_in: str, backend_out: str):
+    def get_convert_func(self, backend_in: str, backend_out: str):
         if backend_in == backend_out:
-            # TODO: we may still need to move to device and convert dtype?
             if (
                 self._dtype_in == self._dtype_out
                 and self._device_in == self._device_out
             ):
-                func = self._pass_through
+                func = self.pass_through
             else:
                 # TODO: for torch, use non_blocking=True
                 func = self._self_convert
         elif backend_out == "list":
-            func = self._to_list
+            func = self.to_list
         elif backend_out == "numpy":
-            func = self._torch_to_np
+            func = self.torch_to_np
         else:
             func = self._np_to_torch
         return func
 
-    def _list_to_output(self, data: list) -> Array:
+    def list_to_output(self, data: list) -> Array:
         return self._xp_out.asarray(
             data, dtype=self._dtype_out, device=self._device_out
         )
@@ -260,10 +262,12 @@ class ArrayTransferMixin:
     def _torch_to_device(self, tensor: Tensor) -> Tensor:
         return tensor.to(device=self._device_out, non_blocking=True)
 
-    def _torch_to_np(self, tensor: Tensor) -> NDArray:
+    @staticmethod
+    def torch_to_np(tensor: Tensor) -> NDArray:
         return tensor.cpu().numpy()
 
-    def _to_list(self, data: Union[NDArray, Tensor]) -> list:
+    @staticmethod
+    def to_list(data: Union[NDArray, Tensor]) -> list:
         return data.tolist()
 
     def _self_convert(self, data: Array):
@@ -271,10 +275,12 @@ class ArrayTransferMixin:
             data, self._dtype_out, copy=True, device=self._device_out
         )
 
-    def _pass_through(self, data):
+    @staticmethod
+    def pass_through(data):
         return data
 
-    def _get_backend_out(self, backend_in: str, backend_out: str) -> str:
+    @staticmethod
+    def get_backend_out(backend_in: str, backend_out: str) -> str:
         return backend_in if backend_out == "same" else backend_out
 
     def _init_xp_out(self, backend_out: str):

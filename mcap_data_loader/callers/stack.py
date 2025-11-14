@@ -1,7 +1,6 @@
 from mcap_data_loader.datasets.mcap_dataset import SampleStamped
 from mcap_data_loader.utils.basic import float_range
 from typing import Tuple, List, Dict, Union, Annotated
-from collections import ChainMap
 from pydantic import PositiveInt, AfterValidator, ConfigDict
 from mcap_data_loader.utils.array_like import (
     Array,
@@ -12,7 +11,7 @@ from mcap_data_loader.callers.basis import CallerBasis
 from threading import Lock
 
 
-DictBatch = ChainMap[str, Union[Array, List[Array], int]]
+DictBatch = Dict[str, Union[Array, List[Array], int]]
 NormStackValue = List[List[str]]
 StackTypeRaw = Dict[
     str,
@@ -48,7 +47,8 @@ class BatchStackerConfig(ArrayTransferConfig):
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     stack: StackType
-    """Configuration for stacking keys, normalized to a consistent format automatically."""
+    """Configuration for stacking keys, normalized to a consistent format automatically.
+    The concatenated keys cannot be the same as any keys that do not need to be concatenated."""
 
 
 class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
@@ -80,15 +80,14 @@ class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
         return True
 
     def _reset_buffers(self, batch_size: int):
-        batch_stack = {}
+        batch_stack: Dict[str, Union[list, Array]] = {}
+        for key in self._keys_no_stack:
+            batch_stack[key] = []
         for cat_key, shape in self._batch_stack_shape.items():
             batch_stack[cat_key] = self._xp_in.empty(
                 (batch_size,) + shape, dtype=self._dtype_in, device=self._device_in
             )
-        batch_list: Dict[str, list] = {}
-        for key in self._keys_no_stack:
-            batch_list[key] = []
-        return batch_stack, batch_list
+        return batch_stack
 
     def _init_info(self, first_sample: SampleStamped):
         with self._lock:
@@ -131,20 +130,20 @@ class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
         convert_func = self.convert_func
         # allocate memory
         batch_size = len(batched_samples)
-        batch_stack, batch_list = self._reset_buffers(batch_size)
+        batch_stack = self._reset_buffers(batch_size)
         # fill in data
         for i, sample in enumerate(batched_samples):
             for cat_key, keys_dict in keys_info.items():
                 for key, config in keys_dict.items():
                     (start, stop), r = config
                     batch_stack[cat_key][i, r, ..., start:stop] = sample[key]["data"]
+            # keep the remaining batched dict unstacked
             for key in keys_no_stack:
-                batch_list[key].append(sample[key]["data"])
+                batch_stack[key].append(sample[key]["data"])
         # stack and move to device
         # TODO: use multi-treaded pin_memory and use a new cuda stream to copy asynchronously
         # TODO: test the performance vs tensor-dict
-        final_batched = {}
-        for catkey, data in batch_stack.items():
-            final_batched[catkey] = convert_func(data)
-        # keep the remaining batched dict unstacked
-        return ChainMap(final_batched, batch_list, {"batch_size": batch_size})
+        for catkey in keys_info:
+            batch_stack[catkey] = convert_func(batch_stack[catkey])
+        batch_stack["batch_size"] = batch_size
+        return batch_stack
