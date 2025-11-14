@@ -77,9 +77,9 @@ class InitConfigMeta(type):
                     config = config.model_validate(config.model_dump(warnings="none"))
                 else:  # dataclass
                     config = replace(config, **kwargs)
-        instance = super().__call__(config)
+        instance: "InitConfigMixinBasis" = super().__call__(config)
         instance.config = config
-        instance._configured = False
+        instance.config_post_init()
         return instance
 
     @classmethod
@@ -108,7 +108,6 @@ class InitConfigMixinBasis:
         """Initialize with a config. It is only used for type hinting in the current class;
         subclasses can override it at will."""
         self.config = config
-        self._configured = False
 
     @classmethod
     def get_logger(cls):
@@ -172,6 +171,9 @@ class InitConfigMixinBasis:
                 "`config` must be annotated as a pydantic BaseModel or a dataclass."
             )
 
+    def config_post_init(self):
+        """A hook to be called after the config is set."""
+
 
 class InitConfigMixin(InitConfigMixinBasis, metaclass=InitConfigMeta):
     """Mixin class for initializing with a config."""
@@ -182,6 +184,9 @@ class InitConfigABCMixin(InitConfigMixinBasis, metaclass=InitConfigABCMeta):
 
 
 class ConfigurableBasis(InitConfigABCMixin):
+    def config_post_init(self):
+        self._configured = False
+
     @final
     def configure(self) -> bool:
         if self._configured:
