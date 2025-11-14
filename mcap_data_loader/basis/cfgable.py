@@ -8,14 +8,16 @@ from typing import (
     Dict,
     Any,
     Literal,
+    Set,
     final,
     get_type_hints,
 )
-from typing_extensions import get_args
+from typing_extensions import get_args, Self
 from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
 from pathlib import Path
 from functools import cache
+from weakref import WeakSet
 from mcap_data_loader.utils.basic import get_class_type, DataClassProto
 import inspect
 import yaml
@@ -184,8 +186,13 @@ class InitConfigABCMixin(InitConfigMixinBasis, metaclass=InitConfigABCMeta):
 
 
 class ConfigurableBasis(InitConfigABCMixin):
+    """A basis class for easy configuring."""
+
+    __instances: Set[Self] = WeakSet()
+
     def config_post_init(self):
         self._configured = False
+        self.__class__.__instances.add(self)
 
     @final
     def configure(self) -> bool:
@@ -205,6 +212,16 @@ class ConfigurableBasis(InitConfigABCMixin):
     @property
     def configured(self) -> bool:
         return self._configured
+
+    @classmethod
+    def all_configure(cls) -> bool:
+        """Configure all instances of this class and its subclasses."""
+        for instance in cls.__instances:
+            if not instance.configured:
+                if not instance.configure():
+                    cls.get_logger().error(f"Failed to configure instance: {instance}")
+                    return False
+        return True
 
     def _create_interface(self, class_type: Optional[Type]):
         """Create the interface instance based on the config and the class type annotation.
@@ -281,7 +298,8 @@ if __name__ == "__main__":
         comps: list[MyComponent]
 
     comp = MyComponent(param1=20)
-    comp.configure()
+    assert comp.configure()
+    assert comp.all_configure()
     print(comp.dump())
 
     comps_config = MyCompsConfig(comps=[comp])

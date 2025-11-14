@@ -22,7 +22,9 @@ class DictMapConfig(ArrayTransferConfig):
     include_unmapped: bool = False
     """Whether to include unmapped keys in the output dict."""
     replace: bool = False
-    """Whether to replace the original data in the output dict."""
+    """Whether to replace the original data in the output dict. If False and `include_unmapped`
+    is True, a copy of the original data is made before mapping which is much slower. If True,
+    the unmapped keys are included even if `include_unmapped` is False."""
 
 
 class DictMap(CallerBasis[DictDataStamped[T]]):
