@@ -33,5 +33,4 @@ if __name__ == "__main__":
     numbers = [1, 2, 3, 4, 5]
     map_iterable = Map(MapConfig(callable=square))(numbers)
 
-    for item in map_iterable:
-        print(item)
+    print(tuple(map_iterable))  # Output: (2, 4, 6, 8, 10)
