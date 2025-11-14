@@ -1,9 +1,9 @@
 import random
 from typing import Any, List, Optional, Generic, TypeVar, Protocol, final
 from typing_extensions import Self, runtime_checkable
-from collections.abc import Iterator, Iterable
+from collections.abc import Iterator, Iterable, Generator
 from pydantic import BaseModel, computed_field
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from functools import cached_property, cache
 from logging import getLogger
 from mcap_data_loader.utils.basic import (
@@ -244,6 +244,29 @@ class IterableRWDatasetABC(
     """
 
 
+class RealTimeDatasetABC(IterableRWDatasetABC[T]):
+    """Generic real-time dataset template.
+    Subclasses need to implement `read()`, `write()` and `reset()` methods.
+    The real-time dataset is designed for scenarios where data is continuously
+    generated and needs to be processed in real-time, such as sensor data from
+    robots.
+    """
+
+    @abstractmethod
+    def reset(self) -> None:
+        """Reset the dataset to its initial state.
+        This method is useful in real-time datasets to clear any buffered data
+        and prepare for a new data stream.
+        """
+
+    @final
+    def read_stream(self) -> Generator[T]:
+        """Generate an infinite stream of data by repeatedly
+        calling the `read` method."""
+        while True:
+            yield self.read()
+
+
 if __name__ == "__main__":
     import time
 
@@ -260,13 +283,12 @@ if __name__ == "__main__":
     dataset = TimeReadDataset()
     print("Read:", dataset.read())
 
-    class LengthRWDataset(IterableRWDatasetABC[int]):
+    class LengthRWDataset(RealTimeDatasetABC[int]):
         def __init__(self, config: ...):
-            self._buffer = []
+            self.reset()
 
-        def read_stream(self):
-            while True:
-                return self.read()
+        def reset(self):
+            self._buffer = []
 
         def read(self):
             return len(self._buffer)
@@ -285,3 +307,4 @@ if __name__ == "__main__":
     assert isinstance(dataset, IterableRWDatasetABC)
     assert isinstance(dataset, IterableReadableDatasetABC)
     assert isinstance(dataset, IterableWritableDatasetABC)
+    assert isinstance(dataset, RealTimeDatasetABC)
