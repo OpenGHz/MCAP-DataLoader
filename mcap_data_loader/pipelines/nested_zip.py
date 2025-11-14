@@ -17,7 +17,7 @@ class NestedZip(Pipeline[Tuple[T, ...]]):
         self.config = config
 
     def __iter__(self) -> Generator[Tuple[T, ...]]:
-        yield from self._recursive_iter(self._iterable, self.config.depth)
+        return self._recursive_iter(self._iterable, self.config.depth)
 
     def _recursive_iter(self, iterables, depth) -> Generator[Tuple[T, ...]]:
         if depth > 0:

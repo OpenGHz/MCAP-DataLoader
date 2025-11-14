@@ -2,7 +2,7 @@ from mcap_data_loader.utils.extra_itertools import epairwise
 from pydantic import BaseModel, NonNegativeInt, Field
 from mcap_data_loader.pipelines.basis import Pipeline, T
 from typing import Any, Tuple
-from collections.abc import Generator
+from collections.abc import Iterator
 
 
 class PairWiseConfig(BaseModel):
@@ -20,9 +20,9 @@ class PairWise(Pipeline[T]):
     def __init__(self, config: PairWiseConfig) -> None:
         self.config = config
 
-    def __iter__(self) -> Generator[Tuple[T, T]]:
+    def __iter__(self) -> Iterator[Tuple[T, T]]:
         config = self.config
-        yield from epairwise(
+        return epairwise(
             self._iterable, config.gap, config.fillvalue, config.fill_with_last
         )
 

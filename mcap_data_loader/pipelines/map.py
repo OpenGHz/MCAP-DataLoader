@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Generic
 from mcap_data_loader.pipelines.basis import Pipeline, T
 from collections.abc import Callable
@@ -18,11 +18,11 @@ class Map(Pipeline[T]):
     def __init__(self, config: MapConfig[T]) -> None:
         self.config = config
 
-    def __iter__(self) -> Generator[T]:
+    def __iter__(self) -> Iterator[T]:
         # TODO: should we reset the callable if it has a reset method?
         # if hasattr(self.config.callable, "reset"):
         #     self.config.callable.reset()
-        yield from map(self.config.callable, self._iterable)
+        return map(self.config.callable, self._iterable)
 
 
 if __name__ == "__main__":

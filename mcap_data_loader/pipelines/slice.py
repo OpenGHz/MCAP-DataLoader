@@ -1,0 +1,45 @@
+"""Slices the data from the start index to the end index with a specified step."""
+
+from collections.abc import Iterator
+from typing import Optional
+from more_itertools import islice_extended
+from pydantic import BaseModel, NonNegativeInt, PositiveInt
+from mcap_data_loader.pipelines.basis import Pipeline, T
+
+
+class SliceConfig(BaseModel):
+    """Configuration for the Slice pipeline."""
+
+    start: NonNegativeInt = 0
+    """Starting index (inclusive) for the slice."""
+
+    stop: Optional[NonNegativeInt] = None
+    """Stopping index (exclusive) for the slice. ``None`` means go to the end."""
+
+    step: PositiveInt = 1
+    """Stride of the slice."""
+
+
+class Slice(Pipeline[T]):
+    """Yield items from the iterable according to the configured slice."""
+
+    def __init__(self, config: SliceConfig) -> None:
+        self.config = config
+
+    def __iter__(self) -> Iterator[T]:
+        return islice_extended(
+            self._iterable, self.config.start, self.config.stop, self.config.step
+        )
+
+
+__all__ = ["Slice", "SliceConfig"]
+
+
+if __name__ == "__main__":
+    iterable = range(10)
+
+    config = SliceConfig(start=2, stop=8, step=2)
+    sliced = Slice(config)(iterable)
+
+    assert tuple(sliced) == (2, 4, 6)
+    print("Sliced output:", tuple(sliced))

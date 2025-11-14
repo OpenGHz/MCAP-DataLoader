@@ -2,7 +2,7 @@ from mcap_data_loader.utils.extra_itertools import past_future
 from pydantic import BaseModel, NonNegativeInt
 from mcap_data_loader.pipelines.basis import Pipeline, T
 from typing import Any, Tuple
-from collections.abc import Generator
+from collections.abc import Iterator
 
 
 class HorizonConfig(BaseModel):
@@ -28,8 +28,8 @@ class Horizon(Pipeline[T]):
     def __init__(self, config: HorizonConfig) -> None:
         self.config_dict = config.model_dump()
 
-    def __iter__(self) -> Generator[Tuple[Tuple[T, ...], Tuple[T, ...]]]:
-        yield from past_future(self._iterable, **self.config_dict)
+    def __iter__(self) -> Iterator[Tuple[Tuple[T, ...], Tuple[T, ...]]]:
+        return past_future(self._iterable, **self.config_dict)
 
 
 if __name__ == "__main__":

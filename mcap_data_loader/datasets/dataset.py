@@ -211,4 +211,4 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
 
     @final
     def __iter__(self) -> Iterator[T]:
-        yield from self.read_stream()
+        return self.read_stream()

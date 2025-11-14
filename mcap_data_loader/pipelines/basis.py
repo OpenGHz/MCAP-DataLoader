@@ -2,7 +2,7 @@ from mcap_data_loader.utils.basic import NonIteratorIterable
 from pydantic import validate_call
 from typing import Any, TypeVar, Generic, final
 from typing_extensions import Self
-from collections.abc import Generator
+from collections.abc import Iterator
 from abc import ABC, abstractmethod
 
 
@@ -20,5 +20,5 @@ class Pipeline(ABC, Generic[T]):
         return self
 
     @abstractmethod
-    def __iter__(self) -> Generator[T]:
+    def __iter__(self) -> Iterator[T]:
         """Yield items from the pipeline."""

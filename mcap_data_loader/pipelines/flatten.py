@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from mcap_data_loader.pipelines.basis import Pipeline, T
 from typing import Optional, Tuple, Union
 from more_itertools import collapse
@@ -27,9 +27,9 @@ class Flatten(Pipeline[T]):
         self._depth = config.depth
         self._base_type = config.base_type
 
-    def __iter__(self) -> Generator[T]:
+    def __iter__(self) -> Iterator[T]:
         if self._depth < 0:
-            yield from collapse(self._iterable, base_type=self._base_type)
+            return collapse(self._iterable, base_type=self._base_type)
         else:
             for item in self._iterable:
                 yield from self._flatten(item, 0)
