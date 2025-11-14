@@ -38,10 +38,12 @@ class InitConfigMeta(type):
         method or at the top level class if not provided as an arg. If a subclass 
         truly does not require any configuration, you can pass an arbitrary (not None) 
         instance parameter during instantiation, typically `...`, or you can mark the 
-        type as `NoConfig`."""
+        type as `NoConfig` or `...`."""
         # mainly used by yaml config, e.g. hydra
         if config is None or isinstance(config, type):
             config_type = config or cls.resolve_config_type(cls)
+            if config_type is ...:
+                config_type = NoConfig
             if not (
                 isinstance(config_type, type)
                 and issubclass(config_type, get_args(ConfigType))

@@ -3,7 +3,7 @@ from typing import Any, List, Optional, Generic, TypeVar, Protocol, final
 from typing_extensions import Self, runtime_checkable
 from collections.abc import Iterator, Iterable
 from pydantic import BaseModel, computed_field
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from functools import cached_property, cache
 from logging import getLogger
 from mcap_data_loader.utils.basic import (
@@ -178,25 +178,6 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
         """Returns an **iterator object**, each element is a stream item."""
         raise NotImplementedError
 
-    def read(self) -> T:
-        """Read a single item from the dataset stream.
-        Typically, when a dataset iteration begins, the `read_stream` method is called to return a refreshed iterator. However, the dataset itself cannot record the iterator's state, making the `read` method meaningless. Therefore, this method is not mandatory and is not implemented by default. However, in some cases, the data stream is not refreshed by the `read_stream` method, such as a real-time video stream from an external camera. In this case, `read_stream` can be viewed as a loop of calls to the `read` method, which can then be conveniently used to retrieve the latest frame of data.
-        """
-        raise NotImplementedError("Read method not implemented for this dataset.")
-
-    def write(self, *args, **kwargs) -> Any:
-        """Write anything to the dataset. For example, it can be used to insert,
-        append, and extend data into a data stream, or conversely, delete data,
-        or dynamically adjust the dataset configuration. Furthermore, this method
-        is essential for real-time data streams that require external control updates,
-        such as multimodal sensor data from robotic devices. However, in most cases,
-        the dataset is static and read-only, so this method is not mandatory and is
-        not implemented by default. Depending on the actual needs, this method can
-        accept arbitrary parameters and return any type of values."""
-        raise NotImplementedError(
-            "Write method not implemented for this dataset (read-only)."
-        )
-
     def get_logger(self):
         return getLogger(self.__class__.__name__)
 
@@ -218,3 +199,79 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
     @final
     def __iter__(self) -> Iterator[T]:
         return self.read_stream()
+
+
+class WritableMixin(ABC):
+    @abstractmethod
+    def write(self, *args, **kwargs) -> Any:
+        """Write anything to the dataset. For example, it can be used to insert,
+        append, and extend data into a data stream, or conversely, delete data,
+        or dynamically adjust the dataset configuration. Furthermore, this method
+        is essential for real-time data streams that require external control updates,
+        such as multimodal sensor data from robotic devices. However, in most cases,
+        the dataset is static and read-only. Depending on the actual needs, this method can
+        accept arbitrary parameters and return any type of values."""
+
+
+class ReadableMixin(ABC, Generic[T]):
+    @abstractmethod
+    def read(self) -> T:
+        """Read a single item from the dataset stream.
+        Typically, when a dataset iteration begins, the `read_stream` method is called to return a refreshed iterator. Since the dataset itself cannot record the iterator's state, the `read` method is meaningless. However, in some cases, the data stream is not refreshed by the `read_stream` method, such as a real-time video stream from an external camera. In this case, `read_stream` can be viewed as a loop of calls to the `read` method, which can then be conveniently used to retrieve the latest frame of data.
+        """
+        raise NotImplementedError("Read method not implemented for this dataset.")
+
+
+class IterableWritableDatasetABC(IterableDatasetABC[T], WritableMixin):
+    """Generic iterable writable dataset template.
+    Subclasses need to implement both `read_stream()` and `write()` methods.
+    """
+
+
+class IterableReadableDatasetABC(IterableDatasetABC[T], ReadableMixin[T]):
+    """Generic iterable readable dataset template.
+    Subclasses need to implement both `read_stream()` and `read()` methods.
+    """
+
+
+class IterableRWDatasetABC(IterableDatasetABC[T], WritableMixin, ReadableMixin[T]):
+    """Generic iterable readable and writable dataset template.
+    Subclasses need to implement `read_stream()`, `read()`, and `write()` methods.
+    """
+
+
+if __name__ == "__main__":
+    import time
+
+    class TimeReadDataset(IterableReadableDatasetABC[float]):
+        config: ...
+
+        def read_stream(self):
+            while True:
+                yield self.read()
+
+        def read(self):
+            return time.time()
+
+    dataset = TimeReadDataset()
+    print("Read:", dataset.read())
+
+    class LengthRWDataset(IterableRWDatasetABC[int]):
+        def __init__(self, config: ...):
+            self._buffer = []
+
+        def read_stream(self):
+            while True:
+                return self.read()
+
+        def read(self):
+            return len(self._buffer)
+
+        def write(self, item: int) -> bool:
+            self._buffer.append(item)
+            return True
+
+    dataset = LengthRWDataset()
+    print("Length before write:", dataset.read())
+    dataset.write(42)
+    print("Length after write:", dataset.read())
