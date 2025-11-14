@@ -181,6 +181,9 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
     def get_logger(self):
         return getLogger(self.__class__.__name__)
 
+    def close(self) -> None:
+        """Close the dataset and release any resources if needed."""
+
     def __getitem__(self, index: int) -> T:
         """
         Get a specific sample by index.
@@ -199,6 +202,9 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
     @final
     def __iter__(self) -> Iterator[T]:
         return self.read_stream()
+
+    def __del__(self):
+        self.close()
 
 
 class IterableWritableDatasetABC(IterableDatasetABC[T]):
