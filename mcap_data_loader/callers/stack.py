@@ -60,8 +60,6 @@ class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
         self._keys_to_stack = set()
         self._first_call = True
         self._lock = Lock()
-
-    def on_configure(self):
         keys_info = {}
         for cat_key, list_keys in self._stack.items():
             keys_info[cat_key] = {}
@@ -77,7 +75,6 @@ class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
                     f"Duplicate keys found in stacking config for category '{cat_key}': {cur_keys}"
                 )
         self._keys_info: Dict[str, dict] = keys_info
-        return True
 
     def _reset_buffers(self, batch_size: int):
         batch_stack: Dict[str, Union[list, Array]] = {}
