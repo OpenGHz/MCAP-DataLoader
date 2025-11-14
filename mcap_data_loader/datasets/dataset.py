@@ -178,6 +178,12 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
         """Returns an **iterator object**, each element is a stream item."""
         raise NotImplementedError
 
+    def read(self) -> T:
+        """Read a single item from the dataset stream.
+        Typically, when a dataset iteration begins, the `read_stream` method is called to return a refreshed iterator. However, the dataset itself cannot record the iterator's state, making the `read` method meaningless. Therefore, this method is not mandatory and is not implemented by default. However, in some cases, the data stream is not refreshed by the `read_stream` method, such as a real-time video stream from an external camera. In this case, `read_stream` can be viewed as a loop of calls to the `read` method, which can then be conveniently used to retrieve the latest frame of data.
+        """
+        raise NotImplementedError("Read method not implemented for this dataset.")
+
     def write(self, *args, **kwargs) -> Any:
         """Write anything to the dataset. For example, it can be used to insert,
         append, and extend data into a data stream, or conversely, delete data,
