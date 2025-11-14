@@ -201,7 +201,11 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
         return self.read_stream()
 
 
-class WritableMixin(ABC):
+class IterableWritableDatasetABC(IterableDatasetABC[T]):
+    """Generic iterable writable dataset template.
+    Subclasses need to implement both `read_stream()` and `write()` methods.
+    """
+
     @abstractmethod
     def write(self, *args, **kwargs) -> Any:
         """Write anything to the dataset. For example, it can be used to insert,
@@ -213,7 +217,11 @@ class WritableMixin(ABC):
         accept arbitrary parameters and return any type of values."""
 
 
-class ReadableMixin(ABC, Generic[T]):
+class IterableReadableDatasetABC(IterableDatasetABC[T]):
+    """Generic iterable readable dataset template.
+    Subclasses need to implement both `read_stream()` and `read()` methods.
+    """
+
     @abstractmethod
     def read(self) -> T:
         """Read a single item from the dataset stream.
@@ -222,19 +230,9 @@ class ReadableMixin(ABC, Generic[T]):
         raise NotImplementedError("Read method not implemented for this dataset.")
 
 
-class IterableWritableDatasetABC(IterableDatasetABC[T], WritableMixin):
-    """Generic iterable writable dataset template.
-    Subclasses need to implement both `read_stream()` and `write()` methods.
-    """
-
-
-class IterableReadableDatasetABC(IterableDatasetABC[T], ReadableMixin[T]):
-    """Generic iterable readable dataset template.
-    Subclasses need to implement both `read_stream()` and `read()` methods.
-    """
-
-
-class IterableRWDatasetABC(IterableDatasetABC[T], WritableMixin, ReadableMixin[T]):
+class IterableRWDatasetABC(
+    IterableReadableDatasetABC[T], IterableWritableDatasetABC[T]
+):
     """Generic iterable readable and writable dataset template.
     Subclasses need to implement `read_stream()`, `read()`, and `write()` methods.
     """
@@ -275,3 +273,9 @@ if __name__ == "__main__":
     print("Length before write:", dataset.read())
     dataset.write(42)
     print("Length after write:", dataset.read())
+
+    assert isinstance(dataset, IterableDatasetProtocol)
+    assert isinstance(dataset, IterableDatasetABC)
+    assert isinstance(dataset, IterableRWDatasetABC)
+    assert isinstance(dataset, IterableReadableDatasetABC)
+    assert isinstance(dataset, IterableWritableDatasetABC)
