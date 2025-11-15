@@ -19,6 +19,7 @@ from pathlib import Path
 from functools import cache
 from weakref import WeakSet
 from mcap_data_loader.utils.basic import get_class_type, DataClassProto
+from copy import copy, deepcopy
 import inspect
 import yaml
 import json
@@ -186,10 +187,15 @@ class InitConfigMixinBasis:
     def config_post_init(self) -> None:
         """A hook to be called after the config is set."""
 
-    # @final
-    # def copy(self) -> Self:
-    #     """Create a copy of the current instance with the same config."""
-    #     return self.__class__(self.__dict__["__config"])
+    @final
+    def copy(self, deep: bool = False) -> Self:
+        """Create a copy of the current instance with the same config."""
+        if isinstance(self.config, BaseModel):
+            config = self.config.model_copy(deep=deep)
+        else:
+            method = copy if not deep else deepcopy
+            config = method(self.config)
+        return self.__class__(config)
 
 
 class InitConfigMixin(InitConfigMixinBasis, metaclass=InitConfigMeta):
@@ -316,7 +322,8 @@ if __name__ == "__main__":
     assert comp.configure()
     assert comp.all_configure()
     print(comp.dump())
-
+    comp.copy()
+    comp.copy(True)
     comps_config = MyCompsConfig(comps=[comp])
     print(comps_config)
     print(comps_config.model_dump(mode="json", fallback=lambda x: x.dump()))
