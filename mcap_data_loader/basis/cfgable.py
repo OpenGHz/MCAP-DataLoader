@@ -13,7 +13,7 @@ from typing import (
     get_type_hints,
 )
 from typing_extensions import get_args, Self
-from pydantic import BaseModel, TypeAdapter, ConfigDict
+from pydantic import BaseModel, TypeAdapter
 from pydantic_yaml import to_yaml_file
 from pathlib import Path
 from functools import cache
@@ -26,10 +26,8 @@ import json
 import pickle
 
 
-class NoConfig(BaseModel):
+class NoConfig(BaseModel, frozen=True):
     """A placeholder config class indicating no configuration is needed."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
 
 OtherCfgType = Optional[
@@ -156,7 +154,9 @@ class InitConfigMixinBasis:
         reflect the internal configuration of the instance. Therefore, when a configuration needs to be
         referenced externally, this consistency issue should be considered. However, this should not be
         seen as a drawback of this security mechanism, as it is an issue that must be considered in all
-        circumstances. On the contrary, it forces developers to make more proactive and reasonable designs."""
+        circumstances. On the contrary, it forces developers to make more proactive and reasonable designs.
+        It is undeniable that shallow copy operations incur additional time consumption, but this is usually
+        negligible."""
         self.config = config
 
     @classmethod
@@ -179,23 +179,28 @@ class InitConfigMixinBasis:
         return config
 
     def save_config(
-        self, path: Union[str, Path], mode: Literal["yaml", "json", "pickle"] = "yaml"
+        self,
+        path: Union[str, Path],
+        mode: Optional[Literal["yaml", "json", "pickle"]] = None,
     ) -> None:
         """Save the config to a yaml file.
         Args:
             path: The file path to save the config.
-            mode: The mode to save the config. "yaml" or "json".
+            mode: The mode to save the config. If None, it will be inferred from the file extension.
         """
         with open(path, "w") as f:
-            if mode == "yaml":
+            mode = Path(path).suffix.removeprefix(".") if mode is None else mode
+            if mode in ("yaml", "yml"):
                 if isinstance(self.config, BaseModel):
                     to_yaml_file(f, self.config, add_comments=True)
                 else:  # dataclass
                     yaml.dump(asdict(self.config), f)
             elif mode == "json":
                 json.dump(self.dump(mode="json"), f, indent=4)
-            else:
+            elif mode in ("pickle", "pkl"):
                 pickle.dump(self.config, f)
+            else:
+                raise ValueError(f"Unsupported mode: {mode}")
 
     def config_post_init(self) -> None:
         """A hook to be called after the config is set."""
