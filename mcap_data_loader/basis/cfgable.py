@@ -161,10 +161,12 @@ class InitConfigMixinBasis:
                 pickle.dump(self.config, f)
 
     @classmethod
-    def load_from_config_file(cls, path: Union[str, Path]) -> None:
+    def init_from_config_file(cls, path: Union[str, Path]) -> Self:
         """Load the config from a yaml or json file.
         Args:
             path: The file path to load the config from.
+        Returns:
+            An instance of the class with the loaded config.
         """
         path = Path(path)
         if path.suffix == ".pkl":
