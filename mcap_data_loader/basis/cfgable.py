@@ -141,11 +141,22 @@ class InitConfigABCMeta(InitConfigMeta, ABCMeta):
 
 
 class InitConfigMixinBasis:
+    """A mixin class for initializing with a config."""
+
     def __init__(self, config: ConfigType) -> None:
         """Initialize with a config. It is only used for type hinting in the current class;
         subclasses can override it at will. Note that you should try to avoid directly modifying
         the config variable internally, as this may lead to potential problems, such as inconsistent
-        behavior when the same config variable is used to instantiate the class multiple times."""
+        behavior when the same config variable is used to instantiate the class multiple times. Unless
+        there is a special need, such as a class that might be specifically designed to modify external
+        configurations, it is best to update the copied variables and then reassign them to the instance.
+        Furthermore, for maximum security and faster value retrieval, the configuration class should be
+        set to frozen unless there is a clear need for modification. Conversely, due to this security
+        mechanism, in complex configuration chains, the original external configuration may not accurately
+        reflect the internal configuration of the instance. Therefore, when a configuration needs to be
+        referenced externally, this consistency issue should be considered. However, this should not be
+        seen as a drawback of this security mechanism, as it is an issue that must be considered in all
+        circumstances. On the contrary, it forces developers to make more proactive and reasonable designs."""
         self.config = config
 
     @classmethod
