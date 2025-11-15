@@ -9,19 +9,29 @@ class HorizonConfig(BaseModel, frozen=True):
     """Configuration for the Horizon pipeline."""
 
     past_num: NonNegativeInt = 0
-    """Number of past items to include in each output tuple."""
+    """Number of past items to be included in the first (past) tuple.
+    The length of the past tuple will be `past_num + 1`, as the current item
+    is always the last item."""
     future_num: NonNegativeInt = 0
-    """Number of future items to include in each output tuple."""
+    """Number of future items to be included in the second (future) tuple.
+    The length of the future tuple will be `future_num + 1`."""
     fillvalue: Any = None
     """Value to use for filling in missing items."""
     step: NonNegativeInt = 1
-    """Step size for sliding window."""
+    """Step between items."""
     fill_with_last: bool = False
     """Whether to fill missing items with the last available value."""
     gap: NonNegativeInt = 0
     """Number of items to skip between the last item in the past tuple 
     (i.e. the current item) and the first item in the future. E.g. 0 means
-    the current item is included in the future."""
+    the first item is the current item."""
+
+    @property
+    def future_span(self) -> int:
+        """Calculate the number of times the last item leads the current item.
+        If the current item index is `t`, then `t + future_span` points exactly
+        to the last future item."""
+        return self.gap + self.future_num
 
 
 class Horizon(Pipeline[T]):

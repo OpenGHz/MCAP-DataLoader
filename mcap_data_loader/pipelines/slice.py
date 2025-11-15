@@ -38,8 +38,14 @@ __all__ = ["Slice", "SliceConfig"]
 if __name__ == "__main__":
     iterable = range(10)
 
-    config = SliceConfig(start=2, stop=8, step=2)
-    sliced = Slice(config)(iterable)
-
-    assert tuple(sliced) == (2, 4, 6)
-    print("Sliced output:", tuple(sliced))
+    args = ((0, None, 1), (0, None, 2), (2, 8, 2))
+    expected = [
+        tuple(iterable),
+        tuple(range(0, 10, 2)),
+        (2, 4, 6),
+    ]
+    for arg, exp in zip(args, expected):
+        config = SliceConfig(start=arg[0], stop=arg[1], step=arg[2])
+        sliced = Slice(config)(iterable)
+        assert tuple(sliced) == exp
+        print("Sliced output:", tuple(sliced))
