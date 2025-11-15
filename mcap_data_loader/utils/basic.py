@@ -19,6 +19,7 @@ from collections.abc import Iterable, Iterator, Callable
 from pydantic import PlainValidator, validate_call
 from functools import wraps
 from inspect import isclass
+from logging import getLogger
 import hashlib
 import time
 import sys
@@ -171,7 +172,8 @@ class InputSleeper:
         pass
 
     def sleep(self):
-        input("Press Enter to continue...")
+        getLogger(self.__class__.__name__).info("Press Enter to continue...")
+        return input()
 
 
 def create_sleeper(rate_hz: float) -> Union[Rate, InputSleeper]:
