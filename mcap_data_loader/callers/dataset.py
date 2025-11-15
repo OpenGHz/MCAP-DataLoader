@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Generic
 
 
-class DatasetCallerConfig(BaseModel, Generic[ReturnT]):
+class DatasetCallerConfig(BaseModel, Generic[ReturnT], frozen=True):
     """Configuration for dataset callers."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

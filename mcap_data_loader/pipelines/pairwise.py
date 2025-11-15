@@ -5,7 +5,7 @@ from typing import Any, Tuple
 from collections.abc import Iterator
 
 
-class PairWiseConfig(BaseModel):
+class PairWiseConfig(BaseModel, frozen=True):
     """Configuration for PairWise pipeline."""
 
     gap: NonNegativeInt = 0

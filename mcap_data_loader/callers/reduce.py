@@ -3,7 +3,7 @@ from mcap_data_loader.callers.basis import CallerBasis
 from mcap_data_loader.utils.array_like import Array
 
 
-class FrequencyReductionCallConfig(BaseModel):
+class FrequencyReductionCallConfig(BaseModel, frozen=True):
     # 1 means call at each step
     period: PositiveInt = 1
 

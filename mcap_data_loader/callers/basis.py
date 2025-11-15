@@ -21,12 +21,12 @@ class CallerBasis(ConfigurableBasis, Generic[ReturnT]):
         """Call the caller with the given inputs."""
 
 
-class HorizonConfig(BaseModel):
+class HorizonConfig(BaseModel, frozen=True):
     input: int = 1
     output: int = 1
 
 
-class MockCallerConfig(BaseModel):
+class MockCallerConfig(BaseModel, frozen=True):
     output_type: Literal["ndarray", "Tensor", "list"] = "list"
     horizon: HorizonConfig = HorizonConfig()
 
@@ -57,7 +57,7 @@ class MockCaller(CallerBasis[ReturnT]):
             return self._xp.tensor(lis)
 
 
-class CallerEnsembleConfig(BaseModel, Generic[CallT]):
+class CallerEnsembleConfig(BaseModel, Generic[CallT], frozen=True):
     callables: List[CallT] = Field(min_length=1)
     """Tuple of callers to be called in ensemble."""
 

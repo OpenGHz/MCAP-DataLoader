@@ -10,7 +10,7 @@ from typing import Set
 from collections import defaultdict
 
 
-class DictMapConfig(ArrayTransferConfig):
+class DictMapConfig(ArrayTransferConfig, frozen=True):
     """Configuration for DictMap caller."""
 
     backend_in: AllBackend = "auto"

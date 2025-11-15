@@ -45,6 +45,12 @@ class ArrayInfo(BaseModel, frozen=True):
         """The name of the type of the array-like object."""
         return self.arr_type.__name__
 
+    @computed_field
+    @property
+    def ns(self) -> str:
+        """The namespace name of the array-like object."""
+        return self.arr_type.__module__
+
     @classmethod
     def from_array(cls, array: Array) -> Self:
         """Create an ArrayInfo from an array-like object."""
@@ -141,7 +147,7 @@ InputBackend = Literal["torch", "numpy", "auto"]
 AllBackend = Union[InputBackend, Literal["list"]]
 
 
-class ArrayTransferConfig(BaseModel):
+class ArrayTransferConfig(BaseModel, frozen=True):
     """Common configuration for ArrayTransfer."""
 
     dtype: Union[Literal["same"], str] = "same"

@@ -7,7 +7,7 @@ from pydantic import BaseModel, NonNegativeInt, PositiveInt
 from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
-class SliceConfig(BaseModel):
+class SliceConfig(BaseModel, frozen=True):
     """Configuration for the Slice pipeline."""
 
     start: NonNegativeInt = 0

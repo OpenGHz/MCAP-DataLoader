@@ -4,7 +4,7 @@ from collections.abc import Generator
 from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
-class NestedZipConfig(BaseModel):
+class NestedZipConfig(BaseModel, frozen=True):
     """Configuration for NestedZip pipeline."""
 
     depth: int = 1

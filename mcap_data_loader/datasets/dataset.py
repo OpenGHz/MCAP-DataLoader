@@ -70,7 +70,7 @@ class RearrangeType(StrEnum):
             raise ValueError(f"Unsupported rearrangement strategy: {strategy}")
 
 
-class DataSlicesConfig(BaseModel):
+class DataSlicesConfig(BaseModel, frozen=True):
     """Configuration for slicing data.
     This class defines how to slice samples, episodes, and datasets.
     Args:
@@ -119,7 +119,7 @@ class DataSlicesConfig(BaseModel):
         return self._slices_to_indexes(self.dataset)
 
 
-class DataRearrangeConfig(BaseModel):
+class DataRearrangeConfig(BaseModel, frozen=True):
     """Configuration for rearranging data.
     This class defines how to rearrange samples, episodes, and datasets.
     """
@@ -134,7 +134,7 @@ class DataRearrangeConfig(BaseModel):
     """Random seed for shuffling, if applicable."""
 
 
-class IterableDatasetConfig(BaseModel):
+class IterableDatasetConfig(BaseModel, frozen=True):
     """Iterable Dataset configuration basis."""
 
     data_root: Path

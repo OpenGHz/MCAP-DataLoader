@@ -5,7 +5,7 @@ from mcap_data_loader.pipelines.basis import Pipeline, T
 from collections.abc import Callable
 
 
-class MapConfig(BaseModel, Generic[T]):
+class MapConfig(BaseModel, Generic[T], frozen=True):
     """Configuration for Map pipeline."""
 
     callable: Callable[..., T]

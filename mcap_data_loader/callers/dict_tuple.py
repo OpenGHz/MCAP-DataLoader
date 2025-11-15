@@ -6,7 +6,7 @@ from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 Item = Dict[str, ReturnT]
 
 
-class DictTupleConfig(BaseModel):
+class DictTupleConfig(BaseModel, frozen=True):
     """Configuration for DictTuple caller."""
 
     depth: int = -1

@@ -4,7 +4,7 @@ from collections import ChainMap
 from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
-class MergeConfig(BaseModel):
+class MergeConfig(BaseModel, frozen=True):
     """Configuration for Merge pipeline."""
 
     method: str = "auto"

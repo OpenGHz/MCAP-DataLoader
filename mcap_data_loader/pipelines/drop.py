@@ -7,7 +7,7 @@ from pydantic import BaseModel, NonNegativeInt
 from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
-class DropConfig(BaseModel):
+class DropConfig(BaseModel, frozen=True):
     """Configuration for the Drop pipeline."""
 
     head: NonNegativeInt = 0

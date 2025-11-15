@@ -5,7 +5,7 @@ from mcap_data_loader.callers.basis import (
 )
 
 
-class CallerChainConfig(CallerEnsembleConfig):
+class CallerChainConfig(CallerEnsembleConfig, frozen=True):
     """Configuration for CallerChain caller."""
 
     single_input: bool = False

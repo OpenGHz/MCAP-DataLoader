@@ -5,7 +5,7 @@ from typing import Any, Tuple
 from collections.abc import Iterator
 
 
-class HorizonConfig(BaseModel):
+class HorizonConfig(BaseModel, frozen=True):
     """Configuration for the Horizon pipeline."""
 
     past_num: NonNegativeInt = 0

@@ -3,7 +3,7 @@ from typing import Any
 from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 
 
-class PolicyEvaluationCallerConfig(BaseModel):
+class PolicyEvaluationCallerConfig(BaseModel, frozen=True):
     """Configuration for policy evaluation."""
 
     # max number of evaluation steps per rollout, 0 means no limit

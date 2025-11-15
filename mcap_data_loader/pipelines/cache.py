@@ -5,7 +5,7 @@ from mcap_data_loader.pipelines.basis import Pipeline, T
 from typing import Optional
 
 
-class CacheConfig(BaseModel):
+class CacheConfig(BaseModel, frozen=True):
     """Configuration for Cache pipeline."""
 
     maxlen: Optional[NonNegativeInt] = None

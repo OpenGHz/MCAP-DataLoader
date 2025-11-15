@@ -11,7 +11,7 @@ from mcap_data_loader.utils.array_like import (
     array_namespace,
     get_namespace_by_name,
     get_array_type_by_ns_name,
-    get_tensor_device_auto,
+    get_default_dtype,
 )
 
 
@@ -19,27 +19,15 @@ CallableT = TypeVar("CallableT", bound=Callable)
 T = TypeVar("T")
 
 
-class ScalarsToContainerConfig(BaseModel):
+class ScalarsToContainerConfig(BaseModel, frozen=True):
     """Configuration for converting scalar outputs to a container."""
 
     xp: Literal["list", "numpy", "torch"] = "list"
     """The container type to convert scalars into."""
     dtype: str = ""
     """The data type of the container elements."""
-    device: str = ""
+    device: Optional[str] = None
     """The device of the container."""
-
-    def model_post_init(self, context):
-        if self.xp != "list":
-            if not self.dtype:
-                if self.xp == "numpy":
-                    self.dtype = "float64"
-                elif self.xp == "torch":
-                    self.dtype = "float32"
-            if self.xp == "numpy":
-                self.device = "cpu"
-            elif self.xp == "torch" and not self.device:
-                self.device = get_tensor_device_auto()
 
 
 class MultiCallerConfig(CallerEnsembleConfig):
@@ -103,7 +91,9 @@ class MultiCaller(CallerEnsembleBasis[MutableSequence[T]]):
                 xp = array_namespace(output)
             self._p_outputs = xp.zeros(
                 (num_calls,) + info.shape,
-                dtype=getattr(xp, info.dtype),
+                dtype=getattr(xp, info.dtype)
+                if info.dtype
+                else get_default_dtype(info.ns),
                 device=info.device,
             )
 
@@ -156,13 +146,12 @@ if __name__ == "__main__":
         scalar_container=ScalarsToContainerConfig(xp="torch"),
     )
     multi_caller = MultiCaller(config=config)
-    multi_caller.on_configure()
     result = multi_caller(3)
     print(result)  # Expected output: [4, 6, 9]
     print(ArrayInfo.from_array(result))
     # Test with no parallelism
-    config_no_parallel = MultiCallerConfig(callables=callables, num_workers=1)
-    multi_caller_no_parallel = MultiCaller(config=config_no_parallel)
-    multi_caller_no_parallel.on_configure()
+    multi_caller_no_parallel = MultiCaller(
+        config=MultiCallerConfig(callables=callables, num_workers=1)
+    )
     result_no_parallel = multi_caller_no_parallel(3)
     print(result_no_parallel)  # Expected output: [4, 6, 9]

@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Union
 from more_itertools import collapse
 
 
-class FlattenConfig(BaseModel):
+class FlattenConfig(BaseModel, frozen=True):
     """Configuration for Flatten pipeline."""
 
     depth: int = -1
