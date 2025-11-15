@@ -13,8 +13,8 @@ from typing import (
     get_type_hints,
 )
 from typing_extensions import get_args, Self
-from pydantic import BaseModel
-from pydantic_yaml import parse_yaml_file_as, to_yaml_file
+from pydantic import BaseModel, TypeAdapter, ConfigDict
+from pydantic_yaml import to_yaml_file
 from pathlib import Path
 from functools import cache
 from weakref import WeakSet
@@ -26,60 +26,64 @@ import json
 import pickle
 
 
-class NoConfig:
+class NoConfig(BaseModel):
     """A placeholder config class indicating no configuration is needed."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
-OtherCfgType = Optional[Union[Type[Union[DataClassProto, BaseModel]], Dict[str, Any]]]
-ConfigType = Union[BaseModel, DataClassProto, NoConfig]
+
+OtherCfgType = Optional[
+    Union[Type[Union[DataClassProto, BaseModel]], Dict[str, Any], str, Path]
+]
+ConfigType = Union[BaseModel, DataClassProto]
+AllConfigType = Union[ConfigType, OtherCfgType]
 
 
 class InitConfigMeta(type):
-    def __call__(cls, config: Union[ConfigType, OtherCfgType] = None, **kwargs):
+    def __call__(cls, config: AllConfigType = None, **kwargs):
         error_msg = """
-        `config` must be annotated as a subclass of `ConfigType` in the `__init__`
-        method or at the top level class if not provided as an arg. If a subclass 
-        truly does not require any configuration, you can pass an arbitrary (not None) 
-        instance parameter during instantiation, typically `...`, or you can mark the 
-        type as `NoConfig` or `...`."""
-        # mainly used by yaml config, e.g. hydra
-        if config is None or isinstance(config, type):
-            config_type = config or cls.resolve_config_type(cls)
-            if config_type is ...:
-                config_type = NoConfig
-            if not (
-                isinstance(config_type, type)
-                and issubclass(config_type, get_args(ConfigType))
-            ):
-                cls_path = kwargs.pop("_target_", None)
-                if cls_path is not None:
-                    config_type = get_class_type(cls_path)
-                raise ValueError(error_msg + f" Got type of {config_type}.")
-            # self.get_logger().info(f"{kwargs}")
-            config = config_type(**kwargs)
-            # check pydantic extra kwargs
+        If not provided as an arg, `config` must be annotated as a subclass of `ConfigType` 
+        either in the `__init__` method or at the class scope. If a class truly does not 
+        require any configuration, you can mark the type as `None` at the class scope."""
+        if isinstance(config, (str, Path)):
+            config = cls.config_from_file(config)
+        config_type = (
+            config
+            if isinstance(config, type)
+            else cls.resolve_config_type(cls)
+            if (config is None or isinstance(config, dict))
+            else type(config)
+        )
+        cls_path = kwargs.pop("_target_", None)
+        if config_type is None:
+            # try to get from _target_
+            if cls_path is not None:
+                config_type = get_class_type(cls_path)
+        if not cls._check_config_type(config_type):
+            raise TypeError(error_msg)
+        if not issubclass(config_type, BaseModel):
+            adapter = TypeAdapter(config_type)
+        if isinstance(config, dict):
+            config.update(kwargs)
+            config = config_type(**config)
+        elif config is None or isinstance(config, type):
+            if issubclass(config_type, BaseModel):
+                config = config_type(**kwargs)
+            else:
+                config = adapter.validate_python(kwargs)
+        elif kwargs:  # mainly used by yaml config, e.g. hydra
             if isinstance(config, BaseModel):
-                extra = kwargs.keys() - config.__class__.model_fields.keys()
+                config = config.model_copy(update=kwargs)
+                # re-validate
+                config = config.model_validate(config.model_dump(warnings="none"))
+                extra = kwargs.keys() - config_type.model_fields.keys()
                 if extra:
                     cls.get_logger().warning(
                         f"Extra fields {extra} found in config, which will be ignored."
                     )
-        else:  # mainly used by instancing manually
-            if isinstance(config, dict):
-                config_type = cls.resolve_config_type(cls)
-                if not config_type:
-                    cls_path = config.pop("_target_", None)
-                    if cls_path is not None:
-                        config_type = get_class_type(cls_path)
-                    raise ValueError(error_msg)
-                config = config_type(**config)
-            if kwargs:  # rarely used
-                if isinstance(config, BaseModel):
-                    config = config.model_copy(update=kwargs)
-                    # re-validate
-                    config = config.model_validate(config.model_dump(warnings="none"))
-                else:  # dataclass
-                    config = replace(config, **kwargs)
+            else:  # dataclass
+                config = replace(config, **kwargs)
+                config = adapter.validate_python(asdict(config))
         # NOTE: since there may be arbitrary instances in the config,
         # we should not deep copy the config here to avoid potential issues.
         # if isinstance(config, BaseModel):
@@ -93,6 +97,12 @@ class InitConfigMeta(type):
         instance.config_post_init()
         return instance
 
+    @staticmethod
+    def _check_config_type(config_type: Type) -> bool:
+        return isinstance(config_type, type) and issubclass(
+            config_type, get_args(ConfigType)
+        )
+
     @classmethod
     def get_logger(cls):
         return getLogger(cls.__name__)
@@ -100,14 +110,30 @@ class InitConfigMeta(type):
     @staticmethod
     @cache
     def resolve_config_type(cls) -> Optional[Type]:
-        return InitConfigMeta.get_annotation(cls, "config") or get_type_hints(
-            cls.__init__
-        ).get("config", None)
+        cfg_type = InitConfigMeta.get_annotation(cls, "config")
+        if cfg_type in (None, ...) or (getattr(cls, "config", object) in (None, ...)):
+            cfg_type = NoConfig
+        elif cfg_type is object:
+            cfg_type = get_type_hints(cls.__init__).get("config", None)
+        return cfg_type
 
     @staticmethod
     @cache
-    def get_annotation(cls, name: str) -> Optional[Type]:
-        return getattr(cls, "__annotations__", {}).get(name, None)
+    def get_annotation(cls, name: str) -> Optional[Any]:
+        return getattr(cls, "__annotations__", {}).get(name, object)
+
+    @staticmethod
+    def config_from_file(path: Union[str, Path]) -> AllConfigType:
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Config file {path} not found.")
+        if path.suffix == ".pkl":
+            with open(path, "rb") as f:
+                config = pickle.load(f)
+        else:  # yaml or json
+            with open(path, "r") as f:
+                config = yaml.safe_load(f)
+        return config
 
 
 class InitConfigABCMeta(InitConfigMeta, ABCMeta):
@@ -159,32 +185,6 @@ class InitConfigMixinBasis:
                 json.dump(self.dump(mode="json"), f, indent=4)
             else:
                 pickle.dump(self.config, f)
-
-    @classmethod
-    def init_from_config_file(cls, path: Union[str, Path]) -> Self:
-        """Load the config from a yaml or json file.
-        Args:
-            path: The file path to load the config from.
-        Returns:
-            An instance of the class with the loaded config.
-        """
-        path = Path(path)
-        if path.suffix == ".pkl":
-            with open(path, "rb") as f:
-                config = pickle.load(f)
-                return cls(config)
-        else:  # yaml or json
-            config_type = InitConfigMeta.resolve_config_type()
-            if not config_type or is_dataclass(config_type):
-                with open(path, "r") as f:
-                    config_dict = yaml.safe_load(f)
-                    return cls(**config_dict)
-            elif issubclass(config_type, BaseModel):
-                config = parse_yaml_file_as(config_type, path)
-                return cls(config)
-            raise ValueError(
-                "`config` must be annotated as a pydantic BaseModel or a dataclass."
-            )
 
     def config_post_init(self) -> None:
         """A hook to be called after the config is set."""
@@ -293,39 +293,3 @@ def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], st
         elif isinstance(config, dict):
             return config
     return repr(obj)
-
-
-if __name__ == "__main__":
-    import logging
-    from pydantic import ConfigDict
-
-    logging.basicConfig(level=logging.INFO)
-
-    class MyConfig(BaseModel):
-        """Example configuration model."""
-
-        param1: int = 10
-        param2: str = "default"
-
-    class MyComponent(ConfigurableBasis):
-        def __init__(self, config: MyConfig):
-            self.config = config
-
-        def on_configure(self) -> bool:
-            self.get_logger().info(f"Configuring with {self.config}")
-            return True
-
-    class MyCompsConfig(BaseModel):
-        model_config = ConfigDict(arbitrary_types_allowed=True)
-
-        comps: list[MyComponent]
-
-    comp = MyComponent(param1=20)
-    assert comp.configure()
-    assert comp.all_configure()
-    print(comp.dump())
-    comp.copy()
-    comp.copy(True)
-    comps_config = MyCompsConfig(comps=[comp])
-    print(comps_config)
-    print(comps_config.model_dump(mode="json", fallback=lambda x: x.dump()))
