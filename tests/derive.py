@@ -44,9 +44,9 @@ for episode in dataset:
     print(f"Deriving data to {derived_file_path}...")
     flb_writer.create_writer(derived_file_path, overwrite=True)
     mcap_tool = McapTool(writer=flb_writer.get_writer())
-    mcap_tool.add_derive_metadata()
+    # mcap_tool.add_derive_metadata()
     flb_writer.register_channel("/image/features", FlatBuffersSchemas.FLOAT_ARRAY)
-    flb_writer.add_array(
+    flb_writer.add_float_array(
         "/image/features", [1.0, 2.0, 3.0], time.time_ns(), time.time_ns()
     )
     # file_hashes[episode_file_path]

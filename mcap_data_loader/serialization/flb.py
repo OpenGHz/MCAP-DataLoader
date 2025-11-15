@@ -248,6 +248,7 @@ class McapFlatBuffersWriter:
         self, topic: str, data: Iterable[float], publish_time: int, log_time: int
     ):
         FloatArray.StartValuesVector(self.builder, len(data))
+        # TODO: optimize performance
         for d in reversed(data):
             self.builder.PrependFloat32(d)
         vec_data = self.builder.EndVector()

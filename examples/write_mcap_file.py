@@ -11,7 +11,7 @@ file_path = "data/written/0.mcap"
 writer = McapFlatBuffersWriter()
 writer.create_writer(file_path, overwrite=True)
 writer.register_channel("/image/features", FlatBuffersSchemas.FLOAT_ARRAY)
-writer.add_array("/image/features", [1.0, 2.0, 3.0], time_ns(), time_ns())
+writer.add_float_array("/image/features", [1.0, 2.0, 3.0], time_ns(), time_ns())
 writer.unset_writer(finish=True)
 
 # Verify the written file
