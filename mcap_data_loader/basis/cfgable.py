@@ -79,8 +79,16 @@ class InitConfigMeta(type):
                     config = config.model_validate(config.model_dump(warnings="none"))
                 else:  # dataclass
                     config = replace(config, **kwargs)
+        # NOTE: since there may be arbitrary instances in the config,
+        # we should not deep copy the config here to avoid potential issues.
+        # if isinstance(config, BaseModel):
+        #     cfg_copy = config.model_copy(deep=True)
+        # else:
+        #     cfg_copy = deepcopy(config)
         instance: "InitConfigMixinBasis" = super().__call__(config)
-        instance.config = config
+        # instance.__config = cfg_copy
+        if not hasattr(instance, "config"):
+            instance.config = config
         instance.config_post_init()
         return instance
 
@@ -108,7 +116,9 @@ class InitConfigABCMeta(InitConfigMeta, ABCMeta):
 class InitConfigMixinBasis:
     def __init__(self, config: ConfigType) -> None:
         """Initialize with a config. It is only used for type hinting in the current class;
-        subclasses can override it at will."""
+        subclasses can override it at will. Note that you should try to avoid directly modifying
+        the config variable internally, as this may lead to potential problems, such as inconsistent
+        behavior when the same config variable is used to instantiate the class multiple times."""
         self.config = config
 
     @classmethod
@@ -173,8 +183,13 @@ class InitConfigMixinBasis:
                 "`config` must be annotated as a pydantic BaseModel or a dataclass."
             )
 
-    def config_post_init(self):
+    def config_post_init(self) -> None:
         """A hook to be called after the config is set."""
+
+    # @final
+    # def copy(self) -> Self:
+    #     """Create a copy of the current instance with the same config."""
+    #     return self.__class__(self.__dict__["__config"])
 
 
 class InitConfigMixin(InitConfigMixinBasis, metaclass=InitConfigMeta):
