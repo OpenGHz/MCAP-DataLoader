@@ -16,7 +16,7 @@ from typing_extensions import Annotated, TypedDict, runtime_checkable
 from enum import Enum
 from pathlib import Path
 from collections.abc import Iterable, Iterator, Callable
-from pydantic import PlainValidator, validate_call
+from pydantic import BaseModel, PlainValidator, validate_call
 from functools import wraps
 from inspect import isclass
 from logging import getLogger
@@ -407,6 +407,45 @@ def resolve_generic_type(cls: Type, target_origin: Type) -> Optional[Type]:
             elif inner_type is not None:
                 return inner_type
     return None
+
+
+class ForceSetAttr:
+    """Context manager to temporarily allow setting attributes on frozen Pydantic models."""
+
+    def __init__(self, obj: BaseModel):
+        if not isinstance(obj, BaseModel):
+            raise TypeError("Only Pydantic BaseModel instances are supported.")
+        self._obj = obj
+
+    def __enter__(self):
+        self._original_setattr = self._obj.__class__.__setattr__
+        self._obj.__class__.__setattr__ = self._setattr
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._obj.__class__.__setattr__ = self._original_setattr
+
+    def _setattr(self, name, value):
+        obj = self._obj
+        config = obj.model_config
+        if config["frozen"]:
+            if config["validate_assignment"]:
+                obj.__pydantic_validator__.validate_assignment(obj, name, value)
+            else:
+                object.__setattr__(obj, name, value)
+        else:
+            setattr(obj, name, value)
+
+
+def force_set_attr(method):
+    """Decorator to force attribute setting on frozen Pydantic models."""
+
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with ForceSetAttr(self):
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 if __name__ == "__main__":
