@@ -26,6 +26,7 @@ dependencies = [
     "natsort",
     "array-api-compat",
     "types-array-api",
+    "termcolor",
 ]
 
 [tool.setuptools.packages.find]
