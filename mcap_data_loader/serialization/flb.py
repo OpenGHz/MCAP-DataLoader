@@ -301,7 +301,7 @@ class McapFlatBuffersReader:
         height = raw_img.Height()
         step = raw_img.Step()
         encoding = raw_img.Encoding().decode("utf-8")
-        data: np.ndarray = raw_img.DataAsNumpy()
+        np_data = raw_img.DataAsNumpy()
 
         if encoding in ("rgb8", "bgr8", "8UC3"):
             channels = 3
@@ -321,7 +321,7 @@ class McapFlatBuffersReader:
         else:
             raise NotImplementedError(f"Unsupported encoding: {encoding}")
 
-        arr = data.view(dtype)
+        arr = np_data.view(dtype)
         cal_width = step // (channels * arr.itemsize)
         # TODO: should be warning?
         assert cal_width == width, (

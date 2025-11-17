@@ -74,12 +74,16 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
 
     def __init__(self, config: McapFlatBuffersSampleDatasetConfig):
         self.config = config
-        self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
+        # delay the reader initialization until read_stream is called
+        # to support multiprocessing data reading
+        self.reader = None
 
     def read_stream(self):
         """
         Read MCAP file and return message stream.
         """
+        if self.reader is None:
+            self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
         samples_iter = self.reader.iter_samples(
             self.config.keys,
             self.config.topics,
@@ -95,7 +99,8 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
                 yield {key: value["data"] for key, value in sample.items()}
 
     def close(self):
-        return self.reader.close()
+        if self.reader is not None:
+            return self.reader.close()
 
     def __len__(self) -> int:
         """Get the total number of messages in the MCAP file."""
