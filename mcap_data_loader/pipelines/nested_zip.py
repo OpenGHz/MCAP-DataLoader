@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Tuple, Union
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 from mcap_data_loader.pipelines.basis import Pipeline, T
 
 
@@ -12,7 +12,7 @@ class NestedZipConfig(BaseModel, frozen=True):
     1 means a single level of zipping, and so on. If depth < 0, zipping continues
     until the base_type or non-iterable is encountered. If fixed is True, the depth will be calculated
     based on the base_type on the first iteration."""
-    base_type: Union[type, Tuple[type]] = (dict, str, bytes)
+    base_type: Union[type, Tuple[type]] = (Mapping, str, bytes)
     """Base type(s) to stop zipping when depth is negative."""
     fixed: bool = True
     """Whether the depth is fixed or determined dynamically based on the base_type.
