@@ -24,6 +24,7 @@ import hashlib
 import time
 import sys
 import importlib
+import inspect
 
 
 class ForceSetAttr:
@@ -448,6 +449,17 @@ def resolve_generic_type(cls: Type, target_origin: Type) -> Optional[Type]:
     return None
 
 
+def has_nested_class_strict(cls: Type) -> bool:
+    for name, obj in cls.__dict__.items():
+        if (
+            inspect.isclass(obj)
+            and obj.__module__ == cls.__module__  # 同一模块
+            and obj.__qualname__.startswith(cls.__qualname__ + ".")
+        ):
+            return True
+    return False
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
@@ -480,16 +492,27 @@ if __name__ == "__main__":
     # assert result == "ab34", result
     # assert remove_util("12ab34", "567") == "12ab34"
 
-    import numpy as np
-    import time
+    # import numpy as np
+    # import time
 
-    data = {
-        "a": {"t": 1, "data": [1, 2]},
-        "b": {"t": 2, "data": [3, 4]},
-    }
-    start = time.perf_counter()
-    result = DataStamped.map_dict(data, np.array)
-    print("Time taken:", time.perf_counter() - start)
-    for value in result.values():
-        print(value["t"])
-        print(value["data"].shape)
+    # data = {
+    #     "a": {"t": 1, "data": [1, 2]},
+    #     "b": {"t": 2, "data": [3, 4]},
+    # }
+    # start = time.perf_counter()
+    # result = DataStamped.map_dict(data, np.array)
+    # print("Time taken:", time.perf_counter() - start)
+    # for value in result.values():
+    #     print(value["t"])
+    #     print(value["data"].shape)
+
+    class A(Generic[T]):
+        class B(Generic[T]):
+            pass
+
+    class C:
+        pass
+
+    assert has_nested_class_strict(A)
+    assert not has_nested_class_strict(C)
+    print("All tests passed.")
