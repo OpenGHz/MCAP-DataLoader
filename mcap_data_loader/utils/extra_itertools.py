@@ -162,6 +162,8 @@ def past_future(
 
 
 class Reusablizer(Generic[T]):
+    """A wrapper to make generator functions reusable as iterables."""
+
     # since the func return type is usually unknown when
     # passed to __init__, we don't annotate the return with T
     def __init__(self, func: Callable[..., Iterable]):
@@ -177,23 +179,36 @@ class Reusablizer(Generic[T]):
 
 
 def take_skip(
-    lst: Iterable[T], N: int, M: int, sort: bool = False
+    lst: Iterable[T], N: int, M: int, in_order: bool = False
 ) -> Tuple[List[T], List[T]]:
     """Take N elements, skip M elements, repeat until the list is exhausted.
-    Return two lists: taken elements and skipped elements.
-    If sort is True, sort the two lists before returning.
+    Args:
+        lst: The input iterable.
+        N: Number of elements to take.
+        M: Number of elements to skip.
+        in_order: Whether to take and skip elements in order or round-robin.
+            If in_order is True, the elements are taken and skipped in the original order (slower).
+            If in_order is False, the elements are taken and skipped in a round-robin fashion.
+    Returns:
+        Two lists: taken elements and skipped elements.
     """
     if N <= 0 or M < 0:
         raise ValueError("N must be positive and M must be non-negative.")
     taken = []
     skipped = []
-    for i in range(N):
-        taken.extend(lst[i :: N + M])
-    for j in range(M):
-        skipped.extend(lst[N + j :: N + M])
-    if sort:
-        taken.sort()
-        skipped.sort()
+    if in_order:
+        index = 0
+        length = len(lst)
+        while index < length:
+            taken.extend(lst[index : index + N])
+            index += N
+            skipped.extend(lst[index : index + M])
+            index += M
+    else:
+        for i in range(N):
+            taken.extend(lst[i :: N + M])
+        for j in range(M):
+            skipped.extend(lst[N + j :: N + M])
     return taken, skipped
 
 
@@ -218,16 +233,16 @@ def first_recursive_true(iterable: Iterable, pred: Callable[[Any], bool]) -> Any
 
 
 if __name__ == "__main__":
-    import time
-    import timeit
+    # import time
+    # import timeit
 
-    iterable = range(5)
-    assert first(iterable) == 0
-    assert first([], default=42) == 42
-    try:
-        first([])
-    except ValueError as e:
-        print(f"Caught expected exception: {e}")
+    # iterable = range(5)
+    # assert first(iterable) == 0
+    # assert first([], default=42) == 42
+    # try:
+    #     first([])
+    # except ValueError as e:
+    #     print(f"Caught expected exception: {e}")
 
     # assert consume_and_return(iter(iterable), 3) == 2
     # assert consume_and_return(iter(iterable)) == 4
@@ -280,8 +295,17 @@ if __name__ == "__main__":
     # for a, b in epairwise(iterable, 2, None):
     #     print(f"{a=}, {b=}")
 
-    # lis = range(17)
-    # print(take_skip(lis, 2, 3, True))  # Example usage
+    for in_order in [True, False]:
+        print(f"in_order={in_order}")
+        taken, skipped = take_skip(range(10), 3, 2, in_order=in_order)
+        print("Taken:", taken)
+        print("Skipped:", skipped)
+        if in_order:
+            assert taken == [0, 1, 2, 5, 6, 7]
+            assert skipped == [3, 4, 8, 9]
+        else:
+            assert taken == [0, 5, 1, 6, 2, 7]
+            assert skipped == [3, 8, 4, 9]
 
     # nested = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
     # print(
