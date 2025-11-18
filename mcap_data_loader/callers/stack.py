@@ -19,7 +19,7 @@ StackTypeRaw = Dict[
 ]
 
 
-def _normalize_stack_config(stack: StackTypeRaw) -> Dict[str, NormStackValue]:
+def normalize_stack_config(stack: StackTypeRaw) -> Dict[str, NormStackValue]:
     def process_value(config):
         if isinstance(config, tuple):
             keys, prefixes = config
@@ -38,7 +38,7 @@ def _normalize_stack_config(stack: StackTypeRaw) -> Dict[str, NormStackValue]:
     return {k: process_value(v) for k, v in stack.items()}
 
 
-StackType = Annotated[StackTypeRaw, AfterValidator(_normalize_stack_config)]
+StackType = Annotated[StackTypeRaw, AfterValidator(normalize_stack_config)]
 
 
 class BatchStackerConfig(ArrayTransferConfig):
