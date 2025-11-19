@@ -1,36 +1,35 @@
-from pydantic import BaseModel
-from collections.abc import Iterator
-from typing import Generic
+from pydantic import BaseModel, Field
+from collections.abc import Iterator, Callable
+from typing import Generic, Union
 from mcap_data_loader.pipelines.basis import Pipeline, T
-from collections.abc import Callable
+from mcap_data_loader.utils.extra_itertools import recursive_map
 
 
 class MapConfig(BaseModel, Generic[T], frozen=True):
     """Configuration for Map pipeline."""
 
     callable: Callable[..., T]
-    """Callable to apply to each item in the iterable."""
+    """Callable to apply to each item at the specified depth."""
+
+    depth: Union[int, None] = Field(default=0, ge=-1)
+    """
+    Depth level to apply the callable."""
 
 
 class Map(Pipeline[T]):
-    """Map pipeline that applies a callable to each item in the iterable."""
+    """Map pipeline that applies a callable to items at a given depth in nested iterables."""
 
     def __init__(self, config: MapConfig[T]) -> None:
         self.config = config
 
     def __iter__(self) -> Iterator[T]:
-        # TODO: should we reset the callable if it has a reset method?
-        # if hasattr(self.config.callable, "reset"):
-        #     self.config.callable.reset()
-        return map(self.config.callable, self._iterable)
+        return recursive_map(self.config.callable, self._iterable, self.config.depth)
 
 
 if __name__ == "__main__":
+    mapper = Map(MapConfig(callable=lambda x: x * 2, depth=1))
 
-    def square(x) -> int:
-        return x * 2
-
-    numbers = [1, 2, 3, 4, 5]
-    map_iterable = Map(MapConfig(callable=square))(numbers)
-
-    print(tuple(map_iterable))  # Output: (2, 4, 6, 8, 10)
+    nested_iterable = [[1, 2], [3, 4], [5, 6]]
+    mapper(nested_iterable)
+    for item in mapper:
+        print(list(item))

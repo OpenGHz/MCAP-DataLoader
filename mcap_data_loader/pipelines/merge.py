@@ -61,8 +61,6 @@ class Merge(Pipeline[T]):
                     f"All items in the first iterable must be of type {self._item_type}, "
                     f"but got {[type(item) for item in first]}."
                 )
-            # if issubclass(item_type, Mapping):
-            #     self._method = "ChainMap"
             if issubclass(self._item_type, (list, tuple)):
                 self._method = "+"
             elif issubclass(self._item_type, (set, Mapping)):

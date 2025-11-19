@@ -9,7 +9,7 @@ class CallerChainConfig(CallerEnsembleConfig, frozen=True):
     """Configuration for CallerChain caller."""
 
     single_input: bool = False
-    """Whether the input to the chain is a single value or are args & kwargs."""
+    """Whether the input to the chain is a single value (slightly faster) or are args & kwargs."""
 
 
 class CallerChain(CallerEnsembleBasis[ReturnT]):
