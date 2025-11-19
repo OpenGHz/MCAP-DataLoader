@@ -21,6 +21,8 @@ class DictTupleConfig(BaseModel, frozen=True):
     """Separator used when concatenating prefixes."""
     separate_key: bool = True
     """Whether to separate the prefix and the dict key with a separator."""
+    zero_prefix: bool = False
+    """Whether to add a prefix for the zeroth level. If False, `0` prefix will not be added."""
 
 
 class DictTuple(CallerBasis[Item]):
@@ -32,37 +34,57 @@ class DictTuple(CallerBasis[Item]):
             if config.depth < 0
             else self._process_depth
             if config.depth > 0
-            else lambda tp, prefix, depth: tp
+            else lambda tp, prefix, depth, rm_zero: tp
         )
         self._sep = config.separator
         self._last_sep = config.separator if config.separate_key else ""
         self._depth = config.depth
+        self._rm_zero = not config.zero_prefix
 
     def __call__(self, data: Tuple[Item]):
         self._tuple_dict: Item = {}
-        self._func(data, "", self._depth)
+        self._func(data, "", self._depth, self._rm_zero)
         return self._tuple_dict
 
-    def _process_auto(self, tp: Tuple[Item], prefix: str, depth: int = 0):
+    def _process_auto(
+        self, tp: Tuple[Item], prefix: str, depth: int = 0, rm_zero: bool = False
+    ):
         for i, value in enumerate(tp):
             if isinstance(value, tuple):
-                self._process_auto(value, f"{prefix}{i}/")
+                cur_prefix = "" if (rm_zero and i == 0) else f"{prefix}{i}{self._sep}"
+                self._process_auto(value, cur_prefix, 0, True if i == 0 else False)
             else:
                 for k, v in value.items():
-                    self._tuple_dict[f"{prefix}{i}/{k}"] = v
+                    cur_prefix = (
+                        k if (rm_zero and i == 0) else f"{prefix}{i}{self._last_sep}{k}"
+                    )
+                    self._tuple_dict[cur_prefix] = v
 
-    def _process_depth(self, tp: Union[Tuple[Item], Item], prefix: str, depth: int):
+    def _process_depth(
+        self,
+        tp: Union[Tuple[Item], Item],
+        prefix: str,
+        depth: int,
+        rm_zero: bool = False,
+    ):
         if depth > 1:
             for i, value in enumerate(tp):
-                self._process_depth(value, f"{prefix}{i}{self._sep}", depth - 1)
+                cur_prefix = "" if (rm_zero and i == 0) else f"{prefix}{i}{self._sep}"
+                self._process_depth(
+                    value, cur_prefix, depth - 1, True if i == 0 else False
+                )
         else:
             for i, value in enumerate(tp):
                 for k, v in value.items():
-                    self._tuple_dict[f"{prefix}{i}{self._last_sep}{k}"] = v
+                    cur_prefix = (
+                        k if (rm_zero and i == 0) else f"{prefix}{i}{self._last_sep}{k}"
+                    )
+                    self._tuple_dict[cur_prefix] = v
 
 
 if __name__ == "__main__":
     import time
+    import timeit
 
     print("---- Auto depth ----")
 
