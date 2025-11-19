@@ -2,7 +2,7 @@ from itertools import chain, islice, tee
 from more_itertools import take
 from collections import deque
 from collections.abc import Iterator, Generator, Callable
-from typing import Any, Iterable, Optional, TypeVar, Generic, Tuple, List
+from typing import Any, Iterable, Optional, TypeVar, Generic, Tuple, List, Union
 
 
 T = TypeVar("T")
@@ -232,6 +232,47 @@ def first_recursive_true(iterable: Iterable, pred: Callable[[Any], bool]) -> Any
     return current
 
 
+def is_iterable_but_not_base(obj: Any, base_type: Union[tuple, type]) -> bool:
+    """Judge whether an object is iterable but not of base types (like str, bytes)."""
+    if isinstance(obj, base_type):
+        return False
+    return isinstance(obj, Iterable)
+
+
+def recursive_map(
+    func: Callable[..., Any],
+    iterable: Iterable,
+    depth: int = 0,
+    base_type: Union[tuple, type] = (str, bytes),
+) -> Generator:
+    """
+    Lazily applies a function recursively to elements in a nested iterable structure,
+    up to a specified depth. This will not flatten the structure; it preserves the original nesting.
+
+    Args:
+        func: The function to apply.
+        iterable: The input iterable (e.g., list, tuple, generator).
+        depth:
+            - < 0: Apply `func` at all levels (unlimited recursion until leaf nodes).
+            - 0: Apply `func` only to top-level items (default behavior).
+            - 1: Apply `func` to second-level items (i.e., children of top-level items).
+            - n: Apply `func` at the (n+1)-th nesting level.
+        base_type: A tuple of types that should be treated as atomic (non-iterable),
+                   even if they technically are iterable (e.g., str, bytes).
+    Yields:
+        Transformed items according to the specified depth, preserving structure lazily.
+    """
+    if depth == 0:
+        yield from map(func, iterable)
+    else:
+        for item in iterable:
+            if depth > 0 or is_iterable_but_not_base(item, base_type):
+                next_depth = depth - 1
+                yield recursive_map(func, item, next_depth, base_type)
+            else:
+                yield item
+
+
 if __name__ == "__main__":
     # import time
     # import timeit
@@ -295,17 +336,17 @@ if __name__ == "__main__":
     # for a, b in epairwise(iterable, 2, None):
     #     print(f"{a=}, {b=}")
 
-    for in_order in [True, False]:
-        print(f"in_order={in_order}")
-        taken, skipped = take_skip(range(10), 3, 2, in_order=in_order)
-        print("Taken:", taken)
-        print("Skipped:", skipped)
-        if in_order:
-            assert taken == [0, 1, 2, 5, 6, 7]
-            assert skipped == [3, 4, 8, 9]
-        else:
-            assert taken == [0, 5, 1, 6, 2, 7]
-            assert skipped == [3, 8, 4, 9]
+    # for in_order in [True, False]:
+    #     print(f"in_order={in_order}")
+    #     taken, skipped = take_skip(range(10), 3, 2, in_order=in_order)
+    #     print("Taken:", taken)
+    #     print("Skipped:", skipped)
+    #     if in_order:
+    #         assert taken == [0, 1, 2, 5, 6, 7]
+    #         assert skipped == [3, 4, 8, 9]
+    #     else:
+    #         assert taken == [0, 5, 1, 6, 2, 7]
+    #         assert skipped == [3, 8, 4, 9]
 
     # nested = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
     # print(
@@ -315,3 +356,15 @@ if __name__ == "__main__":
     # print(first_recursive(nested, depth=2))  # Output: [1, 2]
     # print(first_recursive(nested, depth=-1))  # Output: 1
     # print(first_recursive_true(nested, lambda x: isinstance(x, int)))  # Output: 1
+
+    def double(x) -> int:
+        return x * 2
+
+    nested_numbers = [[1, 2], [3, 4, 5], [6]]
+
+    for depth in [-1, 0, 1]:
+        print(f"Depth: {depth}")
+        result = recursive_map(double, nested_numbers, depth=depth)
+        for item in result:
+            print(list(item))
+        print("===" * 10)
