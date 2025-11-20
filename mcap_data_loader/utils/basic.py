@@ -20,7 +20,9 @@ from pydantic import BaseModel, PlainValidator, validate_call
 from functools import wraps
 from inspect import isclass
 from logging import getLogger
+from contextlib import suppress
 import hashlib
+import operator
 import time
 import sys
 import importlib
@@ -477,6 +479,25 @@ def is_not_implemented(func) -> bool:
     return getattr(func, "__isnotimplemented__", False)
 
 
+def try_to_get_attr(obj: Any, attrs: List[str], default: Any = object) -> Any:
+    """Try to get nested attributes from an object.
+    Args:
+        obj (Any): The object to get attributes from.
+        attrs (List[str]): The list of attribute names to get.
+        default (Any, optional): The default value to return if any attribute is not found. Defaults to None.
+    Returns:
+        Any: The value of the nested attribute or the default value.
+    Raises:
+        AttributeError: if none of the attributes are found and default is not provided.
+    """
+    for attr in attrs:
+        with suppress(AttributeError):
+            return operator.attrgetter(attr)(obj)
+    if default is not object:
+        return default
+    raise AttributeError(f"None of the attributes {attrs} found in {obj}.")
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
@@ -534,18 +555,26 @@ if __name__ == "__main__":
     # assert not has_nested_class_strict(C)
     # print("All tests passed.")
 
-    def sample_not_implemented():
-        @not_implemented
-        def func():
-            pass
+    # def sample_not_implemented():
+    #     @not_implemented
+    #     def func():
+    #         pass
 
-        try:
-            func()
-        except NotImplementedError:
-            print("NotImplementedError raised as expected.")
-        else:
-            print("Error: NotImplementedError was not raised.")
+    #     try:
+    #         func()
+    #     except NotImplementedError:
+    #         print("NotImplementedError raised as expected.")
+    #     else:
+    #         print("Error: NotImplementedError was not raised.")
 
-        assert is_not_implemented(func)
+    #     assert is_not_implemented(func)
 
-    sample_not_implemented()
+    # sample_not_implemented()
+
+    class a:
+        class b:
+            class c:
+                pass
+
+    assert get_full_class_name(a.b.c) == "__main__.a.b.c"
+    assert try_to_get_attr(a, ["b.d", "b.c"]) is a.b.c
