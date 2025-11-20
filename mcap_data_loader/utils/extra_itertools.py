@@ -3,6 +3,7 @@ from more_itertools import take
 from collections import deque
 from collections.abc import Iterator, Generator, Callable
 from typing import Any, Iterable, Optional, TypeVar, Generic, Tuple, List, Union
+from copy import copy
 
 
 T = TypeVar("T")
@@ -166,16 +167,16 @@ class Reusablizer(Generic[T]):
 
     # since the func return type is usually unknown when
     # passed to __init__, we don't annotate the return with T
-    def __init__(self, func: Callable[..., Iterable]):
-        self.gen_func = func
+    def __init__(self, func: Callable[..., Iterable[T]]):
+        self._gen_func = func
 
     def __call__(self, *args, **kwds) -> "Reusablizer[T]":
-        self.args = args
-        self.kwargs = kwds
-        return self
+        self._args = args
+        self._kwargs = kwds
+        return copy(self)
 
     def __iter__(self) -> Iterator[T]:
-        return self.gen_func(*self.args, **self.kwargs)
+        return self._gen_func(*self._args, **self._kwargs)
 
 
 def take_skip(
@@ -321,12 +322,18 @@ if __name__ == "__main__":
     #     print(f"step: {cnt}/{max_steps}")
     #     start = time.perf_counter()
 
-    # from itertools import pairwise
+    from itertools import pairwise
 
-    # iterable = (f"{i}" for i in range(10))
-    # it_reusable = Reusablizer[str](pairwise)(iterable)
-    # for item in it_reusable:
-    #     print(item)
+    iterable = range(4)
+    pairwise_reusable = Reusablizer[int](pairwise)
+    itrable = pairwise_reusable(iterable)
+    assert not isinstance(itrable, Iterator)
+    lis = list(itrable)
+    assert lis == [(0, 1), (1, 2), (2, 3)]
+    assert list(itrable) == lis  # reusable test
+    new_iterable = pairwise_reusable(range(2))
+    assert list(new_iterable) == [(0, 1)]
+    assert list(itrable) == lis  # reusable test
 
     # iterable = range(10)
     # for a, b in epairwise(iterable, 2, fill_with_last=True):
@@ -357,14 +364,14 @@ if __name__ == "__main__":
     # print(first_recursive(nested, depth=-1))  # Output: 1
     # print(first_recursive_true(nested, lambda x: isinstance(x, int)))  # Output: 1
 
-    def double(x) -> int:
-        return x * 2
+    # def double(x) -> int:
+    #     return x * 2
 
-    nested_numbers = [[1, 2], [3, 4, 5], [6]]
+    # nested_numbers = [[1, 2], [3, 4, 5], [6]]
 
-    for depth in [-1, 0, 1]:
-        print(f"Depth: {depth}")
-        result = recursive_map(double, nested_numbers, depth=depth)
-        for item in result:
-            print(list(item))
-        print("===" * 10)
+    # for depth in [-1, 0, 1]:
+    #     print(f"Depth: {depth}")
+    #     result = recursive_map(double, nested_numbers, depth=depth)
+    #     for item in result:
+    #         print(list(item))
+    #     print("===" * 10)
