@@ -179,7 +179,13 @@ class Reusablizer(Generic[T]):
         return self
 
     def __iter__(self) -> Iterator[T]:
-        return self._partial()
+        result = self._partial()
+        if not isinstance(result, Iterator):
+            raise TypeError(
+                f"The wrapped function {self._partial}"
+                f" did not return an iterator: {result}"
+            )
+        return result
 
 
 def take_skip(
