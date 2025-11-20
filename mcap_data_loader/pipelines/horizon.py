@@ -36,6 +36,7 @@ class HorizonConfig(BaseModel, frozen=True):
 
 class Horizon(Pipeline[T]):
     def __init__(self, config: HorizonConfig) -> None:
+        self.config = config
         self.config_dict = config.model_dump()
 
     def __iter__(self) -> Iterator[Tuple[Tuple[T, ...], Tuple[T, ...]]]:

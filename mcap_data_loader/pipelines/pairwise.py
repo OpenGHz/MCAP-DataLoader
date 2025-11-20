@@ -15,9 +15,17 @@ class PairWiseConfig(BaseModel, frozen=True):
     fill_with_last: bool = False
     """Whether to fill missing elements with the last element."""
 
+    @property
+    def future_span(self) -> int:
+        """Calculate the number of times the last item leads the current item.
+        If the current item index is `t`, then `t + future_span` points exactly
+        to the last future item."""
+        return self.gap + 1
+
 
 class PairWise(Pipeline[T]):
     def __init__(self, config: PairWiseConfig) -> None:
+        self.config = config
         self._config_dict = config.model_dump()
 
     def __iter__(self) -> Iterator[Tuple[T, T]]:
