@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Tuple, Dict, Union
 from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 
@@ -9,6 +9,8 @@ Item = Dict[str, ReturnT]
 class DictTupleConfig(BaseModel, frozen=True):
     """Configuration for DictTuple caller."""
 
+    model_config = ConfigDict(extra="forbid")
+
     depth: int = -1
     """Depth of tuple nesting to flatten.
     < 0 means auto-detect by whether the item is a tuple or not,
@@ -17,7 +19,7 @@ class DictTupleConfig(BaseModel, frozen=True):
     the depth to be the same for all items and is faster. 0 means the items
     are already a flattened dictionary thus no further action will be taken.
     """
-    separator: str = "/"
+    separator: str = "."
     """Separator used when concatenating prefixes."""
     separate_key: bool = True
     """Whether to separate the prefix and the dict key with a separator."""
@@ -93,7 +95,7 @@ if __name__ == "__main__":
         ({"a": 1}, ({"b": 2}, {"c": 3})),
         ({"a": 1}, ({"b": 2}, ({"c": 3}, {"d": 4}))),
     ]:
-        dict_tuple = DictTuple(DictTupleConfig())
+        dict_tuple = DictTuple(DictTupleConfig(separator="/"))
         start = time.perf_counter()
         result = dict_tuple(tuple_dict)
         print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
@@ -108,10 +110,22 @@ if __name__ == "__main__":
             (({"/a": 1}, {"/b": 2}), ({"/c": 3}, {"/d": 4}, {"/e": 5})),
         ]
     ):
-        dict_tuple = DictTuple(
-            DictTupleConfig(depth=index, separator=".", separate_key=False)
-        )
+        dict_tuple = DictTuple(DictTupleConfig(depth=index, separate_key=False))
         start = time.perf_counter()
         result = dict_tuple(tuple_dict)
         print(f"Time taken: {(time.perf_counter() - start) * 1000:.3f} ms")
         print(result)
+
+    # Benchmark
+    print("---- Benchmark ----")
+    tuple_dict = (
+        ({"a": 1}, {"b": 2}, {"c": 3}),
+        ({"d": 4}, {"e": 5}, {"f": 6}),
+    )
+    dict_tuple_auto = DictTuple(DictTupleConfig(separator="/"))
+    dict_tuple_depth = DictTuple(DictTupleConfig(depth=2, separator="/"))
+    n_runs = 10000
+    time_auto = timeit.timeit(lambda: dict_tuple_auto(tuple_dict), number=n_runs)
+    time_depth = timeit.timeit(lambda: dict_tuple_depth(tuple_dict), number=n_runs)
+    print(f"Total time for {n_runs} runs (auto depth): {time_auto * 1000:.3f} ms")
+    print(f"Total time for {n_runs} runs (with depth): {time_depth * 1000:.3f} ms")
