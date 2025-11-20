@@ -23,7 +23,10 @@ class CurryConfig(BaseModel, Generic[ReturnT], frozen=True):
 
 class Curry(CallerBasis[ReturnT]):
     def __init__(self, config: CurryConfig[ReturnT]):
-        self._curried = curry(config.callable, *config.args, **config.kwargs)
+        if not config.args and not config.kwargs:
+            self._curried = config.callable
+        else:
+            self._curried = curry(config.callable, *config.args, **config.kwargs)
 
     def __call__(self, *args, **kwds):
         return self._curried(*args, **kwds)
