@@ -1,13 +1,19 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from collections.abc import Mapping, Generator
 from collections import ChainMap
 from mcap_data_loader.pipelines.basis import Pipeline, T
+from typing import Literal
+
+
+Methods = Literal["auto", "ChainMap", "+", "|", "none"]
 
 
 class MergeConfig(BaseModel, frozen=True):
     """Configuration for Merge pipeline."""
 
-    method: str = "auto"
+    model_config = ConfigDict(extra="forbid")
+
+    method: Methods = "auto"
     """Method to use for merging items."""
     replace: bool = False
     """Whether allow to replace existing items with new ones when merging."""
