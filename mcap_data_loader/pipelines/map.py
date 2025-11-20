@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field
-from collections.abc import Iterator, Callable
+from collections.abc import Iterable, Callable
 from typing import Generic, Union
 from mcap_data_loader.pipelines.basis import Pipeline, T
-from mcap_data_loader.utils.extra_itertools import recursive_map
+from mcap_data_loader.utils.extra_itertools import recursive_map, Reusablizer
 
 
 class MapConfig(BaseModel, Generic[T], frozen=True):
@@ -22,14 +22,13 @@ class Map(Pipeline[T]):
         self._callable = config.callable
         self._depth = config.depth
 
-    def __iter__(self) -> Iterator[T]:
-        return recursive_map(self._callable, self._iterable, self._depth)
+    def on_call(self, iterable: Iterable[T]) -> Reusablizer[T]:
+        return Reusablizer(recursive_map)(self._callable, iterable, self._depth)
 
 
 if __name__ == "__main__":
     mapper = Map(MapConfig(callable=lambda x: x * 2, depth=1))
 
     nested_iterable = [[1, 2], [3, 4], [5, 6]]
-    mapper(nested_iterable)
-    for item in mapper:
+    for item in mapper(nested_iterable):
         print(list(item))

@@ -1,8 +1,8 @@
-from mcap_data_loader.utils.extra_itertools import epairwise
+from mcap_data_loader.utils.extra_itertools import epairwise, Reusablizer
 from pydantic import BaseModel, NonNegativeInt, Field
 from mcap_data_loader.pipelines.basis import Pipeline, T
 from typing import Any, Tuple
-from collections.abc import Iterator
+from collections.abc import Iterable
 
 
 class PairWiseConfig(BaseModel, frozen=True):
@@ -27,8 +27,8 @@ class PairWise(Pipeline[T]):
     def __init__(self, config: PairWiseConfig) -> None:
         self._config_dict = config.model_dump()
 
-    def __iter__(self) -> Iterator[Tuple[T, T]]:
-        return epairwise(self._iterable, **self._config_dict)
+    def on_call(self, iterable: Iterable[T]) -> Reusablizer[Tuple[T, T]]:
+        return Reusablizer(epairwise)(iterable, **self._config_dict)
 
 
 if __name__ == "__main__":
@@ -39,3 +39,4 @@ if __name__ == "__main__":
 
     for item in paired:
         print(item)
+    assert list(paired)
