@@ -4,6 +4,7 @@ from collections import deque
 from collections.abc import Iterator, Generator, Callable
 from typing import Any, Iterable, Optional, TypeVar, Generic, Tuple, List, Union
 from copy import copy
+from functools import partial
 
 
 T = TypeVar("T")
@@ -168,15 +169,17 @@ class Reusablizer(Generic[T]):
     # since the func return type is usually unknown when
     # passed to __init__, we don't annotate the return with T
     def __init__(self, func: Callable[..., Iterable[T]]):
-        self._gen_func = func
+        self._func = func
+        self._partial = None
 
     def __call__(self, *args, **kwds) -> "Reusablizer[T]":
-        self._args = args
-        self._kwargs = kwds
-        return copy(self)
+        if self._partial is not None:
+            self = copy(self)
+        self._partial = partial(self._func, *args, **kwds)
+        return self
 
     def __iter__(self) -> Iterator[T]:
-        return self._gen_func(*self._args, **self._kwargs)
+        return self._partial()
 
 
 def take_skip(
