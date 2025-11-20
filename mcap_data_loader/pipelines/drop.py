@@ -21,25 +21,23 @@ class Drop(Pipeline[T]):
     """Drop the first *head* items and the last *tail* items from the iterable."""
 
     def __init__(self, config: DropConfig) -> None:
-        self.config = config
+        self._head = config.head
+        self._tail = config.tail
 
     def __iter__(self) -> Generator[T]:
         iterator = iter(self._iterable)
         # Skip items from the head eagerly using more-itertools.consume.
-        consume(iterator, self.config.head)
-
-        if self.config.tail == 0:
+        consume(iterator, self._head)
+        tail = self._tail
+        if tail == 0:
             yield from iterator
-            return
-
-        buffer: deque[T] = deque()
-        tail = self.config.tail
-        for item in iterator:
-            buffer.append(item)
-            if len(buffer) > tail:
-                yield buffer.popleft()
-
-        # Remaining items in the buffer correspond to the tail that should be dropped.
+        else:
+            # Remaining items in the buffer correspond to the tail that should be dropped.
+            buffer: deque[T] = deque()
+            for item in iterator:
+                buffer.append(item)
+                if len(buffer) > tail:
+                    yield buffer.popleft()
 
 
 __all__ = ["Drop", "DropConfig"]

@@ -23,13 +23,12 @@ class Flatten(Pipeline[T]):
     """Flatten nested iterables up to a specified depth."""
 
     def __init__(self, config: FlattenConfig) -> None:
-        self.config = config
         self._depth = config.depth
         self._base_type = config.base_type
 
     def __iter__(self) -> Iterator[T]:
         if self._depth < 0:
-            return collapse(self._iterable, base_type=self._base_type)
+            yield from collapse(self._iterable, base_type=self._base_type)
         else:
             for item in self._iterable:
                 yield from self._flatten(item, 0)

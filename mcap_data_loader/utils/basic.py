@@ -460,6 +460,23 @@ def has_nested_class_strict(cls: Type) -> bool:
     return False
 
 
+def not_implemented(func):
+    """Decorator that makes a function raise NotImplementedError when called."""
+
+    func.__isnotimplemented__ = True
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        raise NotImplementedError(f"{func.__qualname__} is not implemented")
+
+    return wrapper
+
+
+def is_not_implemented(func) -> bool:
+    """Check if a function is decorated with @not_implemented."""
+    return getattr(func, "__isnotimplemented__", False)
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
@@ -506,13 +523,29 @@ if __name__ == "__main__":
     #     print(value["t"])
     #     print(value["data"].shape)
 
-    class A(Generic[T]):
-        class B(Generic[T]):
+    # class A(Generic[T]):
+    #     class B(Generic[T]):
+    #         pass
+
+    # class C:
+    #     pass
+
+    # assert has_nested_class_strict(A)
+    # assert not has_nested_class_strict(C)
+    # print("All tests passed.")
+
+    def sample_not_implemented():
+        @not_implemented
+        def func():
             pass
 
-    class C:
-        pass
+        try:
+            func()
+        except NotImplementedError:
+            print("NotImplementedError raised as expected.")
+        else:
+            print("Error: NotImplementedError was not raised.")
 
-    assert has_nested_class_strict(A)
-    assert not has_nested_class_strict(C)
-    print("All tests passed.")
+        assert is_not_implemented(func)
+
+    sample_not_implemented()

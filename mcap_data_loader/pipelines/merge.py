@@ -17,7 +17,6 @@ class Merge(Pipeline[T]):
     """Merge multiple iterables' items into one by applying a specified method."""
 
     def __init__(self, config: MergeConfig) -> None:
-        self.config = config
         replace = config.replace
         self._methods = {
             "ChainMap": lambda items: ChainMap(*items),

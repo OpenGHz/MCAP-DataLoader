@@ -16,6 +16,7 @@ dependencies = [
     "pydantic_yaml",
     "numpy",
     "more-itertools",
+    "toolz",
     "typing-extensions",
     "flatbuffers",
     "foxglove-schemas-flatbuffer",

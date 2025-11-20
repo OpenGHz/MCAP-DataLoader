@@ -20,10 +20,11 @@ class Map(Pipeline[T]):
     """Map pipeline that applies a callable to items at a given depth in nested iterables."""
 
     def __init__(self, config: MapConfig[T]) -> None:
-        self.config = config
+        self._callable = config.callable
+        self._depth = config.depth
 
     def __iter__(self) -> Iterator[T]:
-        return recursive_map(self.config.callable, self._iterable, self.config.depth)
+        return recursive_map(self._callable, self._iterable, self._depth)
 
 
 if __name__ == "__main__":

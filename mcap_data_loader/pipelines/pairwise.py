@@ -18,13 +18,10 @@ class PairWiseConfig(BaseModel, frozen=True):
 
 class PairWise(Pipeline[T]):
     def __init__(self, config: PairWiseConfig) -> None:
-        self.config = config
+        self._config_dict = config.model_dump()
 
     def __iter__(self) -> Iterator[Tuple[T, T]]:
-        config = self.config
-        return epairwise(
-            self._iterable, config.gap, config.fillvalue, config.fill_with_last
-        )
+        return epairwise(self._iterable, **self._config_dict)
 
 
 if __name__ == "__main__":

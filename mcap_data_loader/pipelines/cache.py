@@ -16,8 +16,7 @@ class Cache(Pipeline[T]):
     """Cache items from an iterable up to a specified maximum length."""
 
     def __init__(self, config: CacheConfig) -> None:
-        self.config = config
-        self._cache = deque(maxlen=self.config.maxlen)
+        self._cache = deque(maxlen=config.maxlen)
         self._length = None
 
     def __iter__(self) -> Generator[T]:

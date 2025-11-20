@@ -24,12 +24,10 @@ class Slice(Pipeline[T]):
     """Yield items from the iterable according to the configured slice."""
 
     def __init__(self, config: SliceConfig) -> None:
-        self.config = config
+        self._config_dict = config.model_dump()
 
     def __iter__(self) -> Iterator[T]:
-        return islice_extended(
-            self._iterable, self.config.start, self.config.stop, self.config.step
-        )
+        return islice_extended(self._iterable, **self._config_dict)
 
 
 __all__ = ["Slice", "SliceConfig"]
