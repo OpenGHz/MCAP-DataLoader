@@ -25,7 +25,6 @@ class PairWiseConfig(BaseModel, frozen=True):
 
 class PairWise(Pipeline[T]):
     def __init__(self, config: PairWiseConfig) -> None:
-        self.config = config
         self._config_dict = config.model_dump()
 
     def __iter__(self) -> Iterator[Tuple[T, T]]:
