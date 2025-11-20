@@ -187,6 +187,12 @@ class Reusablizer(Generic[T]):
             )
         return result
 
+    def __repr__(self):
+        return (
+            f"{self.__module__}.{self.__class__.__name__}({self._func}): "
+            f"{self._partial}"
+        )
+
 
 def take_skip(
     lst: Iterable[T], N: int, M: int, in_order: bool = False
@@ -335,14 +341,16 @@ if __name__ == "__main__":
 
     iterable = range(4)
     pairwise_reusable = Reusablizer[int](pairwise)
-    itrable = pairwise_reusable(iterable)
-    assert not isinstance(itrable, Iterator)
-    lis = list(itrable)
+    print(pairwise_reusable)
+    reusable = pairwise_reusable(iterable)
+    print(reusable)
+    assert not isinstance(reusable, Iterator)
+    lis = list(reusable)
     assert lis == [(0, 1), (1, 2), (2, 3)]
-    assert list(itrable) == lis  # reusable test
+    assert list(reusable) == lis  # reusable test
     new_iterable = pairwise_reusable(range(2))
     assert list(new_iterable) == [(0, 1)]
-    assert list(itrable) == lis  # reusable test
+    assert list(reusable) == lis  # reusable test
 
     # iterable = range(10)
     # for a, b in epairwise(iterable, 2, fill_with_last=True):
