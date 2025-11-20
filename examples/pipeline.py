@@ -1,5 +1,12 @@
+"""Example of manually constructing a data pipeline."""
+
 if __name__ == "__main__":
-    from mcap_data_loader.pipelines import NestedZipConfig, NestedZip, Merge, MergeConfig
+    from mcap_data_loader.pipelines import (
+        NestedZipConfig,
+        NestedZip,
+        Merge,
+        MergeConfig,
+    )
     from mcap_data_loader.datasets.mcap_dataset import (
         McapFlatBuffersEpisodeDataset,
         McapFlatBuffersEpisodeDatasetConfig,

@@ -12,8 +12,7 @@ class MapConfig(BaseModel, Generic[T], frozen=True):
     """Callable to apply to each item at the specified depth."""
 
     depth: Union[int, None] = Field(default=0, ge=-1)
-    """
-    Depth level to apply the callable."""
+    """Depth level to apply the callable."""
 
 
 class Map(Pipeline[T]):
