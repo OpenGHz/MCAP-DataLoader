@@ -1,8 +1,9 @@
 from abc import abstractmethod
 from typing import Tuple, Literal, Generic, TypeVar, List, Dict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pydantic import BaseModel, Field
 from mcap_data_loader.basis.cfgable import ConfigurableBasis
+from mcap_data_loader.utils.basic import NonIteratorIterable
 
 
 ReturnT = TypeVar("ReturnT")
@@ -85,3 +86,6 @@ class CallerEnsembleBasis(CallerBasis[ReturnT]):
 
 class SplitterBasis(CallerBasis[Dict[str, ReturnT]]):
     """A caller that splits the input data into multiple parts."""
+
+
+SplitterType = Callable[[Iterable], Dict[str, NonIteratorIterable]]

@@ -111,3 +111,11 @@ class Pipeline(CallerBasis[Iterable[T]]):
             self._chained = chained
             self.get_logger().info(f"Chained pipeline:\n{pformat(self._chained)}")
         return pipe(iterable, *chained)
+
+
+PipelineType = Callable[[Iterable], Iterable]
+"""Type alias for pipeline functions. Returning an Iterator 
+is allowed because some custom classes, although instances 
+of iterator type, can reset their internal state at the end 
+of the iteration to achieve an effect similar to a regular 
+iterable, such as torchdata nodes."""
