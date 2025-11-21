@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from collections.abc import Iterable, Callable
 from typing import Generic, Union
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 from mcap_data_loader.utils.extra_itertools import recursive_map, Reusablizer
 
 
@@ -15,7 +15,7 @@ class MapConfig(BaseModel, Generic[T], frozen=True):
     """Depth level to apply the callable."""
 
 
-class Map(Pipeline[T]):
+class Map(Pipe[T]):
     """Map pipeline that applies a callable to items at a given depth in nested iterables."""
 
     def __init__(self, config: MapConfig[T]) -> None:

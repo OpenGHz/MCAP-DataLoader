@@ -1,6 +1,6 @@
 from mcap_data_loader.utils.extra_itertools import epairwise, Reusablizer
 from pydantic import BaseModel, NonNegativeInt, Field
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 from typing import Any, Tuple
 from collections.abc import Iterable
 
@@ -23,12 +23,15 @@ class PairWiseConfig(BaseModel, frozen=True):
         return self.gap + 1
 
 
-class PairWise(Pipeline[T]):
+class PairWise(Pipe[T]):
     def __init__(self, config: PairWiseConfig) -> None:
         self._config_dict = config.model_dump()
+        self._epairwise = Reusablizer(epairwise)
+        # Set future_span attribute to be used by Slice
+        setattr(self._epairwise, "future_span", config.future_span)
 
     def on_call(self, iterable: Iterable[T]) -> Reusablizer[Tuple[T, T]]:
-        return Reusablizer(epairwise)(iterable, **self._config_dict)
+        return self._epairwise(iterable, **self._config_dict)
 
 
 if __name__ == "__main__":

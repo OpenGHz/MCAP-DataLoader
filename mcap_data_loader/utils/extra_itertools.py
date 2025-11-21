@@ -188,10 +188,11 @@ class Reusablizer(Generic[T]):
         return result
 
     def __repr__(self):
-        return (
-            f"{self.__module__}.{self.__class__.__name__}({self._func}): "
-            f"{self._partial}"
-        )
+        cls_path = f"{self.__module__}.{self.__class__.__name__}"
+        if self._partial is None:
+            return f"{cls_path}: {self._func}"
+        else:
+            return f"{cls_path}: {self._partial}"
 
 
 def take_skip(

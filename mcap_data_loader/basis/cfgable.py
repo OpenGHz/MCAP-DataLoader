@@ -215,6 +215,9 @@ class InitConfigMixinBasis:
             config = method(self.config)
         return self.__class__(config)
 
+    def __repr__(self):
+        return f"{self.__module__}.{self.__class__.__qualname__}"
+
 
 class InitConfigMixin(InitConfigMixinBasis, metaclass=InitConfigMeta):
     """Mixin class for initializing with a config."""

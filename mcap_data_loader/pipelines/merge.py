@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from collections.abc import Mapping, Generator
 from collections import ChainMap
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 from typing import Literal
 
 
@@ -19,7 +19,7 @@ class MergeConfig(BaseModel, frozen=True):
     """Whether allow to replace existing items with new ones when merging."""
 
 
-class Merge(Pipeline[T]):
+class Merge(Pipe[T]):
     """Merge multiple iterables' items into one by applying a specified method."""
 
     def __init__(self, config: MergeConfig) -> None:

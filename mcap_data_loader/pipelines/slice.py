@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from typing import Optional
 from more_itertools import islice_extended
 from pydantic import BaseModel, NonNegativeInt, PositiveInt
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 from mcap_data_loader.utils.basic import try_to_get_attr
 
 
@@ -21,7 +21,7 @@ class SliceConfig(BaseModel, frozen=True):
     """Stride of the slice. If ``None``, it will be inferred from the input iterable (future_span)."""
 
 
-class Slice(Pipeline[T]):
+class Slice(Pipe[T]):
     """Yield items from the iterable according to the configured slice."""
 
     def __init__(self, config: SliceConfig) -> None:

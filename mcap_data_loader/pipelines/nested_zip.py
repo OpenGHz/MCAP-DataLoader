@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Tuple, Union
 from collections.abc import Generator, Iterable, Mapping
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 
 
 class NestedZipConfig(BaseModel, frozen=True):
@@ -23,7 +23,7 @@ class NestedZipConfig(BaseModel, frozen=True):
             raise ValueError("If fixed is False, depth must be negative.")
 
 
-class NestedZip(Pipeline[Tuple[T, ...]]):
+class NestedZip(Pipe[Tuple[T, ...]]):
     def __init__(self, config: NestedZipConfig):
         self.config = config
         self._first_iter = True

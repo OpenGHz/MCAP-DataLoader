@@ -1,7 +1,7 @@
 from pydantic import BaseModel, NonNegativeInt
 from collections.abc import Generator
 from collections import deque
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 from typing import Optional
 
 
@@ -12,7 +12,7 @@ class CacheConfig(BaseModel, frozen=True):
     """Maximum length of the cache. If None, the cache can grow indefinitely."""
 
 
-class Cache(Pipeline[T]):
+class Cache(Pipe[T]):
     """Cache items from an iterable up to a specified maximum length."""
 
     def __init__(self, config: CacheConfig) -> None:

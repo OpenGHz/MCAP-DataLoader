@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from collections.abc import Generator, Iterator
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 from typing import Optional, Tuple, Union
 from more_itertools import collapse
 
@@ -19,7 +19,7 @@ class FlattenConfig(BaseModel, frozen=True):
     This is only used when depth is negative."""
 
 
-class Flatten(Pipeline[T]):
+class Flatten(Pipe[T]):
     """Flatten nested iterables up to a specified depth."""
 
     def __init__(self, config: FlattenConfig) -> None:

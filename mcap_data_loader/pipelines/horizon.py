@@ -1,5 +1,5 @@
 from mcap_data_loader.utils.extra_itertools import past_future, Reusablizer
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 from pydantic import BaseModel, NonNegativeInt
 from typing import Any, Tuple
 from collections.abc import Iterable
@@ -34,14 +34,16 @@ class HorizonConfig(BaseModel, frozen=True):
         return self.gap + self.future_num
 
 
-class Horizon(Pipeline):
+class Horizon(Pipe):
     def __init__(self, config: HorizonConfig) -> None:
         self.config_dict = config.model_dump()
+        self._past_future = Reusablizer(past_future)
+        setattr(self._past_future, "future_span", config.future_span)
 
     def on_call(
         self, iterable: Iterable[T]
     ) -> Iterable[Tuple[Tuple[T, ...], Tuple[T, ...]]]:
-        return Reusablizer(past_future)(iterable, **self.config_dict)
+        return self._past_future(iterable, **self.config_dict)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from collections import deque
 from collections.abc import Generator
 from more_itertools import consume
 from pydantic import BaseModel, NonNegativeInt
-from mcap_data_loader.pipelines.basis import Pipeline, T
+from mcap_data_loader.pipelines.basis import Pipe, T
 
 
 class DropConfig(BaseModel, frozen=True):
@@ -17,7 +17,7 @@ class DropConfig(BaseModel, frozen=True):
     """Number of items to discard from the end of the iterable."""
 
 
-class Drop(Pipeline[T]):
+class Drop(Pipe[T]):
     """Drop the first *head* items and the last *tail* items from the iterable."""
 
     def __init__(self, config: DropConfig) -> None:
