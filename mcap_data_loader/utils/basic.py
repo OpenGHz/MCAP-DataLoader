@@ -15,7 +15,7 @@ from typing import (
 from typing_extensions import Annotated, TypedDict, runtime_checkable
 from enum import Enum
 from pathlib import Path
-from collections.abc import Iterable, Iterator, Callable
+from collections.abc import Iterable, Iterator, Callable, Mapping
 from pydantic import BaseModel, PlainValidator, validate_call
 from functools import wraps
 from inspect import isclass
@@ -85,11 +85,15 @@ def validate_call_once(func):
     return wrapper
 
 
-def validate_iterable_not_iterator(value: Iterable) -> Iterable:
+def validate_iterable_not_iterator(
+    value: Iterable, base_types=(str, bytes, Mapping)
+) -> Iterable:
     if not isinstance(value, Iterable):
         raise ValueError("Value must be an Iterable")
     if isinstance(value, Iterator):
         raise ValueError("Value must not be an Iterator")
+    if isinstance(value, base_types):
+        raise ValueError(f"Value must not be of type {base_types}")
     return value
 
 
