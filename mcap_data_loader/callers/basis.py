@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Tuple, Literal, Generic, TypeVar, List
+from typing import Tuple, Literal, Generic, TypeVar, List, Dict
 from collections.abc import Callable
 from pydantic import BaseModel, Field
 from mcap_data_loader.basis.cfgable import ConfigurableBasis
@@ -34,15 +34,15 @@ class MockCallerConfig(BaseModel, frozen=True):
 class MockCaller(CallerBasis[ReturnT]):
     """A mock caller that outputs a sequence of numbers based on the input."""
 
-    config: MockCallerConfig
-
-    def on_configure(self):
-        if self.config.output_type == "ndarray":
+    def __init__(self, config: MockCallerConfig):
+        if config.output_type == "ndarray":
             import numpy as xp
-        elif self.config.output_type == "Tensor":
+        elif config.output_type == "Tensor":
             import torch as xp
+        else:
+            xp = list
         self._xp = xp
-        return True
+        self.config = config
 
     def reset(self):
         """Do nothing"""
@@ -81,3 +81,7 @@ class CallerEnsembleBasis(CallerBasis[ReturnT]):
         for func in self._callables:
             if isinstance(func, CallerBasis):
                 func.reset()
+
+
+class SplitterBasis(CallerBasis[Dict[str, ReturnT]]):
+    """A caller that splits the input data into multiple parts."""
