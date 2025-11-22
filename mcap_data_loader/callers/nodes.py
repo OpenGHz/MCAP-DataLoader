@@ -1,6 +1,6 @@
 from collections.abc import Iterable
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, NonNegativeInt
+from typing import Optional, List
+from pydantic import BaseModel, ConfigDict, NonNegativeInt, NonNegativeFloat
 from torchdata import nodes
 from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 from mcap_data_loader.utils.dict import iterable2dict
@@ -19,7 +19,7 @@ class MultiNodeWeightedSamplerConfig(BaseModel, frozen=True):
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    weights: Iterable[str] = []
+    weights: List[NonNegativeFloat] = []
     """List of weight keys for each item (dataset/episode)."""
     stop_criteria: str = nodes.StopCriteria.ALL_DATASETS_EXHAUSTED
     """Stop criteria for weighted sampling. Options are defined in `nodes.StopCriteria`."""
@@ -45,17 +45,19 @@ class MultiNodeWeightedSampler(CallerBasis):
 
     def __init__(self, config: MultiNodeWeightedSamplerConfig):
         self._config_dict = config.model_dump(exclude={"weights"})
-        weights = tuple(config.weights)
+        weights = config.weights
         self._weights = iterable2dict(weights) if weights else {}
 
     def __call__(
         self, iterable: Iterable[Iterable[ReturnT]]
     ) -> nodes.MultiNodeWeightedSampler[ReturnT]:
-        iterable = tuple(iterable)
+        tupled = tuple(iterable)
+        if not tupled:
+            raise ValueError(f"The input iterable {iterable} is empty.")
+        iterable_dict = iterable2dict(tupled)
+        weights = self._weights or {i: 1.0 for i in range(len(tupled))}
         return nodes.MultiNodeWeightedSampler(
-            iterable2dict(iterable),
-            self._weights or {i: 1.0 for i in range(len(iterable))},
-            **self._config_dict,
+            iterable_dict, weights, **self._config_dict
         )
 
 
