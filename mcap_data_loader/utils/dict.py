@@ -1,4 +1,4 @@
-from typing import Tuple, TypeVar
+from typing import Tuple, TypeVar, Callable
 from collections.abc import Mapping, Iterable
 
 
@@ -15,3 +15,63 @@ def iterable2dict(iterable: Iterable[T]) -> Mapping[int, T]:
 def dict2tuple(d: Mapping[int, T]) -> Tuple[T, ...]:
     """Convert a dictionary with integer keys to an iterable."""
     return tuple(d[i] for i in range(len(d)))
+
+
+def valmap_depth(func: Callable, d: dict, depth: int = -1):
+    """
+    Recursively apply `func` to the values of a dictionary, up to a specified depth.
+
+    Args:
+        func: A callable applied to non-dict values.
+        d: Input dictionary.
+        depth: Maximum recursion depth.
+            - If depth >= 0: apply `func` to values at levels <= depth.
+            - If depth < 0: recurse infinitely (i.e., until values are no longer dicts).
+    """
+    if depth < 0:
+        # Infinite recursion: keep recursing into dicts
+        return {
+            k: valmap_depth(func, v) if isinstance(v, dict) else func(v)
+            for k, v in d.items()
+        }
+    else:
+        # Limited recursion
+        return {
+            k: valmap_depth(func, v, depth - 1) if depth > 0 else func(v)
+            for k, v in d.items()
+        }
+
+
+if __name__ == "__main__":
+    print("Testing valmap_depth function:")
+    complex_dict = {
+        "a": 1,
+        "b": {"b1": 2, "b2": {"b21": 3}},
+        "c": {"c1": 4, "c2": 5},
+    }
+
+    print("Original dictionary:")
+    print(complex_dict)
+
+    print("\nApply valmap_depth with depth=-1 (increment all values):")
+    result_depth_neg1 = valmap_depth(lambda x: x + 10, complex_dict, depth=-1)
+    print(result_depth_neg1)
+
+    simple_dict = {
+        "0": {
+            "0.0": 1,
+            "0.1": 2,
+        },
+        "1": {
+            "1.0": 3,
+            "1.1": 4,
+        },
+    }
+
+    print("\nApply valmap_depth with depth=1 (increment top-level values):")
+    result_depth_1 = valmap_depth(lambda x: x | {"extra": None}, simple_dict, depth=0)
+    print(result_depth_1)
+
+    print("\nApply valmap_depth with depth=2 (increment up to second-level values):")
+    result_depth_2 = valmap_depth(lambda x: x + 10, simple_dict, depth=1)
+    print(result_depth_2)
