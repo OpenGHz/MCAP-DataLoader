@@ -85,16 +85,20 @@ def validate_call_once(func):
     return wrapper
 
 
-def validate_iterable_not_iterator(
-    value: Iterable, base_types=(str, bytes, Mapping)
-) -> Iterable:
+def validate_iterable(value: Iterable, base_types=(str, bytes, Mapping)) -> Iterable:
     if not isinstance(value, Iterable):
         raise ValueError("Value must be an Iterable")
-    if isinstance(value, Iterator):
-        raise ValueError("Value must not be an Iterator")
     if isinstance(value, base_types):
         raise ValueError(f"Value must not be of type {base_types}")
     return value
+
+
+def validate_iterable_not_iterator(
+    value: Iterable, base_types=(str, bytes, Mapping)
+) -> Iterable:
+    if isinstance(value, Iterator):
+        raise ValueError("Value must not be an Iterator")
+    return validate_iterable(value, base_types)
 
 
 @runtime_checkable
@@ -110,6 +114,7 @@ NonIteratorIterable = Annotated[
     Iterable[T],
     PlainValidator(validate_iterable_not_iterator),
 ]
+ConstrainedIterable = Annotated[Iterable[T], PlainValidator(validate_iterable)]
 ReturnT = TypeVar("ReturnT")
 KeyT = TypeVar("KeyT", bound=Hashable)
 DataT = TypeVar("DataT")
