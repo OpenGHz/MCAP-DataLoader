@@ -4,13 +4,12 @@ from mcap_data_loader.utils.basic import (
     not_implemented,
 )
 from mcap_data_loader.callers.basis import CallerBasis
-from mcap_data_loader.utils.extra_itertools import recursive_map, Reusablizer
-from pydantic import BaseModel, NonNegativeInt, ConfigDict, validate_call
-from typing import TypeVar, Dict, Union, Optional, final
+from pydantic import BaseModel, validate_call
+from typing import TypeVar, Dict, Union, Optional, Hashable, List, final
 from collections.abc import Iterator, Callable, Iterable
-from toolz import compose_left, pipe
-from functools import partial
+from toolz import pipe
 from pprint import pformat
+from logging import getLogger
 
 
 T = TypeVar("T")
@@ -22,7 +21,7 @@ class Pipe(CallerBasis[T]):
     parameter and return an iterable value and can only be called once.
     """
 
-    recall = None
+    recall: Optional[bool] = None
     """If True, a new instance of the pipe will be created
     whenever the pipe is called. If False, the same instance
     will be reused. If None, the behavior will be determined
@@ -64,13 +63,60 @@ class Pipe(CallerBasis[T]):
         """Yield items from the pipe."""
 
 
+PipelineType = Dict[float, Optional[Union[Callable, Hashable]]]
+NamedPipelineValue = Optional[Dict[float, Optional[Callable]]]
+NamedPipelineType = Dict[Hashable, NamedPipelineValue]
+NamedPipelines: Dict[Hashable, List[Callable]] = {}
+"""Pipelines with names which will be shared across `Pipeline` instances. 
+Often, a pipeline may contain nested  sub-pipelines, and we want this 
+nesting to be easily removed. This enables flexible reuse, including 
+deleting existing nested pipelines and updating them to be non-nested."""
+
+
+def _chain_pipes(pipeline: PipelineType) -> Callable:
+    """Compose multiple pipes into a single callable."""
+    chained = []
+    for pipe_key in sorted(pipeline.keys()):
+        a_pipe = pipeline[pipe_key]
+        if callable(a_pipe):
+            chained.append(a_pipe)
+        elif a_pipe is not None:
+            pipe_chain = NamedPipelines[a_pipe]
+            if pipe_chain is not None:
+                chained.extend(pipe_chain)
+    return chained
+
+
+@validate_call
+def register_named_pipelines(
+    named_pipelines: NamedPipelineType = {}, **kwargs: NamedPipelineValue
+) -> None:
+    """Register named pipelines into the given named_pipelines dict."""
+    keys = named_pipelines.keys() | kwargs.keys()
+    getLogger("register_named_pipelines").info(f"Registering: {list(keys)}")
+    if keys & NamedPipelines.keys():
+        raise ValueError(
+            f"Key conflict between existing: "
+            f"{list(NamedPipelines.keys())} and new: "
+            f"{list(keys)}."
+        )
+    elif None in keys:
+        raise ValueError("Pipeline name cannot be None.")
+    for name, dict_pipeline in (named_pipelines | kwargs).items():
+        NamedPipelines[name] = (
+            _chain_pipes(dict_pipeline) if dict_pipeline is not None else None
+        )
+
+
 class PipelineConfig(BaseModel, frozen=True):
     """Configuration for a pipeline."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    pipes: Union[Dict[float, Union[Dict[float, Optional[Callable]], NonNegativeInt]]]
-    """Multiple grouped pipes to be connected with diverter."""
+    pipeline: PipelineType
+    """Multiple pipes to be connected. The keys are used to
+    determine the order of the pipes. The values can be either
+    the pipe callable or the name of the pipeline in `named_pipelines`."""
 
 
 class Pipeline(CallerBasis[Iterable[T]]):
@@ -79,41 +125,16 @@ class Pipeline(CallerBasis[Iterable[T]]):
     so that a series of commands can work together to complete more complex tasks."""
 
     def __init__(self, config: PipelineConfig) -> None:
-        self._pipes = config.pipes
-        self._chained = None
+        self.config = config
+        self._chained = _chain_pipes(config.pipeline)
+        self.get_logger().info(f"Chained pipeline:\n{pformat(self._chained)}")
 
     def __call__(self, iterable: NonIteratorIterable):
-        if self._chained is None:
-            depth = None
-            chained = []
-            for group_i in sorted(self._pipes.keys()):
-                value = self._pipes[group_i]
-                if isinstance(value, int):
-                    if depth is not None:
-                        raise ValueError("Duplicate depth specification.")
-                    depth = value
-                else:
-                    a_pipeline = []
-                    for pipe_i in sorted(value.keys()):
-                        a_pipe = value[pipe_i]
-                        if a_pipe is not None:
-                            a_pipeline.append(a_pipe)
-                    composed = compose_left(*a_pipeline)
-                    if depth is None:
-                        chained.append(composed)
-                    else:
-                        if depth == 0:
-                            func = partial(map, composed)
-                        else:
-                            func = partial(recursive_map, composed, depth=depth)
-                        chained.append(Reusablizer(func))
-                    depth = None
-            self._chained = chained
-            self.get_logger().info(f"Chained pipeline:\n{pformat(self._chained)}")
-        return pipe(iterable, *chained)
+        """Apply the pipeline to the given iterable."""
+        return pipe(iterable, *self._chained)
 
 
-PipelineType = Callable[[Iterable], Iterable]
+PipeType = Callable[[Iterable], Iterable]
 """Type alias for pipeline functions. Returning an Iterator 
 is allowed because some custom classes, although instances 
 of iterator type, can reset their internal state at the end 

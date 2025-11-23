@@ -1,0 +1,110 @@
+# DataLoaders are only responsible for loading the data source into a dictionary of data loaders, and are unrelated to how it is processed subsequently.
+_target_: mcap_data_loader.basis.data_loader.DataLoaders
+
+nested_zip:
+  depth: 1
+merge:
+  replace: true
+pairwise:
+  gap: 0
+  fill_with_last: true
+slice:
+  step: null
+batcher: &batcher
+  batch_size: 1
+  drop_last: false
+parallel: &parallel
+  num_workers: 0
+  snapshot_frequency: 1000
+stacker:
+  backend_out: torch
+  dtype: float32
+  stack:
+    current_robot_state:
+      - /follow/arm/joint_state/position
+      - /follow/eef/joint_state/position
+    next_robot_state:
+      - 1/follow/arm/joint_state/position
+      - 1/follow/eef/joint_state/position
+registry0:
+  _target_: mcap_data_loader.pipelines.register_named_pipelines
+  # the key must be a string type, or you can put it in `named_pipelines` field
+  ep_merge:
+    0:
+      _target_: mcap_data_loader.pipelines.Merge
+      config: ${data_loaders.merge}
+    1:
+      _target_: mcap_data_loader.pipelines.PairWise
+      config: ${data_loaders.pairwise}
+    2:
+      _target_: mcap_data_loader.pipelines.Slice
+      config: ${data_loaders.slice}
+    3:
+      _target_: mcap_data_loader.callers.Map
+      callable:
+        _target_: mcap_data_loader.callers.DictTuple
+        separate_key: false
+    4:
+      # use curry to make any callable compatible with the pipeline
+      _target_: mcap_data_loader.callers.Curry
+      callable: torchdata.nodes.IterableWrapper
+  to_loader:
+    0:
+      _target_: mcap_data_loader.callers.nodes.MultiNodeWeightedSampler
+    1:
+      _target_: mcap_data_loader.callers.nodes.Batcher
+      # nodes do not support `config` field
+      # but we can use YAML anchor to merge configurations
+      <<: *batcher
+    2:
+      _target_: mcap_data_loader.callers.nodes.ParallelMapper
+      <<: *parallel
+      map_fn:
+        _target_: mcap_data_loader.callers.stack.BatchStacker
+        config: ${data_loaders.stacker}
+    3:
+      _target_: mcap_data_loader.callers.nodes.Loader
+registry1:
+  _target_: mcap_data_loader.pipelines.register_named_pipelines
+  main:
+    0: # ([d0.ep0, d0.ep1, ...], [d1.ep0, d1.ep1, ...]) -> [(d0.ep0, d1.ep0), (d0.ep1, d1.ep1), ...]
+      _target_: mcap_data_loader.pipelines.NestedZip
+      # standard pipeline and caller support `config` field
+      # so we can use Hydra's variable substitution here and
+      # although the example only needs to include the configuration of the data loader itself, in practice, the data loader is usually treated as a configuration option, such as under the data_loaders field. This example simulates that scenario.
+      config: ${data_loaders.nested_zip}
+    1: # diverter: apply a sub-pipeline to each value in the splitted dictionary
+      _target_: mcap_data_loader.callers.Map
+      callable:
+        _target_: mcap_data_loader.pipelines.Pipeline
+        pipeline: # merge and process the coupled episodes
+          0: ep_merge
+    2: # splitter: split the data into training and validation sets
+      # {"train": [(d0.ep0, d1.ep0), ..., (d0.ep7, d1.ep7)], "val": [(d0.ep8, d1.ep8), ...] }
+      _target_: mcap_data_loader.callers.splitters.binary.BinarySplitter
+      keys: [train, val]
+      ratio: 0.8
+    3:
+      _target_: mcap_data_loader.callers.Map
+      callable:
+        _target_: mcap_data_loader.pipelines.Pipeline
+        pipeline:
+          0: to_loader
+      must: {} # default values are as follows, so if the value is not mapping, it will be directly processed
+        # mapping: true
+        # mode: direct
+sources:
+  # Because the keys in the dictionary in the YAML configuration are static and cannot be variables, if you want to load the source into different keys in the data loaders dictionary at different stages, you need to first treat the source configuration as a separate field, then set the original key to null, and then reference that field with the new key. However, rather than complex YAML processing, it is recommended to handle this on the program side. That is, put the source into the data loaders dictionary with key=`main` during the training, testing, and inference phases. The program first checks if `main` exists. If it does not exist, it checks the corresponding name. If it exists at the same time or does not exist at all, it throws an exception.
+  main:
+    source:
+      _target_: mcap_data_loader.datasets.mcap_dataset.McapMultiEpisodeDatasets
+      common:
+        strict: false
+        rearrange:
+          dataset: sort_stem_digital
+      roots:
+        data/example:
+          - /follow/arm/joint_state/position
+          - /follow/eef/joint_state/position
+    # use the main pipeline
+    pipeline: main

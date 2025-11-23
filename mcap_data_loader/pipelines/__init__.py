@@ -1,3 +1,10 @@
+from mcap_data_loader.pipelines.basis import (
+    Pipe,
+    Pipeline,
+    PipelineConfig,
+    register_named_pipelines,
+    NamedPipelines,
+)
 from mcap_data_loader.pipelines.cache import Cache, CacheConfig
 from mcap_data_loader.pipelines.drop import Drop, DropConfig
 from mcap_data_loader.pipelines.flatten import Flatten, FlattenConfig

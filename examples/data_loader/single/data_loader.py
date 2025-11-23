@@ -9,11 +9,12 @@ if __name__ == "__main__":
     )
     from mcap_data_loader.utils.hydra_utils import init_hydra_config, hydra_instance
     from pprint import pprint
+    from pathlib import Path
     import logging
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("data_loader_example")
-    dict_config = init_hydra_config("examples/data_loader.yaml")
+    dict_config = init_hydra_config(Path(__file__).parent / "data_loader.yaml")
     pprint(OmegaConf.to_container(dict_config))
     logger.info("Instantiating configuration...")
     config = hydra_instance(dict_config)
@@ -33,7 +34,7 @@ if __name__ == "__main__":
         ),
     )
     logger.info("Initializing the connector...")
-    connector = Pipeline(PipelineConfig(pipes=config))
+    connector = Pipeline(PipelineConfig(pipeline=config))
     logger.info("Applying the pipeline...")
     data_loader = connector(datasets)
     logger.info(f"Iterating {data_loader}...")

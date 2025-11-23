@@ -1,0 +1,9 @@
+defaults:
+  - train_val
+
+registry1:
+  main:
+    # TODO: testing should support splitted data loaders
+    2: null # remove the train-val splitter for testing
+    # 3: to_loader # move the pipeline out of the mapper since the above `2` is removed
+    # since we set the `must` field of the `Map`, the above line can be commented

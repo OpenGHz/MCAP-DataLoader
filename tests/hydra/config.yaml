@@ -1,0 +1,10 @@
+model:
+  name: resnet
+  layers: 50
+  pretrained:
+    weights: IMAGENET1K_V1
+    config:
+      2: 1
+      0: -1
+training:
+  batch_size: 32
