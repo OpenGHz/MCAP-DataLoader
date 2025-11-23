@@ -1,4 +1,4 @@
-from pydantic import BaseModel, NonNegativeInt
+from pydantic import BaseModel, int
 from collections.abc import Mapping, Callable, Iterable
 from mcap_data_loader.callers.basis import CallerBasis
 from mcap_data_loader.utils.extra_itertools import recursive_map_reusable
@@ -18,7 +18,7 @@ class MappingStrategy(StrEnum):
 class MapConfig(BaseModel, frozen=True):
     """Configuration for Map caller."""
 
-    depth: NonNegativeInt = 0
+    depth: int = 0
     """The depth to diverge the input data."""
     callable: Callable
     """The callable to apply to each diverged branch."""
