@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Dict, Optional, Union, Generic, TypeVar
+from pydantic import BaseModel, ConfigDict, AfterValidator, Field
+from typing import Dict, Optional, Union, Generic, TypeVar, Annotated
 from collections.abc import Iterable, Callable, Hashable, Mapping
 from mcap_data_loader.utils.basic import StrEnum, NonIteratorIterable
 from mcap_data_loader.pipelines import NamedPipelines
@@ -16,6 +16,18 @@ class Stage(StrEnum):
     TRAIN = auto()
     TEST = auto()
     INFER = auto()
+
+
+def _to_stage(v: Union[Stage, str]) -> Stage:
+    if isinstance(v, Stage):
+        return v
+    upper_v = v.upper()
+    if upper_v in Stage.__members__:
+        return Stage[upper_v]
+    return v
+
+
+DataLoaderKey = Annotated[Union[Stage, str], AfterValidator(_to_stage)]
 
 
 class DataSourceConfig(BaseModel, frozen=True):
