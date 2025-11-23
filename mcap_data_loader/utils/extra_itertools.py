@@ -261,6 +261,7 @@ def recursive_map(
     iterable: Iterable,
     depth: int = 0,
     base_type: Union[tuple, type] = (str, bytes),
+    _recur_func: Optional[Callable[..., Any]] = None,
 ) -> Generator:
     """
     Lazily applies a function recursively to elements in a nested iterable structure,
@@ -279,15 +280,28 @@ def recursive_map(
     Yields:
         Transformed items according to the specified depth, preserving structure lazily.
     """
+    _recur_func = recursive_map if _recur_func is None else _recur_func
     if depth == 0:
         yield from map(func, iterable)
     else:
         for item in iterable:
             if depth > 0 or is_iterable_but_not_base(item, base_type):
-                next_depth = depth - 1
-                yield recursive_map(func, item, next_depth, base_type)
+                yield _recur_func(func, item, depth - 1, base_type, _recur_func)
             else:
                 yield item
+
+
+def recursive_map_reusable(
+    func: Callable[..., Any],
+    iterable: Iterable,
+    depth: int = 0,
+    base_type: Union[tuple, type] = (str, bytes),
+) -> Union[Generator, Reusablizer]:
+    """A reusable version of recursive_map for non-iterator iterables."""
+    recur_map = (
+        recursive_map if isinstance(iterable, Iterator) else Reusablizer(recursive_map)
+    )
+    return recur_map(func, iterable, depth, base_type, recur_map)
 
 
 if __name__ == "__main__":

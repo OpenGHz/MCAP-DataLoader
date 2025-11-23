@@ -12,6 +12,7 @@ from typing import (
     final,
     get_type_hints,
 )
+from collections.abc import Mapping
 from typing_extensions import get_args, Self
 from pydantic import BaseModel, TypeAdapter
 from pydantic_yaml import to_yaml_file
@@ -49,7 +50,7 @@ class InitConfigMeta(type):
             config
             if isinstance(config, type)
             else cls.resolve_config_type(cls)
-            if (config is None or isinstance(config, dict))
+            if (config is None or isinstance(config, Mapping))
             else type(config)
         )
         cls_path = kwargs.pop("_target_", None)
@@ -57,11 +58,13 @@ class InitConfigMeta(type):
             # try to get from _target_
             if cls_path is not None:
                 config_type = get_class_type(cls_path)
+        # TODO: it is better to support more flexible config types
+        # e.g. dict, etc.
         if not cls._check_config_type(config_type):
-            raise TypeError(error_msg)
+            raise TypeError(f"{cls}" + error_msg + f" Got {config_type} instead.")
         if not issubclass(config_type, BaseModel):
             adapter = TypeAdapter(config_type)
-        if isinstance(config, dict):
+        if isinstance(config, Mapping):
             config.update(kwargs)
             config = config_type(**config)
         elif config is None or isinstance(config, type):

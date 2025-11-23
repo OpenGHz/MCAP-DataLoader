@@ -1,6 +1,6 @@
 from mcap_data_loader.callers.basis import SplitterBasis
 from mcap_data_loader.utils.extra_itertools import take_skip
-from pydantic import BaseModel
+from pydantic import BaseModel, NonNegativeFloat, PositiveInt
 from typing import Tuple, Optional
 from random import Random
 
@@ -15,14 +15,14 @@ class BinarySplitterConfig(BaseModel, frozen=True):
 
     keys: Tuple[str, str] = ("first", "second")
     """Tuple containing the names of the two keys to which the data will be split."""
-    ratio: Optional[float] = None
+    ratio: Optional[NonNegativeFloat] = None
     """Ratio of the first key data to the total data."""
-    take_skip: Tuple[int, int] = ()
+    take_skip: Tuple[PositiveInt, PositiveInt] = ()
     """Tuple containing the number of items to take and skip `(first_num, second_num)`. 
     This means that `first_num` data points are taken from the `episode` list, followed 
     by `second_num` data points, and so on. The final ratio of the training set to the 
     validation set is approximately `first_num:second_num`"""
-    grouped_ratio: Tuple[int, float] = ()
+    grouped_ratio: Tuple[PositiveInt, NonNegativeFloat] = ()
     """Tuple containing the number of items in a group and the ratio of the first key data 
     in each group `(group_num, ratio)`. This means that the input data is  divided into groups 
     of `group_num` data points, and in each group, the first `ratio` portion of data points are 
@@ -84,6 +84,14 @@ class BinarySplitter(SplitterBasis):
 
     def __call__(self, data):
         data_list = list(data)
+        total_len = len(data_list)
+        if total_len <= 1:
+            self.get_logger().warning(
+                f"Data length {total_len} is too small to split by ratio."
+                f" Returning original data as the first part and empty list as the second part."
+            )
+            return data_list, []
+        self.get_logger().info(f"Splitting data {data_list}.")
         if self._random is not None:
             self._random.shuffle(data_list)
         return dict(zip(self._keys, self._split_method(data_list)))

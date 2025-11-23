@@ -1,4 +1,4 @@
-from typing import Tuple, TypeVar, Callable
+from typing import Tuple, TypeVar, Callable, Any
 from collections.abc import Mapping, Iterable
 
 
@@ -15,6 +15,11 @@ def iterable2dict(iterable: Iterable[T]) -> Mapping[int, T]:
 def dict2tuple(d: Mapping[int, T]) -> Tuple[T, ...]:
     """Convert a dictionary with integer keys to an iterable."""
     return tuple(d[i] for i in range(len(d)))
+
+
+def dict2tuple_sort(d: Mapping[Any, T]) -> Tuple[T, ...]:
+    """Convert a dictionary with float keys to an iterable."""
+    return tuple(d[k] for k in sorted(d.keys()))
 
 
 def valmap_depth(func: Callable, d: dict, depth: int = -1):
