@@ -2,7 +2,7 @@ import random
 from typing import Any, List, Optional, Generic, TypeVar, Protocol, final
 from typing_extensions import Self, runtime_checkable
 from collections.abc import Iterator, Iterable, Generator
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field
 from abc import abstractmethod
 from functools import cached_property, cache
 from logging import getLogger
@@ -136,6 +136,8 @@ class DataRearrangeConfig(BaseModel, frozen=True):
 
 class IterableDatasetConfig(BaseModel, frozen=True):
     """Iterable Dataset configuration basis."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     data_root: Path
     """Root directory of the dataset."""

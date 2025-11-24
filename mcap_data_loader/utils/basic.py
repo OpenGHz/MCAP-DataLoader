@@ -8,15 +8,15 @@ from typing import (
     Type,
     Optional,
     Protocol,
-    Hashable,
+    Set,
     get_origin,
     get_args,
 )
 from typing_extensions import Annotated, TypedDict, runtime_checkable
 from enum import Enum
 from pathlib import Path
-from collections.abc import Iterable, Iterator, Callable, Mapping
-from pydantic import BaseModel, PlainValidator, validate_call
+from collections.abc import Iterable, Iterator, Callable, Mapping, Hashable
+from pydantic import BaseModel, PlainValidator, AfterValidator, validate_call
 from functools import wraps
 from inspect import isclass
 from logging import getLogger
@@ -101,6 +101,24 @@ def validate_iterable_not_iterator(
     return validate_iterable(value, base_types)
 
 
+def _mapping2list(value: Union[Dict, List]) -> List:
+    if isinstance(value, Mapping):
+        return list(value.values())
+    return value
+
+
+def _mapping2list_sorted(value: Union[Dict, List]) -> List:
+    if isinstance(value, Mapping):
+        return [value[key] for key in sorted(value.keys())]
+    return value
+
+
+def _mapping2set(value: Union[Dict, Set]) -> Set:
+    if isinstance(value, Mapping):
+        return set(value.values())
+    return value
+
+
 @runtime_checkable
 class DataClassProto(Protocol):
     """Protocol for dataclass types."""
@@ -119,6 +137,17 @@ ReturnT = TypeVar("ReturnT")
 KeyT = TypeVar("KeyT", bound=Hashable)
 DataT = TypeVar("DataT")
 
+# convert Mapping to List of values with the original order of keys
+ListMapping = Annotated[
+    Union[List[T], Mapping[Hashable, T]], AfterValidator(_mapping2list)
+]
+# convert Mapping to List of values with sorted order of keys
+ListMappingSorted = Annotated[
+    Union[List[T], Mapping[Hashable, T]], AfterValidator(_mapping2list_sorted)
+]
+SetMapping = Annotated[
+    Union[Set[T], Mapping[Hashable, T]], AfterValidator(_mapping2set)
+]
 
 SlicesType = Union[List[tuple], tuple, int]
 DictableSlicesType = Union[Dict[str, SlicesType], SlicesType]

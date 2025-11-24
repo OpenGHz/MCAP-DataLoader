@@ -12,12 +12,18 @@ if __name__ == "__main__":
             "strict": False,
             "rearrange": DataRearrangeConfig(episode=RearrangeType.SORT_STEM_DIGITAL),
         },
-        roots={
-            "data/example": ["/follow/arm/joint_state/position"],
-            "data/example_copy": ["/env_camera/color/image_raw"],
-            # add other keys to data/example with a `ID//` prefix to avoid collision
-            # this is useful for incremental configuration adjustment
-            "0//data/example": ["/follow/eef/joint_state/position"],
+        configs={
+            0: {
+                "data_root": "data/example",
+                "keys": ["/follow/arm/joint_state/position"],
+            },
+            1: {
+                "data_root": "data/example_copy",
+                "keys": {
+                    0: "/env_camera/color/image_raw",
+                    1: "/env_camera/depth/image_raw",
+                },
+            },
         },
     )
     pprint(config.model_dump())

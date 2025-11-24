@@ -1,12 +1,18 @@
 import numpy as np
 import random
 from pathlib import Path
-from typing import List, Optional, Dict, Union, Sequence, Any
+from typing import List, Optional, Dict, Union, Any
+from collections.abc import Sequence, Hashable
 from typing_extensions import Self
 from functools import cached_property
 from pydantic import field_validator, ConfigDict, BaseModel, Field
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
-from mcap_data_loader.utils.basic import get_items_by_ext, file_hash, DictDataStamped
+from mcap_data_loader.utils.basic import (
+    get_items_by_ext,
+    file_hash,
+    DictDataStamped,
+    SetMapping,
+)
 from mcap_data_loader.datasets.dataset import (
     IterableDatasetABC,
     IterableDatasetConfig,
@@ -28,9 +34,9 @@ class McapDatasetConfig(IterableDatasetConfig):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    keys: List[str] = []
-    topics: Optional[List[str]] = []
-    attachments: Optional[List[str]] = []
+    keys: SetMapping[str] = set()
+    topics: Optional[SetMapping[str]] = set()
+    attachments: Optional[SetMapping[str]] = set()
     with_timestamp: bool = True
     strict: bool = True
     media_configs: List = []
@@ -242,42 +248,17 @@ def to_episodic_sequence(dataset) -> Sequence[McapFlatBuffersSampleDataset]:
     return dataset
 
 
-class McapMultiEpisodeDatasetsConfig(BaseModel):
+class McapMultiEpisodeDatasetsConfig(BaseModel, frozen=True):
     """
     Multi-episodic dataset configuration for reading MCAP files from multiple roots.
     """
 
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
     common: Dict[str, Any] = {}
     """Common configuration for all dataset roots."""
-    roots: Dict[str, Union[Dict[str, Any], List[str]]] = Field(min_length=1)
-    """Dataset root specific configurations. The key is the root path, and the value is either a dict of configurations or a list of keys to read."""
-
-    @field_validator("roots")
-    def validate_roots(cls, v: Dict[str, Any]) -> dict:
-        for root in list(v.keys()):
-            cfg = v[root]
-            splited = root.split("//", 1)
-            if len(splited) == 2:
-                v.pop(root)
-                root = splited[1]
-                base_cfg = v.pop(root, {})
-            else:
-                base_cfg = {}
-            if isinstance(cfg, list):
-                if len(cfg) == 0:
-                    raise ValueError(f"root[{root}] keys must not be an empty list")
-                dict_cfg = {"keys": cfg}
-            else:
-                dict_cfg = cfg
-            # merge keys and overwrite the config
-            keys = base_cfg.get("keys", []) + dict_cfg.get("keys", [])
-            base_cfg.update(dict_cfg)
-            v[root] = base_cfg
-            if keys:
-                v[root]["keys"] = keys
-            # if not v[root]:
-            #     raise ValueError(f"root[{root}] configuration must not be empty")
-        return v
+    configs: Dict[Hashable, Dict[str, Any]] = Field(min_length=1)
+    """Dataset configurations. The key is the unique name of the dataset, and the value is the dataset config dict."""
 
 
 class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]):
@@ -294,16 +275,13 @@ class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]
         """
         Initialize episode datasets from multiple roots.
         """
-        for root_str, cfg in self.config.roots.items():
-            data_root = Path(root_str)
+        for name, cfg in self.config.configs.items():
+            self.get_logger().debug(f"Initializing dataset '{name}' with config: {cfg}")
+            data_root = Path(cfg["data_root"])
             merge_config = self.config.common.copy()
             merge_config.update(cfg)
             config_cls, dataset_cls = get_config_and_class_type(data_root)
-            dataset_cfg = config_cls(
-                data_root=data_root,
-                **merge_config,
-            )
-            episode_dataset = dataset_cls(dataset_cfg)
+            episode_dataset = dataset_cls(config_cls(**merge_config))
             episode_dataset = to_episodic_sequence(episode_dataset)
             self._episode_datasets.append(episode_dataset)
 
