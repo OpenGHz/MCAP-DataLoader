@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, AfterValidator, Field
 from typing import Dict, Optional, Union, Generic, TypeVar, Annotated
-from collections.abc import Iterable, Callable, Hashable, Mapping
+from collections.abc import Iterable, Callable, Hashable, Mapping, MutableMapping
 from mcap_data_loader.utils.basic import StrEnum, NonIteratorIterable
 from mcap_data_loader.pipelines import NamedPipelines
 from mcap_data_loader.basis.cfgable import ConfigurableBasis
@@ -55,7 +55,7 @@ class DataLoaderConfig(BaseModel, frozen=True):
     by the `splitter`."""
 
 
-class DataLoaders(ConfigurableBasis, Generic[T]):
+class DataLoaders(ConfigurableBasis, Mapping[str, Iterable[T]], Generic[T]):
     """Base class for data loaders."""
 
     def __init__(self, config: DataLoaderConfig):
@@ -93,5 +93,17 @@ class DataLoaders(ConfigurableBasis, Generic[T]):
     def __getitem__(self, key: Union[Stage, str]) -> Iterable[T]:
         return self._data_loaders[key]
 
+    def __iter__(self):
+        return iter(self._data_loaders)
+
+    def __len__(self):
+        return len(self._data_loaders)
+
     def __repr__(self):
         return super().__repr__() + f"(\n{pformat(self._data_loaders)})"
+
+    def __eq__(self, other):
+        return id(self) == id(other)
+
+    def __hash__(self):
+        return id(self)

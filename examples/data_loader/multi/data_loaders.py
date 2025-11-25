@@ -5,7 +5,8 @@ if __name__ == "__main__":
     from mcap_data_loader.utils.hydra_utils import init_hydra_config, hydra_instance
     from pathlib import Path
     from pprint import pprint
-    from typing import Dict, Iterable
+    from typing import Iterable
+    from collections.abc import Mapping
     import logging
 
     logging.basicConfig(level=logging.INFO)
@@ -20,7 +21,8 @@ if __name__ == "__main__":
 
     # the DataLoaders instance is callable to get the inner
     # data loaders dict
-    data_loaders: Dict[str, Iterable] = config["data_loaders"]()
+    data_loaders: Mapping[str, Iterable] = config["data_loaders"]
+    assert isinstance(data_loaders, Mapping), data_loaders
 
     def get_first_batchs():
         batchs = {}

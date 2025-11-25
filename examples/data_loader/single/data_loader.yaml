@@ -1,49 +1,50 @@
-0: # pipeline group 0
-  0:
-    _target_: mcap_data_loader.pipelines.NestedZip
-    depth: 1
-1: 0 # 0 level diverter
+0: # pipe 0
+  _target_: mcap_data_loader.pipelines.NestedZip
+  depth: 1
+1:
+  _target_: mcap_data_loader.callers.Map
+  callable:
+    _target_: mcap_data_loader.pipelines.Pipeline
+    pipeline:
+      0:
+        _target_: mcap_data_loader.pipelines.Merge
+        replace: true
+      1:
+        _target_: mcap_data_loader.pipelines.PairWise
+        gap: 0
+        fill_with_last: true
+      2:
+        _target_: mcap_data_loader.pipelines.Slice
+        step: null
+      3:
+        _target_: mcap_data_loader.callers.Map
+        callable:
+          _target_: mcap_data_loader.callers.DictTuple
+          separate_key: false
+      4:
+        # use curry to make any callable compatible with the pipeline
+        _target_: mcap_data_loader.callers.Curry
+        callable: torchdata.nodes.IterableWrapper
 2:
-  0:
-    _target_: mcap_data_loader.pipelines.Merge
-    replace: true
-  1:
-    _target_: mcap_data_loader.pipelines.PairWise
-    gap: 0
-    fill_with_last: true
-  2:
-    _target_: mcap_data_loader.pipelines.Slice
-    step: null
-  3:
-    _target_: mcap_data_loader.pipelines.Map
-    callable:
-      _target_: mcap_data_loader.callers.DictTuple
-      separate_key: false
-  4:
-    # use curry to make any callable compatible with the pipeline
-    _target_: mcap_data_loader.callers.Curry
-    callable: torchdata.nodes.IterableWrapper
+  _target_: mcap_data_loader.callers.nodes.MultiNodeWeightedSampler
 3:
-  0:
-    _target_: mcap_data_loader.callers.nodes.MultiNodeWeightedSampler
-  1:
-    _target_: mcap_data_loader.callers.nodes.Batcher
-    batch_size: 1
-    drop_last: false
-  2:
-    _target_: mcap_data_loader.callers.nodes.ParallelMapper
-    map_fn:
-      _target_: mcap_data_loader.callers.stack.BatchStacker
-      backend_out: torch
-      dtype: float32
-      stack:
-        current_robot_state:
-          - /follow/arm/joint_state/position
-          - /follow/eef/joint_state/position
-        next_robot_state:
-          - 1/follow/arm/joint_state/position
-          - 1/follow/eef/joint_state/position
-    num_workers: 0
-    snapshot_frequency: 1000
-  3:
-    _target_: mcap_data_loader.callers.nodes.Loader
+  _target_: mcap_data_loader.callers.nodes.Batcher
+  batch_size: 1
+  drop_last: false
+4:
+  _target_: mcap_data_loader.callers.nodes.ParallelMapper
+  map_fn:
+    _target_: mcap_data_loader.callers.stack.BatchStacker
+    backend_out: torch
+    dtype: float32
+    stack:
+      current_robot_state:
+        - /follow/arm/joint_state/position
+        - /follow/eef/joint_state/position
+      next_robot_state:
+        - 1/follow/arm/joint_state/position
+        - 1/follow/eef/joint_state/position
+  num_workers: 0
+  snapshot_frequency: 1000
+5:
+  _target_: mcap_data_loader.callers.nodes.Loader

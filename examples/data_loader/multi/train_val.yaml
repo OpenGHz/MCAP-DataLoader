@@ -10,10 +10,8 @@ pairwise:
   fill_with_last: true
 slice:
   step: null
-batcher: &batcher
-  batch_size: 1
-  drop_last: false
-parallel: &parallel
+batch_size: 1
+parallel:
   num_workers: 0
   snapshot_frequency: 1000
 stacker:
@@ -53,12 +51,16 @@ registry0:
       _target_: mcap_data_loader.callers.nodes.MultiNodeWeightedSampler
     1:
       _target_: mcap_data_loader.callers.nodes.Batcher
-      # nodes do not support `config` field
-      # but we can use YAML anchor to merge configurations
-      <<: *batcher
+      batch_size: ${data_loaders.batch_size}
+      drop_last: false
     2:
       _target_: mcap_data_loader.callers.nodes.ParallelMapper
-      <<: *parallel
+      # original nodes do not support `config` field
+      # and we can not use YAML anchor to merge since it can not
+      # be correctly overridden by Hydra, so we use variable substitution
+      # directly here; but the `callers.nodes` are wrapped to be supported
+      # by `config` field
+      config: ${data_loaders.parallel}
       map_fn:
         _target_: mcap_data_loader.callers.stack.BatchStacker
         config: ${data_loaders.stacker}
@@ -102,9 +104,11 @@ sources:
         strict: false
         rearrange:
           dataset: sort_stem_digital
-      roots:
-        data/example:
-          - /follow/arm/joint_state/position
-          - /follow/eef/joint_state/position
+      configs:
+        raw:
+          data_root: data/example
+          keys:
+            - /follow/arm/joint_state/position
+            - /follow/eef/joint_state/position
     # use the main pipeline
     pipeline: main

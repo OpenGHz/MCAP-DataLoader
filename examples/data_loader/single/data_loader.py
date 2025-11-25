@@ -34,9 +34,9 @@ if __name__ == "__main__":
         ),
     )
     logger.info("Initializing the connector...")
-    connector = Pipeline(PipelineConfig(pipeline=config))
+    pipeline = Pipeline(PipelineConfig(pipeline=config))
     logger.info("Applying the pipeline...")
-    data_loader = connector(datasets)
+    data_loader = pipeline(datasets)
     logger.info(f"Iterating {data_loader}...")
     for sample in data_loader:
         pprint(sample)
