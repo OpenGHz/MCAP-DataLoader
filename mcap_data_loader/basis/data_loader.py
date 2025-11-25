@@ -46,7 +46,7 @@ class DataLoaderConfig(BaseModel, frozen=True):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="ignore")
 
-    sources: Dict[Union[Stage, str], Optional[DataSourceConfig]] = Field(min_length=1)
+    sources: Dict[DataLoaderKey, Optional[DataSourceConfig]] = Field(min_length=1)
     """Configuration for data sources to be loaded. The key is the data loader name,
     which can be of type `Stage` or any string. If a `splitter` is provided
     in the `DataSourceConfig`, the item corresponding to the key will be populated
@@ -55,7 +55,7 @@ class DataLoaderConfig(BaseModel, frozen=True):
     by the `splitter`."""
 
 
-class DataLoaders(ConfigurableBasis, Mapping[str, Iterable[T]], Generic[T]):
+class DataLoaders(ConfigurableBasis, Mapping[DataLoaderKey, Iterable[T]], Generic[T]):
     """Base class for data loaders."""
 
     def __init__(self, config: DataLoaderConfig):
@@ -70,7 +70,7 @@ class DataLoaders(ConfigurableBasis, Mapping[str, Iterable[T]], Generic[T]):
                 continue
             result = self._apply_pipeline(src_cfg.source, src_cfg.pipeline)
             if isinstance(result, Mapping):
-                data_loaders.update(result)
+                data_loaders.update({_to_stage(k): v for k, v in result.items()})
             else:
                 data_loaders[name] = result
         self._data_loaders = data_loaders

@@ -3,6 +3,7 @@
 if __name__ == "__main__":
     from omegaconf import OmegaConf
     from mcap_data_loader.utils.hydra_utils import init_hydra_config, hydra_instance
+    from mcap_data_loader.basis.data_loader import Stage
     from pathlib import Path
     from pprint import pprint
     from typing import Iterable
@@ -27,7 +28,11 @@ if __name__ == "__main__":
     def get_first_batchs():
         batchs = {}
         for stage, data_loader in data_loaders.items():
-            logger.info(f"Iterating data loader for stage: {stage}")
+            logger.info(
+                f"Iterating data loader for stage: {stage} of type {type(stage)}"
+            )
+            if stage == Stage.TRAIN:
+                assert stage is Stage.TRAIN, stage
             for batch in data_loader:
                 batchs[stage] = batch
                 break
