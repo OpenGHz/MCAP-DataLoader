@@ -9,6 +9,7 @@ from typing import (
     Optional,
     Protocol,
     Set,
+    Literal,
     get_origin,
     get_args,
 )
@@ -16,7 +17,13 @@ from typing_extensions import Annotated, TypedDict, runtime_checkable
 from enum import Enum
 from pathlib import Path
 from collections.abc import Iterable, Iterator, Callable, Mapping, Hashable
-from pydantic import BaseModel, PlainValidator, AfterValidator, validate_call
+from pydantic import (
+    BaseModel,
+    PlainValidator,
+    AfterValidator,
+    ConfigDict,
+    validate_call,
+)
 from functools import wraps
 from inspect import isclass
 from logging import getLogger
@@ -185,6 +192,17 @@ if sys.version_info >= (3, 10):
     zip = partial(zip, strict=True)
 else:
     from more_itertools import zip_equal as zip  # noqa: F401
+
+
+class DataBasicConfig(BaseModel, frozen=True):
+    """Basic configuration for data processing."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    device: Optional[str] = None
+    """Device to use for data processing, e.g., 'cpu' or 'cuda'."""
+    dtype: Optional[Union[Literal["auto"], str]] = None
+    """Data type to use for data processing, e.g., 'float32' or 'int64'."""
 
 
 class ReprEnum(Enum):

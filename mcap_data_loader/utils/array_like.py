@@ -91,11 +91,26 @@ def get_ns_name_by_array(array: Array) -> NameSpace:
     return type(array).__module__
 
 
-def get_tensor_device_auto(device: str = "") -> str:
-    """Get the tensor device automatically."""
-    if device:
+def get_tensor_device_auto(device: str = "auto") -> str:
+    """Get the tensor device automatically.
+    Args:
+        device: The device string.
+            If "auto", will try to use CUDA with the current device id if available.
+            If empty, will use the default device of torch.
+            Otherwise, will return the input device string as is.
+    Returns:
+        The device string.
+    """
+    if device == "auto":
+        return (
+            f"cuda:{torch.cuda.current_device()}"
+            if torch.cuda.is_available()
+            else "cpu"
+        )
+    elif device:
         return device
-    return f"cuda:{torch.cuda.current_device()}" if torch.cuda.is_available() else "cpu"
+    else:
+        return str(torch.get_default_device())
 
 
 def get_device_auto(ns: NameSpace, device: str = "") -> str:
@@ -211,10 +226,7 @@ class ArrayTransferMixin:
     def _init_device_out(self, backend_out: str, device_in: str, device_out: str):
         if device_out == "same":
             device_out = str(device_in) if device_in else "cpu"
-        elif not device_out:
-            device_out = get_default_device(backend_out)
         else:
-            device_out = "" if device_out == "auto" else device_out
             device_out = get_device_auto(backend_out, device_out)
         self._device_out = device_out
 
