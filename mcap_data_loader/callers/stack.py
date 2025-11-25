@@ -1,5 +1,5 @@
 from mcap_data_loader.datasets.mcap_dataset import SampleStamped
-from mcap_data_loader.utils.basic import float_range
+from mcap_data_loader.utils.basic import float_range, ListMapping
 from typing import Tuple, List, Dict, Union, Annotated
 from pydantic import PositiveInt, AfterValidator, ConfigDict
 from mcap_data_loader.utils.array_like import (
@@ -15,7 +15,7 @@ DictBatch = Dict[str, Union[Array, List[Array], int]]
 NormStackValue = List[List[str]]
 StackTypeRaw = Dict[
     str,
-    Union[NormStackValue, List[str], Tuple[List[str], List[Union[float, PositiveInt]]]],
+    Union[NormStackValue, ListMapping[str], Tuple[List[str], List[Union[float, PositiveInt]]]],
 ]
 
 
