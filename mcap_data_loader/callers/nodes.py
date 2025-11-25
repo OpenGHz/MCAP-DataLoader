@@ -4,14 +4,15 @@ from pydantic import BaseModel, ConfigDict, NonNegativeInt, NonNegativeFloat
 from torchdata import nodes
 from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 from mcap_data_loader.utils.dict import iterable2dict
+from mcap_data_loader.utils.basic import cfgize
 from toolz import curry
 
 
-"""Make nodes curried."""
-IterableWrapper = curry(nodes.IterableWrapper)
-Batcher = curry(nodes.Batcher)
-ParallelMapper = curry(nodes.ParallelMapper)
-Loader = curry(nodes.Loader)
+"""Make nodes curried and cfgized."""
+IterableWrapper = cfgize(curry(nodes.IterableWrapper))
+Batcher = cfgize(curry(nodes.Batcher))
+ParallelMapper = cfgize(curry(nodes.ParallelMapper))
+Loader = cfgize(curry(nodes.Loader))
 
 
 class MultiNodeWeightedSamplerConfig(BaseModel, frozen=True):
@@ -62,12 +63,15 @@ class MultiNodeWeightedSampler(CallerBasis):
 
 
 if __name__ == "__main__":
-    from collections import Counter
+    # from collections import Counter
 
-    wrapper = [IterableWrapper(range(10)) for _ in range(2)]
-    sampler = MultiNodeWeightedSampler(MultiNodeWeightedSamplerConfig())
-    sampled = sampler(wrapper)
+    # wrapper = [IterableWrapper(range(10)) for _ in range(2)]
+    # sampler = MultiNodeWeightedSampler(MultiNodeWeightedSamplerConfig())
+    # sampled = sampler(wrapper)
 
-    counter = Counter(sampled)
-    most_common = counter.most_common()
-    assert most_common[0][1] == most_common[-1][1]
+    # counter = Counter(sampled)
+    # most_common = counter.most_common()
+    # assert most_common[0][1] == most_common[-1][1]
+
+    batcher = Batcher(config={"batch_size": 4}, drop_last=False)
+    print(list(batcher([])))

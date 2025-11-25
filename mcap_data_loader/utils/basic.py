@@ -554,6 +554,16 @@ def try_to_get_attr(obj: Any, attrs: List[str], default: Any = object) -> Any:
     raise AttributeError(f"None of the attributes {attrs} found in {obj}.")
 
 
+def cfgize(func):
+    """Decorator to convert a callable into one that accepts a config and additional arguments."""
+
+    @wraps(func)
+    def wrapper(config: Optional[Dict[str, Any]] = None, *args, **kwargs):
+        return func(*args, **(config or {}), **kwargs)
+
+    return wrapper
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
