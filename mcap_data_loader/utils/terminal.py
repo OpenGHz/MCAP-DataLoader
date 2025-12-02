@@ -84,10 +84,28 @@ def format_log_message(
     return formatter.format(record)
 
 
+class FormatTerminalMessage:
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+        self.formatter = get_effective_terminal_formatter(logger)
+
+    def format(
+        self,
+        message: str,
+        level: int = logging.INFO,
+        args: tuple = (),
+    ) -> str:
+        return format_log_message(
+            self.formatter, self.logger.name, message, level, args
+        )
+
+
 if __name__ == "__main__":
     from logging import getLogger, basicConfig
 
     basicConfig(level=logging.INFO)
+    logging._nameToLevel
+    logging._levelToName
 
     logger = getLogger("terminal_test")
     logger.info("This is normal")
@@ -104,3 +122,10 @@ if __name__ == "__main__":
         formatter, logger.name, level=logging.ERROR, message="Something went wrong!"
     )
     print(msg)  # [ERROR] Something went wrong!
+
+    ftm = FormatTerminalMessage(logger)
+    print(
+        ftm.format(
+            "Formatted message via FormatTerminalMessage class.", logging.WARNING
+        )
+    )
