@@ -32,8 +32,6 @@ class McapDatasetConfig(IterableDatasetConfig):
     MCAP dataset configuration.
     """
 
-    model_config = ConfigDict(validate_assignment=True)
-
     keys: SetMapping[str] = set()
     topics: Optional[SetMapping[str]] = set()
     attachments: Optional[SetMapping[str]] = set()
@@ -90,13 +88,14 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         """
         if self.reader is None:
             self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
+        config = self.config
         samples_iter = self.reader.iter_samples(
-            self.config.keys,
-            self.config.topics,
-            self.config.attachments,
-            self.config.rearrange.episode is RearrangeType.REVERSE,
-            self.config.strict,
-            self.config.media_configs,
+            config.keys,
+            config.topics,
+            config.attachments,
+            config.rearrange.episode is RearrangeType.REVERSE,
+            config.strict,
+            config.media_configs,
         )
         if self.config.with_timestamp:
             yield from samples_iter
@@ -178,6 +177,9 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         self._sample_ds_cfg = self.config.model_dump(
             exclude={"data_root", "media_configs"}
         )
+        self._sample_ds_cfg["rearrange"] = config.rearrange.model_copy(
+            update={"dataset": RearrangeType.NONE}
+        )
 
     def read_stream(self):
         """
@@ -189,8 +191,9 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
 
     def _create_sample_dataset(self, file_path: str) -> McapFlatBuffersSampleDataset:
         return McapFlatBuffersSampleDataset(
-            McapDatasetConfig(
+            McapFlatBuffersSampleDatasetConfig(
                 data_root=file_path,
+                # should not be a dict type
                 media_configs=self.config.media_configs,
                 **self._sample_ds_cfg,
             )
