@@ -93,12 +93,13 @@ def register_named_pipelines(
 ) -> None:
     """Register named pipelines into the given named_pipelines dict."""
     keys = named_pipelines.keys() | kwargs.keys()
-    getLogger("register_named_pipelines").info(f"Registering: {list(keys)}")
+    logger = getLogger("register_named_pipelines")
+    logger.info(f"Registering: {list(keys)}")
     if keys & NamedPipelines.keys():
-        raise ValueError(
+        logger.warning(
             f"Key conflict between existing: "
             f"{list(NamedPipelines.keys())} and new: "
-            f"{list(keys)}."
+            f"{list(keys)}. Overwriting existing pipelines."
         )
     elif None in keys:
         raise ValueError("Pipeline name cannot be None.")

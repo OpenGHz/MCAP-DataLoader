@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Tuple, Literal, Generic, TypeVar, List, Dict
 from collections.abc import Callable, Iterable
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from mcap_data_loader.basis.cfgable import ConfigurableBasis
 from mcap_data_loader.utils.basic import NonIteratorIterable
 
@@ -23,11 +23,15 @@ class CallerBasis(ConfigurableBasis, Generic[ReturnT]):
 
 
 class HorizonConfig(BaseModel, frozen=True):
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
+
     input: int = 1
     output: int = 1
 
 
 class MockCallerConfig(BaseModel, frozen=True):
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
+
     output_type: Literal["ndarray", "Tensor", "list"] = "list"
     horizon: HorizonConfig = HorizonConfig()
 
@@ -59,6 +63,10 @@ class MockCaller(CallerBasis[ReturnT]):
 
 
 class CallerEnsembleConfig(BaseModel, Generic[CallT], frozen=True):
+    model_config = ConfigDict(
+        validate_assignment=True, extra="forbid", arbitrary_types_allowed=True
+    )
+
     callables: List[CallT] = Field(min_length=1)
     """Tuple of callers to be called in ensemble."""
 
