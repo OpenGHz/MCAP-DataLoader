@@ -42,6 +42,8 @@ class MultiCallerConfig(CallerEnsembleConfig):
     """The container type for scalar outputs (int or float). Otherwise, the output
     type will be used if it is array-like. If the output is not array-like, a list
     container will be used."""
+    axis: Optional[int] = None
+    """The axis to concatenate along. If None, a new axis will be created at 0."""
 
 
 class MultiCaller(CallerEnsembleBasis[MutableSequence[T]]):
@@ -72,9 +74,13 @@ class MultiCaller(CallerEnsembleBasis[MutableSequence[T]]):
             else:
                 info_set.add(ArrayInfo.from_array(output))
         if len(info_set) > 1:
-            print(f"The outputs of the callables have different array info: {info_set}")
+            self.get_logger().warning(
+                f"The outputs of the callables have different array info: {info_set}"
+            )
         num_calls = len(self._callables)
         scalar_cfg = self.config.scalar_container
+        self._finish = lambda: None
+        self._set_output = self._set_output_left
         if len(info_set) > 1 or (has_scalar and scalar_cfg.xp == "list"):
             self._p_outputs = [None] * num_calls
         else:
@@ -86,22 +92,37 @@ class MultiCaller(CallerEnsembleBasis[MutableSequence[T]]):
                     device=scalar_cfg.device,
                 )
                 xp = get_namespace_by_name(scalar_cfg.xp)
+                dtype = (
+                    getattr(xp, info.dtype)
+                    if info.dtype
+                    else get_default_dtype(info.ns)
+                )
             else:
                 info: ArrayInfo = info_set.pop()
                 xp = array_namespace(output)
-            self._p_outputs = xp.zeros(
-                (num_calls,) + info.shape,
-                dtype=getattr(xp, info.dtype)
-                if info.dtype
-                else get_default_dtype(info.ns),
-                device=info.device,
-            )
+                dtype = info.dtype
+            self._xp = xp
+            if config.axis is None or has_scalar:
+                self._p_outputs = xp.zeros(
+                    (num_calls,) + info.shape, dtype=dtype, device=info.device
+                )
+            else:
+                self._set_output = self._set_output_concat
+                self._finish = self._finish_concat
+
+    def _set_output_left(self, index: int, value: T):
+        self._p_outputs[index] = value
+
+    def _set_output_concat(self, index: int, value: T):
+        self._p_list.append(value)
+
+    def _finish_concat(self):
+        self._p_outputs = self._xp.concatenate(self._p_list, axis=self.config.axis)
 
     def _call_in_sequence(self, *args, **kwds):
         for i, func in enumerate(self._callables):
             output = func(*args, **kwds)
-            self._p_outputs[i] = output
-        return self._p_outputs
+            self._set_output(i, output)
 
     def _call_in_parallel(self, *args, **kwds):
         future_to_index = {
@@ -110,18 +131,21 @@ class MultiCaller(CallerEnsembleBasis[MutableSequence[T]]):
         }
         for future in as_completed(future_to_index):
             idx = future_to_index[future]
-            self._p_outputs[idx] = future.result()
-        return self._p_outputs
+            self._set_output(idx, future.result())
 
     def __call__(self, *args, **kwds):
         """Call all the callables in sequence and aggregate their outputs."""
+        self._p_list = []
         if self._first_call:
             self._first_setup(*args, **kwds)
             self._first_call = False
-        return self._call(*args, **kwds)
+        self._call(*args, **kwds)
+        self._finish()
+        return self._p_outputs
 
 
 if __name__ == "__main__":
+    """Test for scalar"""
     callables = [
         lambda x: x + 1,
         lambda x: x * 2,
@@ -154,4 +178,24 @@ if __name__ == "__main__":
         config=MultiCallerConfig(callables=callables, num_workers=1)
     )
     result_no_parallel = multi_caller_no_parallel(3)
-    print(result_no_parallel)  # Expected output: [4, 6, 9]
+    print(f"{result_no_parallel=}")  # Expected output: [4, 6, 9]
+
+    """Test for array-like with axis == None and axis == 1"""
+
+    import numpy as np
+    import torch
+
+    xp = torch  # np or torch
+    device = "cpu" if xp is np else torch.device("cuda")
+    callables = [
+        lambda x: xp.ones((1, 1, 2), device=device) * (x + 1),
+        lambda x: xp.ones((1, 1, 2), device=device) * x * 2,
+        lambda x: xp.ones((1, 1, 2), device=device) * x**2,
+    ]
+    for axis in [None, 1]:
+        config = MultiCallerConfig(callables=callables, axis=axis)
+        multi_caller = MultiCaller(config)
+        result = multi_caller(3)
+        print(f"{result=}")
+        print(f"{result.shape=}")
+        print(ArrayInfo.from_array(result))
