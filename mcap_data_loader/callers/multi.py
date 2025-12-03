@@ -102,7 +102,7 @@ class MultiCaller(CallerEnsembleBasis[MutableSequence[T]]):
                 xp = array_namespace(output)
                 dtype = info.dtype
             self._xp = xp
-            if config.axis is None or has_scalar:
+            if self.config.axis is None or has_scalar:
                 self._p_outputs = xp.zeros(
                     (num_calls,) + info.shape, dtype=dtype, device=info.device
                 )
