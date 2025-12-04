@@ -158,6 +158,31 @@ def get_default_device(ns: NameSpace) -> Any:
         raise ValueError(f"Unsupported namespace '{ns}' for default device retrieval.")
 
 
+def convert_str_dtype(ns: str, dtype: str) -> Any:
+    """Convert a string data type to the corresponding data type in the given namespace."""
+    if ns == "numpy":
+        return getattr(np, dtype)
+    elif ns == "torch":
+        return getattr(torch, dtype)
+    else:
+        raise ValueError(f"Unsupported namespace '{ns}' for dtype conversion.")
+
+
+def tensor_to_ndarray(
+    tensor: Tensor,
+    transpose: Tuple[int, ...],
+    scale: float = 1.0,
+    dtype: Union[np.dtype, str] = None,
+) -> NDArray:
+    """Convert a torch Tensor to a numpy ndarray."""
+    arr = tensor.cpu().numpy() * scale
+    if transpose:
+        arr = arr.transpose(*transpose)
+    if dtype is not None:
+        return arr.astype(getattr(np, dtype) if isinstance(dtype, str) else dtype)
+    return arr
+
+
 InputBackend = Literal["torch", "numpy", "auto"]
 AllBackend = Union[InputBackend, Literal["list"]]
 
