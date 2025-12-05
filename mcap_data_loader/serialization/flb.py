@@ -247,11 +247,7 @@ class McapFlatBuffersWriter:
     def add_float_array(
         self, topic: str, data: Iterable[float], publish_time: int, log_time: int
     ):
-        FloatArray.StartValuesVector(self.builder, len(data))
-        # TODO: optimize performance
-        for d in reversed(data):
-            self.builder.PrependFloat32(d)
-        vec_data = self.builder.EndVector()
+        vec_data = self.builder.CreateNumpyVector(np.asarray(data, dtype=np.float32))
         FloatArray.Start(self.builder)
         FloatArray.AddValues(self.builder, vec_data)
         end_data = FloatArray.End(self.builder)

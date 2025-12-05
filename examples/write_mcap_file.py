@@ -4,6 +4,10 @@ from mcap_data_loader.serialization.flb import (
 )
 from mcap_data_loader.utils.mcap_utils import McapCLI
 from time import time_ns
+from mcap_data_loader.datasets.mcap_dataset import (
+    McapFlatBuffersSampleDataset,
+    McapFlatBuffersSampleDatasetConfig,
+)
 
 
 file_path = "data/written/0.mcap"
@@ -20,3 +24,10 @@ assert not mcap_cli.is_mcap_corrupted(file_path)
 # Show the file info
 output = mcap_cli.run_command(f"info {file_path}")
 print(mcap_cli.check_cmd_output(output))
+
+dataset = McapFlatBuffersSampleDataset(
+    McapFlatBuffersSampleDatasetConfig(data_root=file_path, keys=["/image/features"])
+)
+
+for sample in dataset:
+    print(sample)
