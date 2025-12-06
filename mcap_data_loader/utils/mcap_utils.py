@@ -39,18 +39,31 @@ class McapCLI(PyMCAP):
         media_type: str,
         data: Union[str, bytes],
     ):
-        """Add attachment to the MCAP file."""
+        """Add attachment to the MCAP file.
+        Args:
+            file_path (str): Path to the MCAP file.
+            create_time (int): Creation time in nanoseconds.
+            log_time (int): Log time in nanoseconds.
+            name (str): Name of the attachment.
+            media_type (str): Media type of the attachment. See MediaType enum.
+            data (str | bytes): Data to be added as attachment. If str, it is treated as file path.
+        Returns:
+            str: Standard output from the MCAP CLI command.
+        """
         use_tmp_file = False
         if isinstance(data, bytes):
             use_tmp_file = True
             with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
                 tmp_file.write(data)
                 tmp_file.flush()
-                data = tmp_file.name
+                file = tmp_file.name
+        else:
+            file = data
         output = self.run_command(
-            f"add attachment {file_path} -n {name} "
-            f"--content-type {media_type} --creation-time {create_time} "
-            f"--log-time {log_time} -f {data}"
+            f"add attachment {file_path} -n {name} --content-type {media_type} "
+            # x-time has bugs in current mcap CLI
+            # f"--log-time {log_time} --creation-time {create_time} "
+            f"-f {file}"
         )
         if use_tmp_file:
             tmp_file.close()
@@ -220,11 +233,15 @@ class McapTool(McapHandlerBasis):
             json.dumps(log_stamps).encode(),
         )
 
-    def add_topic_statistics_attachment(self, statistics: dict):
-        self.writer.add_attachment(
+    @staticmethod
+    def topic_statistics_attachment_args(statistics: dict):
+        return (
             time_ns(),
             time_ns(),
             "topic_statistics",
             MediaType.APPLICATION_JSON,
             json.dumps(statistics, cls=ArrayEncoder).encode(),
         )
+
+    def add_topic_statistics_attachment(self, statistics: dict):
+        self.writer.add_attachment(*self.topic_statistics_attachment_args(statistics))

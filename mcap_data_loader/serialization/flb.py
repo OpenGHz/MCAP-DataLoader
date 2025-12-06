@@ -556,6 +556,10 @@ class McapFlatBuffersReader:
     def get_logger(cls) -> logging.Logger:
         return logging.getLogger(cls.__name__)
 
+    def has_topic_statistics(self) -> bool:
+        """Check if the MCAP file has topic statistics attachment."""
+        return "topic_statistics" in self.all_attachment_names()
+
     def compute_topic_statistics(self) -> Dict[str, Statistics]:
         """Compute statistics for each topic in the MCAP file."""
         if self.reader is None:
