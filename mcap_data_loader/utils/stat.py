@@ -12,7 +12,7 @@ class StatisticsBasis(TypedDict):
 
 class Statistics(StatisticsBasis):
     mean: NDArray[np.floating]
-    sd: NDArray[np.floating]
+    std: NDArray[np.floating]
 
 
 StatGroup = Tuple[int, NDArray[np.floating], NDArray[np.floating]]
@@ -81,7 +81,7 @@ def combine_groups(groups: List[Statistics]) -> Statistics:
     combined_mean = tx / tn
     variance = (txx - (tx**2) / tn) / (tn - 1)
     combined_sd = np.sqrt(np.maximum(variance, 0.0))
-    return {"n": tn, "sum": tx, "sum_sq": txx, "mean": combined_mean, "sd": combined_sd}
+    return {"n": tn, "sum": tx, "sum_sq": txx, "mean": combined_mean, "std": combined_sd}
 
 
 def combine_two_groups_cochrane(

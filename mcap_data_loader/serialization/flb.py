@@ -596,6 +596,7 @@ class McapFlatBuffersReader:
                     stat["std"] = (stat["sum_sq"] / cnt - stat["mean"] ** 2) ** 0.5
                     stat["n"] = cnt
                 return stats
+        self.get_logger().info("Computing topic statistics...")
         return self.compute_topic_statistics()
 
     @cache
