@@ -7,11 +7,13 @@ from collections.abc import Generator, Iterable
 from foxglove_schemas_flatbuffer import CompressedImage, RawImage, Time, get_schema
 from importlib.resources import read_binary
 from enum import Enum
-from functools import cache
+from functools import cache, cached_property
 from mcap_data_loader.schemas.airbot_fbs import FloatArray
 from mcap_data_loader.utils.basic import zip, DictDataStamped
 from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig
+from mcap_data_loader.utils.stat import StatisticsBasis, Statistics
 from pathlib import Path
+from collections import defaultdict
 import json
 import numpy as np
 import flatbuffers
@@ -54,6 +56,7 @@ class McapFlatBuffersWriter:
                 np.uint8: "8UC3",
             },
         }
+        self._stat = defaultdict(lambda: {"sum": 0, "sum_sq": 0})
 
     def set_writer(self, writer: Writer, start: bool = False):
         """Set the MCAP writer for this instance."""
@@ -92,6 +95,7 @@ class McapFlatBuffersWriter:
         self._smapping.clear()
         self._cmapping.clear()
         self.builder.Clear()
+        self._stat.clear()
 
     def get_writer(self) -> Optional[Writer]:
         return self._writer
@@ -247,19 +251,24 @@ class McapFlatBuffersWriter:
     def add_float_array(
         self, topic: str, data: Iterable[float], publish_time: int, log_time: int
     ):
-        vec_data = self.builder.CreateNumpyVector(np.asarray(data, dtype=np.float32))
+        arr = np.asarray(data, dtype=np.float32)
+        self._stat[topic]["sum"] += arr
+        self._stat[topic]["sum_sq"] += arr**2
+        vec_data = self.builder.CreateNumpyVector(arr)
         FloatArray.Start(self.builder)
         FloatArray.AddValues(self.builder, vec_data)
         end_data = FloatArray.End(self.builder)
         self.builder.Finish(end_data)
         msg_data = self.builder.Output()
         self._writer.add_message(
-            channel_id=self._cmapping[topic],
-            data=bytes(msg_data),
-            publish_time=publish_time,
-            log_time=log_time,
+            self._cmapping[topic], log_time, bytes(msg_data), publish_time
         )
         self.builder.Clear()
+
+    @property
+    def topic_statistics(self) -> Dict[str, StatisticsBasis]:
+        """The accumulated statistics of topics (supported schema: FloatArray)."""
+        return self._stat
 
     def _get_image_encoding(self, image: np.ndarray) -> str:
         """Get the image encoding string for a given channel and dtype."""
@@ -277,9 +286,9 @@ class McapFlatBuffersReader:
         self.file_io = file
         self.reader = make_reader(file)
         self._decoders = {
-            "airbot_fbs.FloatArray": self._decode_array,
-            "foxglove.RawImage": self._decode_raw_image,
-            "foxglove.CompressedImage": self._decode_compressed_image,
+            FlatBuffersSchemas.FLOAT_ARRAY.value[0]: self._decode_array,
+            FlatBuffersSchemas.RAW_IMAGE.value[0]: self._decode_raw_image,
+            FlatBuffersSchemas.COMPRESSED_IMAGE.value[0]: self._decode_compressed_image,
         }
         self._jpeg = TurboJPEG()
 
@@ -506,6 +515,7 @@ class McapFlatBuffersReader:
                 raise ValueError(error) from e
             self.get_logger().warning(error)
 
+    @cache
     def topic_message_counts(self) -> Dict[str, int]:
         """Get the message count for each topic in the MCAP file."""
         topic_msg_count = {}
@@ -545,6 +555,44 @@ class McapFlatBuffersReader:
     @classmethod
     def get_logger(cls) -> logging.Logger:
         return logging.getLogger(cls.__name__)
+
+    def compute_topic_statistics(self) -> Dict[str, Statistics]:
+        """Compute statistics for each topic in the MCAP file."""
+        if self.reader is None:
+            raise ValueError("Reader is not initialized.")
+        stat_schemas = (FlatBuffersSchemas.FLOAT_ARRAY.value[0],)
+        stat_topics = set()
+        for schema, channel, message in self.reader.iter_messages():
+            if schema.name in stat_schemas:
+                stat_topics.add(channel.topic)
+        stats = defaultdict(lambda: {"sum": 0, "sum_sq": 0})
+        for sample in self.iter_message_samples(stat_topics):
+            for topic in stat_topics:
+                data = sample[topic]["data"]
+                stats[topic]["sum"] += data
+                stats[topic]["sum_sq"] += data**2
+        for topic, stat in stats.items():
+            cnt = self.topic_message_counts()[topic]
+            stat["mean"] = stat["sum"] / cnt
+            stat["std"] = (stat["sum_sq"] / cnt - stat["mean"] ** 2) ** 0.5
+            stat["n"] = cnt
+        return stats
+
+    @cached_property
+    def topic_statistics(self) -> Dict[str, Statistics]:
+        """Get the topic statistics attachment from the MCAP file."""
+        for attach in self.reader.iter_attachments():
+            if attach.name == "topic_statistics":
+                stats: Dict[str, StatisticsBasis] = json.loads(attach.data)
+                for topic, stat in stats.items():
+                    cnt = self.topic_message_counts()[topic]
+                    for name, value in stat.items():
+                        stat[name] = np.asarray(value)
+                    stat["mean"] = stat["sum"] / cnt
+                    stat["std"] = (stat["sum_sq"] / cnt - stat["mean"] ** 2) ** 0.5
+                    stat["n"] = cnt
+                return stats
+        return self.compute_topic_statistics()
 
     @cache
     def __len__(self) -> int:

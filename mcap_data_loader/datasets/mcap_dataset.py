@@ -3,8 +3,9 @@ import random
 from pathlib import Path
 from typing import List, Optional, Dict, Union, Any
 from collections.abc import Sequence, Hashable
+from collections import defaultdict
 from typing_extensions import Self
-from functools import cached_property
+from functools import cached_property, cache
 from pydantic import field_validator, ConfigDict, BaseModel, Field
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
@@ -13,6 +14,7 @@ from mcap_data_loader.utils.basic import (
     DictDataStamped,
     SetMapping,
 )
+from mcap_data_loader.utils.stat import combine_groups
 from mcap_data_loader.datasets.dataset import (
     IterableDatasetABC,
     IterableDatasetConfig,
@@ -86,8 +88,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         """
         Read MCAP file and return message stream.
         """
-        if self.reader is None:
-            self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
+        self._ensure_reader()
         config = self.config
         samples_iter = self.reader.iter_samples(
             config.keys,
@@ -106,6 +107,14 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     def close(self):
         if self.reader is not None:
             return self.reader.close()
+
+    def statistics(self):
+        self._ensure_reader()
+        return self.reader.topic_statistics
+
+    def _ensure_reader(self):
+        if self.reader is None:
+            self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
 
     def __len__(self) -> int:
         """Get the total number of messages in the MCAP file."""
@@ -198,6 +207,14 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
                 **self._sample_ds_cfg,
             )
         )
+
+    @cache
+    def statistics(self):
+        groups = defaultdict(list)
+        for sd in self.read_stream():
+            for topic, stat in sd.statistics().items():
+                groups[topic].append(stat)
+        return {topic: combine_groups(stats) for topic, stats in groups.items()}
 
     @property
     def all_files(self) -> List[str]:

@@ -186,6 +186,12 @@ class IterableDatasetABC(InitConfigABCMixin, Generic[T]):
     def close(self) -> None:
         """Close the dataset and release any resources if needed."""
 
+    def statistics(self) -> dict:
+        """Get dataset statistics if available."""
+        raise NotImplementedError(
+            f"Statistics method not implemented for {self.__class__.__name__}."
+        )
+
     def __getitem__(self, index: int) -> T:
         """
         Get a specific sample by index.

@@ -201,6 +201,13 @@ class MediaType(StrEnum):
     APPLICATION_OCTET_STREAM = "application/octet-stream"
 
 
+class ArrayEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "tolist"):
+            return obj.tolist()
+        return super().default(obj)
+
+
 class McapTool(McapHandlerBasis):
     """Utility class for MCAP file operations."""
 
@@ -210,5 +217,14 @@ class McapTool(McapHandlerBasis):
             time_ns(),
             "log_stamps",
             MediaType.APPLICATION_JSON,
-            json.dumps(log_stamps).encode("utf-8"),
+            json.dumps(log_stamps).encode(),
+        )
+
+    def add_topic_statistics_attachment(self, statistics: dict):
+        self.writer.add_attachment(
+            time_ns(),
+            time_ns(),
+            "topic_statistics",
+            MediaType.APPLICATION_JSON,
+            json.dumps(statistics, cls=ArrayEncoder).encode(),
         )
