@@ -1,16 +1,21 @@
-if __name__ == "__main__":
+"""Example of creating multi-episode datasets."""
+
+from pprint import pprint
+
+
+def create_multi_datasets_example():
+    """Example of creating multi-episode datasets."""
     from mcap_data_loader.datasets.mcap_dataset import (
         McapMultiEpisodeDatasets,
         McapMultiEpisodeDatasetsConfig,
         DataRearrangeConfig,
         RearrangeType,
     )
-    from pprint import pprint
 
     config = McapMultiEpisodeDatasetsConfig(
         common={
             "strict": False,
-            "rearrange": DataRearrangeConfig(episode=RearrangeType.SORT_STEM_DIGITAL),
+            "rearrange": DataRearrangeConfig(dataset=RearrangeType.SORT_STEM_DIGITAL),
         },
         configs={
             0: {
@@ -28,6 +33,12 @@ if __name__ == "__main__":
     )
     pprint(config.model_dump())
     dataset = McapMultiEpisodeDatasets(config)
+    return dataset
+
+
+if __name__ == "__main__":
+    dataset = create_multi_datasets_example()
+    pprint(dataset.statistics())
     for idx, episodes in enumerate(dataset):
         for episode in episodes:
             pprint(

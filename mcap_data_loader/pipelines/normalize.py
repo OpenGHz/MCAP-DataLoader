@@ -1,8 +1,15 @@
 from pydantic import BaseModel, ConfigDict
 from weakref import WeakValueDictionary
 from mcap_data_loader.utils.array_like import Array
-from mcap_data_loader.utils.basic import ForceSetAttr
-from mcap_data_loader.utils.extra_itertools import recursive_map_reusable
+from mcap_data_loader.utils.basic import (
+    ForceSetAttr,
+    DictDataStamped,
+    copy_dict_data_stamped,
+)
+from mcap_data_loader.utils.extra_itertools import (
+    recursive_map_reusable,
+    first_recursive,
+)
 from mcap_data_loader.pipelines.basis import Pipe, T
 from typing import Optional, Dict, Set
 from collections.abc import Mapping
@@ -39,9 +46,11 @@ class StandardizeConfig(BaseModel, frozen=True):
     < 0 means recursion until a `Mapping` is encountered."""
     replace: bool = False
     """Whether to replace the original values with standardized values."""
+    strict: bool = True
+    """Whether to raise an error if a specified key is not found in the data item."""
 
 
-class Standardize(Pipe[T]):
+class Standardize(Pipe[DictDataStamped]):
     _configs: WeakValueDictionary[str, StandardizeConfig] = WeakValueDictionary()
 
     def __init__(self, config: StandardizeConfig) -> None:
@@ -76,21 +85,22 @@ class Standardize(Pipe[T]):
                 "The `statistics` field must be provided in the config or the iterable must have a `statistics` method."
             )
 
-    def transform(self, item: dict, inverse: bool) -> dict:
+    def transform(self, item: DictDataStamped, inverse: bool) -> DictDataStamped:
         """Transform a single data item by standardizing or inverse standardizing specified keys."""
         statistics = self._statistics
-        new_item = item if self._replace else item.copy()
+        new_item = item if self._replace else copy_dict_data_stamped(item)
         for key in self._used_keys:
             stat = statistics[key]
             mean = stat.mean
             std = stat.std
+            value = item[key]["data"]
             if inverse:
-                new_item[key] = item[key] * std + mean
+                new_item[key]["data"] = value * std + mean
             else:
-                new_item[key] = (item[key] - mean) / std
+                new_item[key]["data"] = (value - mean) / std
         return new_item
 
-    def _transform(self, item: dict) -> dict:
+    def _transform(self, item: DictDataStamped) -> DictDataStamped:
         return self.transform(item, self.config.inverse)
 
     def on_call(self, iterable):
@@ -105,6 +115,15 @@ class Standardize(Pipe[T]):
                 )
             self._used_keys = (config.include or all_keys) - config.exclude
             self.get_logger().info("Keys to be standardized: %s", self._used_keys)
+            first_item: dict = first_recursive(iterable, config.depth + 1)
+            if not config.strict:
+                self._used_keys &= first_item.keys()
+            else:
+                missing_keys = self._used_keys - first_item.keys()
+                if missing_keys:
+                    raise KeyError(
+                        f"Keys {missing_keys} specified for standardization are not found in the data item."
+                    )
         return recursive_map_reusable(
             self._transform, iterable, self.config.depth, base_type=Mapping
         )
@@ -142,6 +161,13 @@ if __name__ == "__main__":
             "d": np.array(8.0),
         },
     ]
+    for item in data:
+        for key, value in item.items():
+            item[key] = {"data": value}
+    print("---- Original Data ----")
+    for item in data:
+        pprint(item)
+    # Standardization
     standardized = pipeline(data)
     print("---- Standardized Data ----")
     for item in standardized:

@@ -129,7 +129,7 @@ class DataRearrangeConfig(BaseModel, frozen=True):
     episode: RearrangeType = RearrangeType.NONE
     """Rearrangement strategy for each episode (e.g. reverse a trajectory)."""
     dataset: RearrangeType = RearrangeType.NONE
-    """Rearrangement strategy for the dataset."""
+    """Rearrangement strategy for the dataset (e.g. sort episodes)."""
     seed: Optional[int] = None
     """Random seed for shuffling, if applicable."""
 

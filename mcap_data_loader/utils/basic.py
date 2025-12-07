@@ -28,6 +28,7 @@ from functools import wraps
 from inspect import isclass
 from logging import getLogger
 from contextlib import suppress
+from copy import deepcopy
 import hashlib
 import operator
 import time
@@ -186,6 +187,20 @@ class DataStamped(TypedDict, Generic[T]):
 
 
 DictDataStamped = Dict[str, DataStamped[T]]
+
+
+def copy_dict_data_stamped(data: DictDataStamped[T], deep: bool = False):
+    """Copy a DictDataStamped object.
+    Args:
+        data (DictDataStamped[T]): The DictDataStamped object to copy.
+        deep (bool, optional): Whether to perform a deep copy. Defaults to False.
+    Returns:
+        DictDataStamped[T]: The copied DictDataStamped object.
+    """
+    if deep:
+        return deepcopy(data)
+    else:
+        return {key: value.copy() for key, value in data.items()}
 
 
 if sys.version_info >= (3, 10):
