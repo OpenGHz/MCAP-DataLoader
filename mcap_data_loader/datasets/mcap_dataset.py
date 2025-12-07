@@ -3,7 +3,6 @@ import random
 from pathlib import Path
 from typing import List, Optional, Dict, Union, Any
 from collections.abc import Sequence, Hashable
-from collections import defaultdict
 from typing_extensions import Self
 from functools import cached_property, cache
 from pydantic import field_validator, ConfigDict, BaseModel, Field
@@ -14,7 +13,7 @@ from mcap_data_loader.utils.basic import (
     DictDataStamped,
     SetMapping,
 )
-from mcap_data_loader.utils.stat import combine_groups
+from mcap_data_loader.utils.stat import combine_dict_groups
 from mcap_data_loader.datasets.dataset import (
     IterableDatasetABC,
     IterableDatasetConfig,
@@ -210,11 +209,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
 
     @cache
     def statistics(self):
-        groups = defaultdict(list)
-        for sd in self.read_stream():
-            for topic, stat in sd.statistics().items():
-                groups[topic].append(stat)
-        return {topic: combine_groups(stats) for topic, stats in groups.items()}
+        return combine_dict_groups(ds.statistics() for ds in self.read_stream())
 
     @property
     def all_files(self) -> List[str]:
@@ -309,7 +304,10 @@ class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]
         """
         Read MCAP files from multiple roots and return episodic message stream.
         """
-        yield from self._episode_datasets
+        return iter(self._episode_datasets)
+
+    def statistics(self):
+        return combine_dict_groups(ds.statistics() for ds in self.read_stream())
 
     def __len__(self) -> int:
         """Get the total number of episodes across all dataset roots."""

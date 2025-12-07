@@ -9,13 +9,13 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from torch import Tensor
 
-    Array = Union[NDArray, Tensor]
 else:
     from typing import MutableSequence
 
-    Array = MutableSequence
     Tensor = Any
     NDArray = Any
+
+Array = Union[NDArray, Tensor]
 
 
 try:

@@ -1,7 +1,9 @@
 import numpy as np
 from typing import List, Tuple
+from collections.abc import Iterable
 from numpy.typing import NDArray
-from typing import TypedDict
+from typing import TypedDict, Dict
+from collections import defaultdict
 
 
 class StatisticsBasis(TypedDict):
@@ -18,14 +20,12 @@ class Statistics(StatisticsBasis):
 StatGroup = Tuple[int, NDArray[np.floating], NDArray[np.floating]]
 
 
-def combine_groups_decomposition(groups: List[StatGroup]) -> StatGroup:
+def combine_groups_decomposition(groups: Iterable[StatGroup]) -> StatGroup:
     """
     方法1：基于 Σx 和 Σx² 的分解法（支持多维/向量化）
     groups: list of (n, mean_array, sd_array)
     returns: (combined_n, combined_mean_array, combined_sd_array)
     """
-    if not groups:
-        raise ValueError("Group list is empty.")
 
     tx = 0  # Σx over all groups
     txx = 0  # Σx² over all groups
@@ -35,21 +35,21 @@ def combine_groups_decomposition(groups: List[StatGroup]) -> StatGroup:
         if n < 1:
             raise ValueError("At least one sample is required in each group.")
 
-        sigma_x = mean * n  # vectorized
+        # Σx = mean * n
+        sigma_x = mean * n
         # Σx² = (n - 1) * SD² + (Σx)² / n
         sigma_x2 = (sd**2) * (n - 1) + (sigma_x**2) / n
         tx += sigma_x
         txx += sigma_x2
         tn += n
 
-    if tn <= 1:
-        raise ValueError("Total sample size must be > 1.")
+    if tn == 0:
+        raise ValueError("Group is empty.")
 
     combined_mean = tx / tn
-    # variance = (txx - tx^2 / tn) / (tn - 1)
-    variance = (txx - (tx**2) / tn) / (tn - 1)
-    variance = np.maximum(variance, 0.0)
-    combined_sd = np.sqrt(variance)
+    combined_sd = (
+        np.sqrt(np.maximum((txx - (tx**2) / tn) / (tn - 1), 0.0)) if tn > 1 else 0.0
+    )
     return tn, combined_mean, combined_sd
 
 
@@ -59,8 +59,6 @@ def combine_groups(groups: List[Statistics]) -> Statistics:
     groups: list of (n, Σx, Σx²)
     returns: (combined_n, combined_mean_array, combined_sd_array)
     """
-    if not groups:
-        raise ValueError("Group list is empty.")
 
     tx = 0  # Σx over all groups
     txx = 0  # Σx² over all groups
@@ -75,13 +73,31 @@ def combine_groups(groups: List[Statistics]) -> Statistics:
         txx += stat["sum_sq"]
         tn += n
 
-    if tn <= 1:
-        raise ValueError("Total sample size must be > 1.")
+    if tn == 0:
+        raise ValueError("Group is empty.")
 
     combined_mean = tx / tn
-    variance = (txx - (tx**2) / tn) / (tn - 1)
-    combined_sd = np.sqrt(np.maximum(variance, 0.0))
-    return {"n": tn, "sum": tx, "sum_sq": txx, "mean": combined_mean, "std": combined_sd}
+    combined_sd = (
+        np.sqrt(np.maximum((txx - (tx**2) / tn) / (tn - 1), 0.0)) if tn > 1 else 0.0
+    )
+    return {
+        "n": tn,
+        "sum": tx,
+        "sum_sq": txx,
+        "mean": combined_mean,
+        "std": combined_sd,
+    }
+
+
+def combine_dict_groups(
+    dict_groups: Iterable[Dict[str, Statistics]],
+) -> Dict[str, Statistics]:
+    """Merge multiple statistics dictionaries by key."""
+    groups = defaultdict(list)
+    for dict_group in dict_groups:
+        for key, stat in dict_group.items():
+            groups[key].append(stat)
+    return {key: combine_groups(stats) for key, stats in groups.items()}
 
 
 def combine_two_groups_cochrane(

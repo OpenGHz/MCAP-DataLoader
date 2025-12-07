@@ -38,6 +38,9 @@ class MapConfig(BaseModel, frozen=True):
     """Strategy for the diverter caller when the input data is a mapping."""
     must: Optional[MustConfig] = None
     """Configuration for the must checker."""
+    # slicing: Optional[SliceConfig] = None
+    # """Only apply the callable to the specified slice of the data
+    # and keep the rest unchanged."""
 
 
 class Map(CallerBasis):
@@ -47,6 +50,7 @@ class Map(CallerBasis):
         self._depth = config.depth
         self._callable = config.callable
         self._mapping = config.mapping
+        # self._slicing = config.slicing
         # TODO: support depth for KEY and ITEM strategies
         self._strategies = {
             MappingStrategy.FORBID: self._forbid,
@@ -62,7 +66,7 @@ class Map(CallerBasis):
                 must["mapping"] = config.must.mode
             else:
                 must["not_mapping"] = config.must.mode
-        print(must)
+        # print(must)
         self._must = must
 
     def _forbid(self, data):

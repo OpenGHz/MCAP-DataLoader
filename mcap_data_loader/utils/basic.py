@@ -35,19 +35,21 @@ import sys
 import importlib
 import inspect
 
+BaseModelT = TypeVar("BaseModelT", bound=BaseModel)
 
-class ForceSetAttr:
+
+class ForceSetAttr(Generic[BaseModelT]):
     """Context manager to temporarily allow setting attributes on frozen Pydantic models."""
 
-    def __init__(self, obj: BaseModel):
+    def __init__(self, obj: BaseModelT):
         if not isinstance(obj, BaseModel):
             raise TypeError("Only Pydantic BaseModel instances are supported.")
         self._obj = obj
 
-    def __enter__(self):
+    def __enter__(self) -> BaseModelT:
         self._original_setattr = self._obj.__class__.__setattr__
         self._obj.__class__.__setattr__ = self._setattr
-        return self
+        return self._obj
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._obj.__class__.__setattr__ = self._original_setattr
