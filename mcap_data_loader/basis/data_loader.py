@@ -1,5 +1,15 @@
 from pydantic import BaseModel, ConfigDict, AfterValidator, Field, field_serializer
-from typing import Dict, Optional, Union, Generic, TypeVar, Annotated, List
+from typing import (
+    Dict,
+    Optional,
+    Union,
+    Generic,
+    TypeVar,
+    Annotated,
+    List,
+    Protocol,
+    runtime_checkable,
+)
 from collections.abc import Iterable, Callable, Hashable, Mapping
 from mcap_data_loader.utils.basic import StrEnum, NonIteratorIterable
 from mcap_data_loader.pipelines import NamedPipelines
@@ -115,3 +125,17 @@ class DataLoaders(ConfigurableBasis, Mapping[DataLoaderKey, Iterable[T]], Generi
 
     def __hash__(self):
         return id(self)
+
+
+K = TypeVar("K")
+V = TypeVar("V")
+
+
+@runtime_checkable
+class MappingProtocol(Protocol[K, V]):
+    def __getitem__(self, key: K) -> V: ...
+    def __len__(self) -> int: ...
+    def __iter__(self): ...
+    def keys(self): ...
+    def values(self): ...
+    def items(self): ...

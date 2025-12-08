@@ -12,7 +12,7 @@ from typing import (
     final,
     get_type_hints,
 )
-from collections.abc import Mapping
+from collections.abc import Mapping, Callable
 from typing_extensions import get_args, Self
 from pydantic import BaseModel, TypeAdapter
 from pydantic_yaml import to_yaml_file
@@ -324,7 +324,9 @@ def dump_omegaconf(obj: Any) -> Dict[str, Any]:
     raise TypeError("Not an omegaconf object.")
 
 
-def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], str]:
+def dump_or_repr(
+    obj: Union[Any, ConfigurableBasis], handler: Optional[Callable] = None
+) -> Union[Dict[str, Any], str]:
     """Dump the config if the object is a ConfigurableBasis, otherwise return the repr.
     Args:
         obj: The object to dump or repr.
@@ -347,4 +349,6 @@ def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], st
     try:
         return dump_omegaconf(obj)
     except TypeError:
+        if handler is not None:
+            return handler(obj)
         return repr(obj)
