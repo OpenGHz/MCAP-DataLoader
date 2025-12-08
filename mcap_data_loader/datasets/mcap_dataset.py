@@ -306,6 +306,7 @@ class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]
         """
         return iter(self._episode_datasets)
 
+    @cache
     def statistics(self):
         return combine_dict_groups(ds.statistics() for ds in self.read_stream())
 

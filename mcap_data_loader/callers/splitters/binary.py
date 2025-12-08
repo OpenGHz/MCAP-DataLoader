@@ -91,7 +91,7 @@ class BinarySplitter(SplitterBasis):
                 f" Returning original data as the first part and empty list as the second part."
             )
             return data_list, []
-        self.get_logger().info(f"Splitting data {data_list}.")
+        # self.get_logger().info(f"Splitting data {data_list}.")
         if self._random is not None:
             self._random.shuffle(data_list)
         return dict(zip(self._keys, self._split_method(data_list)))

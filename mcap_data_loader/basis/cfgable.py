@@ -19,7 +19,11 @@ from pydantic_yaml import to_yaml_file
 from pathlib import Path
 from functools import cache
 from weakref import WeakSet
-from mcap_data_loader.utils.basic import get_class_type, DataClassProto
+from mcap_data_loader.utils.basic import (
+    get_class_type,
+    DataClassProto,
+    get_fully_qualified_class_name,
+)
 from copy import copy, deepcopy
 import inspect
 import yaml
@@ -65,6 +69,13 @@ class InitConfigMeta(type):
         if not issubclass(config_type, BaseModel):
             adapter = TypeAdapter(config_type)
         if isinstance(config, Mapping):
+            # if (
+            #     get_fully_qualified_class_name(config)
+            #     == "omegaconf.dictconfig.DictConfig"
+            # ):
+            #     from omegaconf import OmegaConf
+
+            #     config = OmegaConf.to_object(config)
             config.update(kwargs)
             config = config_type(**config)
         elif config is None or isinstance(config, type):
@@ -294,6 +305,25 @@ class ConfigurableBasis(InitConfigABCMixin):
         return interface
 
 
+def dump_omegaconf(obj: Any) -> Dict[str, Any]:
+    """Dump an omegaconf object to a dictionary.
+    Args:
+        obj: The omegaconf object to dump.
+    Returns:
+        A dictionary representing the omegaconf object.
+    Raises:
+        TypeError: If the object is not an omegaconf object.
+    """
+    from omegaconf import OmegaConf
+
+    if get_fully_qualified_class_name(obj) in {
+        "omegaconf.dictconfig.DictConfig",
+        "omegaconf.listconfig.ListConfig",
+    }:
+        return OmegaConf.to_object(obj)
+    raise TypeError("Not an omegaconf object.")
+
+
 def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], str]:
     """Dump the config if the object is a ConfigurableBasis, otherwise return the repr.
     Args:
@@ -314,4 +344,7 @@ def dump_or_repr(obj: Union[Any, ConfigurableBasis]) -> Union[Dict[str, Any], st
             return asdict(config)
         elif isinstance(config, dict):
             return config
-    return repr(obj)
+    try:
+        return dump_omegaconf(obj)
+    except TypeError:
+        return repr(obj)

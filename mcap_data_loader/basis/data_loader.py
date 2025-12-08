@@ -1,9 +1,9 @@
-from pydantic import BaseModel, ConfigDict, AfterValidator, Field
-from typing import Dict, Optional, Union, Generic, TypeVar, Annotated
-from collections.abc import Iterable, Callable, Hashable, Mapping, MutableMapping
+from pydantic import BaseModel, ConfigDict, AfterValidator, Field, field_serializer
+from typing import Dict, Optional, Union, Generic, TypeVar, Annotated, List
+from collections.abc import Iterable, Callable, Hashable, Mapping
 from mcap_data_loader.utils.basic import StrEnum, NonIteratorIterable
 from mcap_data_loader.pipelines import NamedPipelines
-from mcap_data_loader.basis.cfgable import ConfigurableBasis
+from mcap_data_loader.basis.cfgable import ConfigurableBasis, dump_or_repr
 from enum import auto
 from pprint import pformat
 from toolz import pipe
@@ -40,12 +40,18 @@ class DataSourceConfig(BaseModel, frozen=True):
     pipeline: Optional[Union[Hashable, Callable]] = None
     """The pipeline to use for this data source. If None, no pipeline will be applied."""
 
+    @field_serializer("source", when_used="json")
+    def serialize_source(self, source):
+        return dump_or_repr(source)
+
 
 class DataLoaderConfig(BaseModel, frozen=True):
     """Configuration for data loader maker."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="ignore")
 
+    named_pipelines: Dict[Hashable, List[Callable]] = {}
+    """Named pipelines that can be referenced in `DataSourceConfig`."""
     sources: Dict[DataLoaderKey, Optional[DataSourceConfig]] = Field(min_length=1)
     """Configuration for data sources to be loaded. The key is the data loader name,
     which can be of type `Stage` or any string. If a `splitter` is provided
@@ -54,13 +60,15 @@ class DataLoaderConfig(BaseModel, frozen=True):
     an error if there is a key conflict between the original keys and the keys returned 
     by the `splitter`."""
 
+    def model_post_init(self, context):
+        self.named_pipelines.update(NamedPipelines)
+
 
 class DataLoaders(ConfigurableBasis, Mapping[DataLoaderKey, Iterable[T]], Generic[T]):
     """Base class for data loaders."""
 
     def __init__(self, config: DataLoaderConfig):
         self.config = config
-
         src_cfgs = config.sources
         data_loaders = {}
         for name, src_cfg in src_cfgs.items():
@@ -84,7 +92,7 @@ class DataLoaders(ConfigurableBasis, Mapping[DataLoaderKey, Iterable[T]], Generi
         elif callable(pipeline):
             return pipeline(source)
         else:
-            return pipe(source, *NamedPipelines[pipeline])
+            return pipe(source, *self.config.named_pipelines[pipeline])
 
     def __call__(self) -> Dict[Union[Stage, str], Iterable[T]]:
         """Get the data loaders."""
