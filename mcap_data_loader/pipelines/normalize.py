@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator, field_serializer
 from weakref import WeakValueDictionary
 from mcap_data_loader.utils.array_like import Array
 from mcap_data_loader.utils.basic import (
@@ -12,18 +12,32 @@ from mcap_data_loader.utils.extra_itertools import (
 )
 from mcap_data_loader.pipelines.basis import Pipe, T
 from typing import Optional, Dict, Set
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 
 class MeanStd(BaseModel, frozen=True):
     """Class to hold mean and standard deviation values."""
 
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = ConfigDict(validate_assignment=True, extra="allow")
 
     mean: Optional[Array]
     """Mean value for standardization."""
     std: Optional[Array]
     """Standard deviation for standardization."""
+
+    @field_validator("mean", "std", mode="before")
+    def validate_mean_std(cls, v):
+        if isinstance(v, Sequence):
+            import numpy as np
+
+            return np.array(v)
+        return v
+
+    @field_serializer("mean", "std", when_used="json")
+    def serialize_mean_std(self, v):
+        if v is not None:
+            return v.tolist()
+        return v
 
 
 class StandardizeConfig(BaseModel, frozen=True):
@@ -50,7 +64,7 @@ class StandardizeConfig(BaseModel, frozen=True):
     """Whether to raise an error if a specified key is not found in the data item."""
 
 
-class Standardize(Pipe[DictDataStamped]):
+class Standardize(Pipe[DictDataStamped[T]]):
     _configs: WeakValueDictionary[str, StandardizeConfig] = WeakValueDictionary()
 
     def __init__(self, config: StandardizeConfig) -> None:
@@ -132,6 +146,7 @@ class Standardize(Pipe[DictDataStamped]):
 if __name__ == "__main__":
     import numpy as np
     import logging
+    import json
     from pprint import pprint
 
     logging.basicConfig(level=logging.INFO)
@@ -147,10 +162,12 @@ if __name__ == "__main__":
         exclude={"c", "d"},
     )
     pipeline = Standardize(config)
+    print("---- Pipeline Config ----")
+    pprint(json.dumps(pipeline.dump("json"), indent=4))
     data = [
         {
             "a": np.array(7.0),
-            "b": np.array([2.0, 3.0]),
+            "b": [2.0, 3.0],
             "c": np.array(0.0),
             "d": np.array(12.0),
         },
