@@ -11,8 +11,33 @@ from mcap_data_loader.utils.extra_itertools import (
     first_recursive,
 )
 from mcap_data_loader.pipelines.basis import Pipe, T
-from typing import Optional, Dict, Set
+from typing import Optional, Dict, Set, Generic
 from collections.abc import Mapping, Sequence
+
+
+StatisticsT = Optional[Dict[str, T]]
+
+
+class NormalizeConfigBasis(BaseModel, Generic[T], frozen=True):
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    name: str = ""
+    """Unique name of the pipeline. Used for caching configs as the default values."""
+    statistics: StatisticsT[T] = None
+    """Statistic values corresponding to each key."""
+    inverse: bool = False
+    """Whether to perform inverse normalization."""
+    include: Set[str] = set()
+    """List of keys to include for normalization. If empty, all keys are included."""
+    exclude: Set[str] = set()
+    """List of keys to exclude from normalization."""
+    depth: int = 0
+    """Depth of recursion for nested iterable. 0 means no recursion.
+    < 0 means recursion until a `Mapping` is encountered."""
+    replace: bool = False
+    """Whether to replace the original values with normalized values."""
+    strict: bool = True
+    """Whether to raise an error if a specified key is not found in the data item."""
 
 
 class MeanStd(BaseModel, frozen=True):
@@ -40,28 +65,8 @@ class MeanStd(BaseModel, frozen=True):
         return v
 
 
-class StandardizeConfig(BaseModel, frozen=True):
+class StandardizeConfig(NormalizeConfigBasis[MeanStd]):
     """Configuration for Standardize pipeline."""
-
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
-
-    name: str = ""
-    """Unique name of the pipeline. Used for caching instances."""
-    statistics: Optional[Dict[str, MeanStd]] = None
-    """Precomputed mean and std values corresponding to each key."""
-    inverse: bool = False
-    """Whether to perform inverse standardization."""
-    include: Set[str] = set()
-    """List of keys to include for standardization. If empty, all keys are included."""
-    exclude: Set[str] = set()
-    """List of keys to exclude from standardization."""
-    depth: int = 0
-    """Depth of recursion for nested iterable. 0 means no recursion.
-    < 0 means recursion until a `Mapping` is encountered."""
-    replace: bool = False
-    """Whether to replace the original values with standardized values."""
-    strict: bool = True
-    """Whether to raise an error if a specified key is not found in the data item."""
 
 
 class Standardize(Pipe[DictDataStamped[T]]):
