@@ -105,9 +105,17 @@ class Configurer(ConfigurerBasis[T]):
             exit(0)
 
     def __instantiate_config(self):
-        dict_config: DictConfig = instantiate(self._dict_config)
-        instance = self.config_class(**dict_config)
-        return instance
+        config_instance = instantiate(self._dict_config)
+        if isinstance(config_instance, self.config_class):
+            return config_instance
+        else:
+            config_instance = OmegaConf.to_object(config_instance)
+            if isinstance(config_instance, dict):
+                return self.config_class(**config_instance)
+            else:
+                raise TypeError(
+                    f"The instantiated config {config_instance} must be a `{self.config_class}` or a dict, but got `{type(config_instance)}`."
+                )
 
     def __set_and_run(self, dict_config: DictConfig) -> T:
         self.__set_dict_config(dict_config)
