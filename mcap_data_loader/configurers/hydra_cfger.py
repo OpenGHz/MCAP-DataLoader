@@ -12,10 +12,10 @@ import sys
 class Configurer(ConfigurerBasis[T]):
     """The configurer using Hydra as the backend."""
 
-    def parse(self) -> None:
+    def parse(self, config_path=None) -> None:
         cwd = Path.cwd()
         parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument("--config-path", "--path", default=None)
+        parser.add_argument("--config-path", "--path", default=config_path)
         parser.add_argument(
             "--base-dir",
             default=str(cwd),
@@ -50,17 +50,21 @@ class Configurer(ConfigurerBasis[T]):
                 config_path = path
                 break
             else:
+                # TODO: should allow not having a config file?
                 raise FileNotFoundError(
                     "The `config.yaml` file cannot be found automatically. Please ensure that the configuration file is placed in the working directory or at most one of its next-level subdirectories, or manually specify its path."
                 )
-        if config_path:
+        elif isinstance(config_path, str):
+            if not config_path.startswith("pkg://"):
+                config_path = Path(config_path)
+        if isinstance(config_path, Path):
+            # empty config_path means using the base_dir as config_path
             base_dir = self._main_dir if args.base_dir == "__main__" else args.base_dir
-            ori_config_path = Path(config_path)
-            if ori_config_path.suffix == ".yaml":
-                config_dir = ori_config_path.parent
-                config_name = ori_config_path.stem
+            if config_path.suffix == ".yaml":
+                config_dir = config_path.parent
+                config_name = config_path.stem
             else:
-                config_dir = ori_config_path
+                config_dir = config_path
             if not config_dir.is_absolute():
                 config_dir = (base_dir / config_dir).absolute()
             if not config_dir.exists():
@@ -76,7 +80,7 @@ class Configurer(ConfigurerBasis[T]):
             sys.path.insert(0, cwd)
         elif add_cwd_mode == "append":
             sys.path.append(cwd)
-        self._config_path = config_path or None
+        self._config_path = config_path
         self._config_name = config_name
 
     @staticmethod

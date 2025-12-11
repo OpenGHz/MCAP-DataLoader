@@ -21,10 +21,11 @@ class ConfigurerBasis(ABC, Generic[T]):
         self._main = None
 
     @abstractmethod
-    def parse(self) -> None:
+    def parse(self, config_path: Optional[str] = None, **kwargs) -> None:
         """Parse the command line arguments.
         Args:
-            config_class (Type[T]): The config class to be configured.
+            config_path (Optional[str]): The path to the configuration file.
+            **kwargs: Additional keyword arguments.
         """
 
     @abstractmethod
