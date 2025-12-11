@@ -1,7 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ImportString
 from typing import Union, Generic, Dict, Any
 from collections.abc import Callable
-from mcap_data_loader.utils.basic import get_class_type, force_set_attr
 from mcap_data_loader.callers.basis import CallerBasis, ReturnT
 from toolz import curry
 
@@ -11,14 +10,9 @@ class CurryConfig(BaseModel, Generic[ReturnT], frozen=True):
         extra="forbid", arbitrary_types_allowed=True, validate_assignment=True
     )
 
-    callable: Union[str, Callable[..., ReturnT]]
+    callable: Union[ImportString[Callable[..., ReturnT]], Callable[..., ReturnT]]
     args: tuple = ()
     kwargs: Dict[str, Any] = {}
-
-    @force_set_attr
-    def model_post_init(self, context):
-        if isinstance(self.callable, str):
-            self.callable = get_class_type(self.callable)
 
 
 class Curry(CallerBasis[ReturnT]):
@@ -35,7 +29,8 @@ class Curry(CallerBasis[ReturnT]):
 if __name__ == "__main__":
     caller = Curry(
         CurryConfig(
-            callable=lambda x, y=1: x + y,
+            # callable=lambda x, y=1: x + y,
+            callable="operator.add",
             args=(2,),
             kwargs={"y": 3},
         )

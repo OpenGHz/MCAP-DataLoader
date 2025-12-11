@@ -5,7 +5,14 @@ from typing import List, Optional, Dict, Union, Any
 from collections.abc import Sequence, Hashable
 from typing_extensions import Self
 from functools import cached_property, cache
-from pydantic import field_validator, ConfigDict, BaseModel, Field
+from pydantic import (
+    field_validator,
+    ConfigDict,
+    BaseModel,
+    Field,
+    FilePath,
+    DirectoryPath,
+)
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
 from mcap_data_loader.utils.basic import (
     get_items_by_ext,
@@ -46,15 +53,12 @@ class McapFlatBuffersSampleDatasetConfig(McapDatasetConfig):
     Sample dataset configuration for reading a MCAP file.
     """
 
+    data_root: FilePath
+
     @field_validator("data_root")
-    def validate_data_root(cls, v) -> Path:
-        if not isinstance(v, Path):
-            if len(v) == 1:
-                v = v[0]
-            else:
-                raise ValueError(f"data_root {v} must be a single path to a MCAP file")
-        if not v.is_file() or v.suffix != ".mcap":
-            raise ValueError(f"data_root {v} must be an existing `.mcap` file")
+    def validate_data_root(cls, v: Path) -> Path:
+        if v.suffix != ".mcap":
+            raise ValueError(f"data_root {v} must be an `.mcap` file")
         return v
 
     @field_validator("slices")
@@ -136,13 +140,7 @@ class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
     Episodic dataset configuration for reading MCAP files.
     """
 
-    @field_validator("data_root")
-    def validate_data_root(cls, v: Path) -> List[Path]:
-        if not v.is_dir():
-            raise ValueError(
-                f"data_root {v.absolute()} must be a directory containing MCAP files"
-            )
-        return v
+    data_root: DirectoryPath
 
     @field_validator("slices")
     def validate_slices(cls, v: DataSlicesConfig) -> DataSlicesConfig:

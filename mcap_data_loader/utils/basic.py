@@ -22,6 +22,7 @@ from pydantic import (
     PlainValidator,
     AfterValidator,
     ConfigDict,
+    ImportString,
     validate_call,
 )
 from functools import wraps
@@ -463,11 +464,9 @@ def get_full_class_name(obj: Union[Any, Type]) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
-def get_class_type(class_path: str) -> Type:
-    module_path, class_name = class_path.rsplit(".", 1)
-    module = importlib.import_module(module_path)
-    cls = getattr(module, class_name)
-    return cls
+@validate_call
+def import_string(import_path: ImportString[T]) -> T:
+    return import_path
 
 
 def remove_util(string: str, stop: str, include_stop: bool = True) -> str:

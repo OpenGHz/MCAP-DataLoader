@@ -5,9 +5,9 @@ from mcap_data_loader.utils.basic import (
 )
 from mcap_data_loader.callers.basis import CallerBasis
 from pydantic import BaseModel, validate_call
+from toolz import pipe
 from typing import TypeVar, Dict, Union, Optional, Hashable, List, final
 from collections.abc import Iterator, Callable, Iterable
-from toolz import pipe
 from pprint import pformat
 from logging import getLogger
 

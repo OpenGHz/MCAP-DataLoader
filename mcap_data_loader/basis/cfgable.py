@@ -9,6 +9,7 @@ from typing import (
     Any,
     Literal,
     Set,
+    List,
     final,
     get_type_hints,
 )
@@ -20,11 +21,12 @@ from pathlib import Path
 from functools import cache
 from weakref import WeakSet
 from mcap_data_loader.utils.basic import (
-    get_class_type,
     DataClassProto,
+    import_string,
     get_fully_qualified_class_name,
 )
 from copy import copy, deepcopy
+from toolz.dicttoolz import get_in
 import inspect
 import yaml
 import json
@@ -61,7 +63,7 @@ class InitConfigMeta(type):
         if config_type is None:
             # try to get from _target_
             if cls_path is not None:
-                config_type = get_class_type(cls_path)
+                config_type = import_string(cls_path)
         # TODO: it is better to support more flexible config types
         # e.g. dict, etc.
         if not cls._check_config_type(config_type):
@@ -352,3 +354,40 @@ def dump_or_repr(
         if handler is not None:
             return handler(obj)
         return repr(obj)
+
+
+def fetch_config(
+    target: Union[Path, str, Mapping],
+    keys: Union[List[str], str] = "",
+    default=None,
+    no_default: bool = True,
+) -> Any:
+    """Fetch the config from a target mapping or a yaml file.
+    Args:
+        target: The target mapping or file path.
+        keys: The keys or a dot-separated key to the config. If empty, return the whole config.
+        default: The default value if the key is not found.
+        no_default: Whether to raise an error if the key is not found and no default is provided.
+    Returns:
+        The config object.
+    """
+    if isinstance(target, (str, Path)):
+        with open(target, "r") as f:
+            data = yaml.safe_load(f)
+    else:
+        data = target
+    if not keys:
+        return data
+    if isinstance(keys, str):
+        keys = keys.split(".")
+    return get_in(keys, data, default, no_default)
+
+
+if __name__ == "__main__":
+    config = {"a": {"b": 1}}
+    assert fetch_config(config, "a.b") == 1
+    fetch_config(config, "a.c", 2, False) == 2
+    try:
+        fetch_config(config, "a.c")
+    except KeyError:
+        pass
