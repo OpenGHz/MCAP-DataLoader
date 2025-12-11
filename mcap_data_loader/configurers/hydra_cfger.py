@@ -7,6 +7,10 @@ from hydra.core import hydra_config
 import hydra
 import argparse
 import sys
+import os
+
+
+os.environ["HYDRA_FULL_ERROR"] = "1"
 
 
 class Configurer(ConfigurerBasis[T]):
