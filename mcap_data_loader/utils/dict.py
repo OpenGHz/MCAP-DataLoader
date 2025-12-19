@@ -1,5 +1,5 @@
-from typing import Tuple, TypeVar, Callable, Any
-from collections.abc import Mapping, Iterable
+from typing import Tuple, TypeVar, Callable, Any, Dict, Generic
+from collections.abc import Mapping, Iterable, Hashable
 
 
 T = TypeVar("T")
@@ -69,6 +69,24 @@ def update_if(
             continue
         if ((not strict) and k_n_i) or func(v):
             target[k] = v
+
+
+K = TypeVar("K", bound=Hashable)
+V = TypeVar("V")
+
+
+class CallableDict(Dict[K, V]):
+    """A dictionary that allows access to its values using a callable interface."""
+
+    def __call__(self, key: K, default: V = None) -> V:
+        return self.get(key, default)
+
+
+class CallableKeyMappingDict(Dict[K, K], Generic[K]):
+    """A dictionary that returns the key itself if the key is not found."""
+
+    def __call__(self, key: K) -> K:
+        return self.get(key, key)
 
 
 if __name__ == "__main__":
