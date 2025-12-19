@@ -47,6 +47,30 @@ def valmap_depth(func: Callable, d: dict, depth: int = -1):
         }
 
 
+def update_if(
+    target: dict,
+    source: dict,
+    func: Callable[..., bool] = bool,
+    strict: bool = False,
+    intersection: bool = False,
+):
+    """Update `target` dictionary with `source` dictionary in a conditional manner.
+    Args:
+        target: The dictionary to be updated.
+        source: The dictionary from which to copy key-value pairs.
+        func: A callable that takes a value and returns a boolean.
+            Default is `bool`, which means values that are truthy will be updated.
+        strict: If False, directly update keys from source that are not in target without checking.
+        intersection: If True, only consider keys that are already present in `target`.
+    """
+    for k, v in source.items():
+        k_n_i = k not in target
+        if intersection and k_n_i:
+            continue
+        if ((not strict) and k_n_i) or func(v):
+            target[k] = v
+
+
 if __name__ == "__main__":
     print("Testing valmap_depth function:")
     complex_dict = {

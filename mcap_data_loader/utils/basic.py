@@ -39,6 +39,12 @@ import inspect
 
 
 BaseModelT = TypeVar("BaseModelT", bound=BaseModel)
+T = TypeVar("T")
+
+
+def validate_field(obj: BaseModel, name: str, value: Any):
+    """Validate a field value using the Pydantic model's validator."""
+    obj.__pydantic_validator__.validate_assignment(obj, name, value)
 
 
 class ForceSetAttr(Generic[BaseModelT]):
@@ -62,7 +68,7 @@ class ForceSetAttr(Generic[BaseModelT]):
         config = obj.model_config
         if config.get("frozen", False):
             if config.get("validate_assignment", False):
-                obj.__pydantic_validator__.validate_assignment(obj, name, value)
+                validate_field(obj, name, value)
             else:
                 object.__setattr__(obj, name, value)
         else:
@@ -78,6 +84,9 @@ def force_set_attr(method):
             return method(self, *args, **kwargs)
 
     return wrapper
+
+
+force_validate_field = force_set_attr(validate_field)
 
 
 def validate_call_once(func):
@@ -139,7 +148,6 @@ class DataClassProto(Protocol):
     def __dataclass_fields__(cls) -> Dict[str, Any]: ...
 
 
-T = TypeVar("T")
 NonIteratorIterable = Annotated[
     Iterable[T],
     PlainValidator(validate_iterable_not_iterator),
