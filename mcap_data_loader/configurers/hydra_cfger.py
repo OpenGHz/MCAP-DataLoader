@@ -2,6 +2,7 @@ from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
 from mcap_data_loader.configurers.basis import ConfigurerBasis, T
 from mcap_data_loader.utils.file import find_file_paths
+from mcap_data_loader.utils.basic import import_string
 from hydra_zen import instantiate, store
 from hydra.core import hydra_config
 import hydra
@@ -140,6 +141,7 @@ class Configurer(ConfigurerBasis[T]):
 
 OmegaConf.register_new_resolver("merge_cfg", Configurer.merge_dicts)
 OmegaConf.register_new_resolver("instantiate", Configurer.instantiate)
+OmegaConf.register_new_resolver("import_string", import_string)
 
 
 if __name__ == "__main__":

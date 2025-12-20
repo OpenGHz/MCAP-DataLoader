@@ -195,7 +195,6 @@ class DataStamped(TypedDict, Generic[T]):
         return result
 
 
-
 DictDataStamped = Dict[str, DataStamped[T]]
 
 
@@ -591,6 +590,18 @@ def cfgize(func: Callable) -> Callable:
 
 def is_cached(func: Callable) -> bool:
     return hasattr(func, "cache_info") and hasattr(func, "cache_clear")
+
+
+def sum_auto_start(iterable: Iterable[T]) -> T:
+    """Sum the items in the iterable, starting from the first item."""
+    iterator = iter(iterable)
+    try:
+        total = next(iterator)
+    except StopIteration:
+        raise ValueError("sum_auto_start() arg is an empty iterable")
+    for item in iterator:
+        total += item
+    return total
 
 
 if __name__ == "__main__":

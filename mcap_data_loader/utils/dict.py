@@ -207,6 +207,7 @@ def merge_values_with_pred(
     priority_dict = defaultdict(list)
     for k, v in d.items():
         new_k, prior = pred(k)
+        # print(f"{k} -> {new_k} with priority {prior}")
         value_dict[new_k].append(v)
         priority_dict[new_k].append(prior)
     merged_dict = {}
@@ -275,6 +276,39 @@ MergeValuesCallType = Annotated[
 ]
 
 
+class PredReplaceTo:
+    """A predicate callable that replaces target substrings in keys with specified alternatives."""
+
+    def __init__(
+        self,
+        targets: List[str],
+        sources: List[List[str]],
+        to_targets: Optional[List[str]] = None,
+    ):
+        if len(targets) != len(set(targets)):
+            raise ValueError(f"targets must be unique: {targets}")
+        self.targets = targets
+        self.sources = sources
+        self._replace_target = to_targets is not None
+        if self._replace_target:
+            if len(to_targets) != len(targets):
+                raise ValueError("to_targets length must match targets length")
+        self.to_targets = to_targets or targets
+
+    def __call__(self, k: str) -> Tuple[str, int]:
+        to_targets = self.to_targets
+        for i, target in enumerate(self.targets):
+            if target in k:
+                if self._replace_target:
+                    k = k.replace(target, to_targets[i])
+                return (k, 0)
+        for target, source_list in zip(self.to_targets, self.sources):
+            for prior, source in enumerate(source_list):
+                if source in k:
+                    return (k.replace(source, target), prior + 1)
+        return (k, 0)
+
+
 if __name__ == "__main__":
     # print("Testing valmap_depth function:")
     # complex_dict = {
@@ -330,20 +364,25 @@ if __name__ == "__main__":
         "e": 0,
     }
 
-    def predicate(key):
-        if key in ["a", "b"]:
-            return ("group1", key)  # group1
-        elif key in ["c", "d"]:
-            return ("group2", 0)  # group2
-        else:
-            return (key, 0)  # keep original key
+    # def predicate(key):
+    #     if key in ["a", "b"]:
+    #         return ("group1", key)  # group1
+    #     elif key in ["c", "d"]:
+    #         return ("group2", 0)  # group2
+    #     else:
+    #         return (key, 0)  # keep original key
+
+    predicate = PredReplaceTo(
+        ["group1", "group2"],
+        [["a", "b"], ["d", "c"]],
+    )
 
     merged = merge_values_with_pred(data, predicate, method=sum, start=[])
 
     def assert_merged(merged):
-        assert merged["group1"] == [10, 20]
-        assert merged["group2"] == [40, 30]
-        assert merged["e"] == 0
+        assert merged["group1"] == [10, 20], merged
+        assert merged["group2"] == [40, 30], merged
+        assert merged["e"] == 0, merged
 
     assert_merged(merged)
 
