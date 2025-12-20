@@ -1,3 +1,5 @@
+"""Basic utility functions and classes for MCAP Data Loader.TODO: simplify and split into multiple files."""
+
 from typing import (
     List,
     Union,
@@ -30,11 +32,12 @@ from inspect import isclass
 from logging import getLogger
 from contextlib import suppress
 from copy import deepcopy
+from statistics import mean
+from toolz import curry
 import hashlib
 import operator
 import time
 import sys
-import inspect
 
 
 BaseModelT = TypeVar("BaseModelT", bound=BaseModel)
@@ -194,8 +197,24 @@ class DataStamped(TypedDict, Generic[T]):
             }
         return result
 
+    @staticmethod
+    def merge(
+        values: Iterable["DataStamped[DataT]"],
+        d_method: Callable[[List[DataT]], ReturnT],
+        t_method: Callable[[List[int]], int] = mean,
+    ) -> "DataStamped[ReturnT]":
+        time_list = []
+        data_list = []
+        for item in values:
+            time_list.append(item["t"])
+            data_list.append(item["data"])
+        return {"t": t_method(time_list), "data": d_method(data_list)}
+
 
 DictDataStamped = Dict[str, DataStamped[T]]
+
+map_dict_data_stamped = curry(DataStamped.map_dict)
+merge_data_stamped = curry(DataStamped.merge)
 
 
 def copy_dict_data_stamped(data: DictDataStamped[T], deep: bool = False):
@@ -534,7 +553,7 @@ def resolve_generic_type(cls: Type, target_origin: Type) -> Optional[Type]:
 def has_nested_class_strict(cls: Type) -> bool:
     for name, obj in cls.__dict__.items():
         if (
-            inspect.isclass(obj)
+            isclass(obj)
             and obj.__module__ == cls.__module__  # 同一模块
             and obj.__qualname__.startswith(cls.__qualname__ + ".")
         ):
@@ -592,6 +611,7 @@ def is_cached(func: Callable) -> bool:
     return hasattr(func, "cache_info") and hasattr(func, "cache_clear")
 
 
+@curry
 def sum_auto_start(iterable: Iterable[T]) -> T:
     """Sum the items in the iterable, starting from the first item."""
     iterator = iter(iterable)
