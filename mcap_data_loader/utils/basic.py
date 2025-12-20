@@ -579,7 +579,7 @@ def try_to_get_attr(obj: Any, attrs: List[str], default: Any = object) -> Any:
     raise AttributeError(f"None of the attributes {attrs} found in {obj}.")
 
 
-def cfgize(func):
+def cfgize(func: Callable) -> Callable:
     """Decorator to convert a callable into one that accepts a config and additional arguments."""
 
     @wraps(func)
@@ -587,6 +587,10 @@ def cfgize(func):
         return func(*args, **(config or {}), **kwargs)
 
     return wrapper
+
+
+def is_cached(func: Callable) -> bool:
+    return hasattr(func, "cache_info") and hasattr(func, "cache_clear")
 
 
 if __name__ == "__main__":
