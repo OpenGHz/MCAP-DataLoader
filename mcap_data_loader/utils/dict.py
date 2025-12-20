@@ -113,7 +113,7 @@ def _serialize_mapping_call(v: Any) -> Dict[K, K]:
 
 
 MappingCall = Annotated[
-    Callable[[Hashable], Hashable],
+    Callable[[K], K],
     BeforeValidator(_validate_mapping_call),
     PlainSerializer(_serialize_mapping_call, when_used="json"),
 ]
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     from pydantic import BaseModel
 
     class TestMappingDictModel(BaseModel):
-        mapping: MappingCall
+        mapping: MappingCall[str]
 
     test_dict = {"a": "alpha", "b": "beta"}
     model_instance = TestMappingDictModel(mapping=test_dict)
