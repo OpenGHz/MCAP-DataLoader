@@ -113,18 +113,29 @@ def call_multi_args(
     data: DataT,
     func: Callable[[DataT], ReturnT],
     args_kwargs: Iterable[Tuple[Tuple[Any, ...], Dict[str, Any]]],
-) -> ReturnT:
+    chain: bool = True,
+) -> Union[ReturnT, List[ReturnT]]:
     """Compose multiple function calls with keyword arguments on data.
     Args:
         data: Input data.
         func: Function to be called multiple times.
-        *args: Variable number of dictionaries containing keyword arguments for each call.
+        args_kwargs: An iterable of tuples, each containing a tuple of positional arguments
+                     and a dictionary of keyword arguments for the function.
+        chain: If True, the output of each function call is passed as input to the next.
+               If False, each function call is independent and returns a list of results.
     Returns:
         Result of the composed function calls.
     """
-    for args, kwargs in args_kwargs:
-        data = func(data, *args, **kwargs)
-    return data
+    if chain:
+        for args, kwargs in args_kwargs:
+            data = func(data, *args, **kwargs)
+        results = data
+    else:
+        results = []
+        for args, kwargs in args_kwargs:
+            result = func(data, *args, **kwargs)
+            results.append(result)
+    return results
 
 
 @curry
