@@ -17,6 +17,7 @@ dependencies = [
     "numpy",
     "more-itertools",
     "toolz",
+    "cachetools",
     "typing-extensions",
     "flatbuffers",
     "foxglove-schemas-flatbuffer",
