@@ -34,6 +34,7 @@ from contextlib import suppress
 from copy import deepcopy
 from statistics import mean
 from toolz import curry
+from copy import copy
 import hashlib
 import operator
 import time
@@ -212,7 +213,6 @@ class DataStamped(TypedDict, Generic[T]):
 
 
 DictDataStamped = Dict[str, DataStamped[T]]
-
 map_dict_data_stamped = curry(DataStamped.map_dict)
 merge_data_stamped = curry(DataStamped.merge)
 
@@ -615,10 +615,7 @@ def is_cached(func: Callable) -> bool:
 def sum_auto_start(iterable: Iterable[T]) -> T:
     """Sum the items in the iterable, starting from the first item."""
     iterator = iter(iterable)
-    try:
-        total = next(iterator)
-    except StopIteration:
-        raise ValueError("sum_auto_start() arg is an empty iterable")
+    total = copy(next(iterator))
     for item in iterator:
         total += item
     return total
