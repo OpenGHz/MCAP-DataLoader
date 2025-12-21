@@ -177,6 +177,16 @@ DictableSlicesType = Union[Dict[str, SlicesType], SlicesType]
 DictableIndexesType = Union[Dict[str, List[int]], List[int]]
 
 
+@curry
+def sum_auto_start(iterable: Iterable[T]) -> T:
+    """Sum the items in the iterable, starting from the first item."""
+    iterator = iter(iterable)
+    total = copy(next(iterator))
+    for item in iterator:
+        total += item
+    return total
+
+
 class DataStamped(TypedDict, Generic[T]):
     t: int
     data: T
@@ -201,7 +211,7 @@ class DataStamped(TypedDict, Generic[T]):
     @staticmethod
     def merge(
         values: Iterable["DataStamped[DataT]"],
-        d_method: Callable[[List[DataT]], ReturnT],
+        d_method: Callable[[List[DataT]], ReturnT] = sum_auto_start,
         t_method: Callable[[List[int]], int] = mean,
     ) -> "DataStamped[ReturnT]":
         time_list = []
@@ -609,16 +619,6 @@ def cfgize(func: Callable) -> Callable:
 
 def is_cached(func: Callable) -> bool:
     return hasattr(func, "cache_info") and hasattr(func, "cache_clear")
-
-
-@curry
-def sum_auto_start(iterable: Iterable[T]) -> T:
-    """Sum the items in the iterable, starting from the first item."""
-    iterator = iter(iterable)
-    total = copy(next(iterator))
-    for item in iterator:
-        total += item
-    return total
 
 
 if __name__ == "__main__":
