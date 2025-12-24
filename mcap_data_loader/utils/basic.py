@@ -219,7 +219,7 @@ class DataStamped(TypedDict, Generic[T]):
         for item in values:
             time_list.append(item["t"])
             data_list.append(item["data"])
-        return {"t": t_method(time_list), "data": d_method(data_list)}
+        return {"t": int(t_method(time_list)), "data": d_method(data_list)}
 
 
 DictDataStamped = Dict[str, DataStamped[T]]
