@@ -9,19 +9,52 @@ from turbojpeg import TurboJPEG
 from logging import getLogger
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
-from mcap_data_loader.utils.basic import DataStamped
-from pydantic import BaseModel
+from mcap_data_loader.utils.basic import DataStamped, StrEnum
+from mcap_data_loader.basis.cfgable import InitConfigMixin
+from pydantic import BaseModel, PositiveInt, NonNegativeInt, ConfigDict
+from enum import auto
 
 
 class DecodeConfig(BaseModel, frozen=True):
+    model_config = ConfigDict(extra="forbid")
+
     thread_type: str = "AUTO"
+    """Threading type for decoding. `AUTO` lets PyAV decide."""
     frame_format: str = "bgr24"
-    mismatch_tolerance: int = 0
+    """Format of the frames to decode."""
+    mismatch_tolerance: NonNegativeInt = 0
+    """Number of frames that can be missing before raising an error."""
     ensure_base_stamp: bool = False
-    target_time_base: int = int(1e9)
+    """If True, ensures that the base timestamp is present in the video metadata."""
+    target_time_base: PositiveInt = int(1e9)
+    """Time base for the timestamps. If set to 0, timestamps are not returned."""
 
 
-class AvCoder:
+class NonMonotonicTimeMode(StrEnum):
+    ADJUST = auto()
+    DROP = auto()
+    RAISE = auto()
+    NONE = auto()
+
+
+class AvCoderConfig(BaseModel, frozen=True):
+    model_config = ConfigDict(extra="forbid")
+
+    time_base: PositiveInt = int(1e6)
+    """Time base for the encoder/decoder."""
+    frame_format: str = "bgr24"
+    """Format of the frames to encode/decode."""
+    async_encode: bool = False
+    """Whether to use asynchronous encoding."""
+    log_level: Optional[int] = None
+    """Logging level for the PyAV module."""
+    non_monotonic_mode: NonMonotonicTimeMode = NonMonotonicTimeMode.ADJUST
+    """Mode to handle frames with the same timestamp."""
+    non_monotonic_log: bool = True
+    """Whether to log when frames have the same timestamp."""
+
+
+class AvCoder(InitConfigMixin):
     """
     A class for encoding video frames using PyAV.
     This class supports encoding frames in various formats and ensures that
@@ -31,20 +64,15 @@ class AvCoder:
 
     logging = av.logging
 
-    def __init__(
-        self,
-        time_base: int = int(1e9),
-        frame_format: str = "bgr24",
-        async_encode: bool = False,
-        log_level: Optional[int] = None,
-    ):
-        av.logging.set_level(log_level)
-        self._time_base = fractions.Fraction(1, time_base)
+    def __init__(self, config: AvCoderConfig):
+        self.config = config
+        av.logging.set_level(config.log_level)
+        self._time_base = fractions.Fraction(1, config.time_base)
         self._configured = False
-        self._frame_format = frame_format
+        self._frame_format = config.frame_format
         self._preprocess = None
         self._reset()
-        if async_encode:
+        if config.async_encode:
             # set max_workers to 1 to ensure frames are processed in order
             self._executor = ThreadPoolExecutor(1, "av_coder")
         else:
@@ -130,10 +158,17 @@ class AvCoder:
         # Ensure timestamps are strictly increasing
         last_time = self._last_time
         if timestamp <= last_time:
-            self.get_logger().warning(
-                f"Frame timestamp {timestamp} is not greater than last timestamp {last_time}. Adjusting."
-            )
-            timestamp = last_time + max(self._time_base.denominator // 1000, 1)
+            mode = self.config.non_monotonic_mode
+            error_msg = f"Frame timestamp {timestamp} is not greater than last timestamp {last_time}"
+            if mode is NonMonotonicTimeMode.RAISE:
+                raise ValueError(error_msg)
+            else:
+                if self.config.non_monotonic_log:
+                    self.get_logger().warning(error_msg + f", {mode}")
+                if mode is NonMonotonicTimeMode.DROP:
+                    return
+                elif mode is NonMonotonicTimeMode.ADJUST:
+                    timestamp = last_time + max(self._time_base.denominator // 1000, 1)
         self._last_time = timestamp
         video_frame.pts = timestamp - self._start_time
         video_frame.time_base = self._time_base
