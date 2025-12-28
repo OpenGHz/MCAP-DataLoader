@@ -309,6 +309,13 @@ class StrEnum(str, ReprEnum):
 
 class Rate:
     def __init__(self, rate_hz: float):
+        """Initialize the Rate object with the desired frequency in Hertz.
+        Args:
+            rate_hz (float): The frequency in Hertz at which to run.
+                If set to negative, no sleeping will occur.
+        Raises:
+            DivisionByZeroError: If rate_hz is zero.
+        """
         self._interval = 1.0 / rate_hz
         self._last_time = time.perf_counter()
 
