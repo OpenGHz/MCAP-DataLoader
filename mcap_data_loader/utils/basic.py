@@ -221,6 +221,10 @@ class DataStamped(TypedDict, Generic[T]):
             data_list.append(item["data"])
         return {"t": int(t_method(time_list)), "data": d_method(data_list)}
 
+    @staticmethod
+    def create(data: T, t: int = 0) -> "DataStamped[T]":
+        return {"t": t, "data": data}
+
 
 DictDataStamped = Dict[str, DataStamped[T]]
 map_dict_data_stamped = curry(DataStamped.map_dict)
