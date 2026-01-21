@@ -13,6 +13,7 @@ from mcap_data_loader.utils.basic import DataStamped, StrEnum
 from mcap_data_loader.basis.cfgable import InitConfigMixin
 from pydantic import BaseModel, PositiveInt, NonNegativeInt, ConfigDict
 from enum import auto
+from time import time_ns
 
 
 class DecodeConfig(BaseModel, frozen=True):
@@ -32,20 +33,25 @@ class DecodeConfig(BaseModel, frozen=True):
 
 class NonMonotonicTimeMode(StrEnum):
     ADJUST = auto()
+    """Adjust the timestamp to be just greater than the last timestamp."""
     DROP = auto()
+    """Drop the frame with non-monotonic timestamp."""
     RAISE = auto()
+    """Raise an error when a non-monotonic timestamp is encountered."""
     NONE = auto()
+    """Do nothing. May result in out-of-order frames."""
 
 
 class AvCoderConfig(BaseModel, frozen=True):
     model_config = ConfigDict(extra="forbid")
 
     time_base: PositiveInt = int(1e6)
-    """Time base for the encoder/decoder."""
+    """Time base for the encoder/decoder. Default is 1e6 (microseconds).
+    Large time base (e.g. 1e9) improves timestamp precision but may cause overflow issues in some machines."""
     frame_format: str = "bgr24"
     """Format of the frames to encode/decode."""
-    async_encode: bool = False
-    """Whether to use asynchronous encoding."""
+    blocking: bool = True
+    """Whether to use blocking encoding. If False, uses a separate thread."""
     log_level: Optional[int] = None
     """Logging level for the PyAV module."""
     non_monotonic_mode: NonMonotonicTimeMode = NonMonotonicTimeMode.ADJUST
@@ -71,29 +77,44 @@ class AvCoder(InitConfigMixin):
         self._configured = False
         self._frame_format = config.frame_format
         self._preprocess = None
-        self._reset()
-        if config.async_encode:
-            # set max_workers to 1 to ensure frames are processed in order
-            self._executor = ThreadPoolExecutor(1, "av_coder")
-        else:
-            self._executor = None
         self._last_future = None
+        self._outbuf = None
+        self._container = None
+        # NOTE: set max_workers to 1 to ensure frames are processed in order
+        self._executor = None if config.blocking else ThreadPoolExecutor(1, "av_coder")
+        self._ns2base = int(1e9 / self.config.time_base)
         self._encode_lock = Lock()
-        self._perf_logs = {}
+        self.reset()
 
-    def _reset(self):
+    def reset(self, file_path: str = ""):
         """
         Reset the encoder state.
         This method clears the output buffer and resets the start and last timestamps.
+        Args:
+            file_path (str): Optional file path to save the encoded video for the following encoding session.
         """
-        self._outbuf = BytesIO()
-        self._container = av.open(self._outbuf, "w", format="mp4")
-        self.stream = self._container.add_stream("h264", options={"preset": "fast"})
-        self.stream.codec_context.time_base = self._time_base
-        self.stream.time_base = self._time_base
+        if self._last_future:
+            self._last_future.result()
+        self._close()
+        self.set_output(file_path)
         self._start_time = 0
         self._last_time = 0
         self._configured = False
+        self._last_future = None
+        self._perf_logs = {}
+
+    def set_output(self, file_path: str):
+        """
+        Set the output file path for the encoder.
+        This method closes the current container and opens a new one with the specified file path.
+        Args:
+            file_path (str): The file path to save the encoded video.
+        """
+        self._outbuf = None if file_path else BytesIO()
+        self._container = av.open(file_path or self._outbuf, "w", format="mp4")
+        self.stream = self._container.add_stream("h264", options={"preset": "fast"})
+        self.stream.codec_context.time_base = self._time_base
+        self.stream.time_base = self._time_base
 
     def configure_stream(
         self,
@@ -135,15 +156,18 @@ class AvCoder(InitConfigMixin):
         self,
         frame: Union[np.ndarray, bytes],
         timestamp: int,
+        ns_to_base: bool = False,
     ):
         """
         Encode a single video frame with the given timestamp.
         Args:
             frame (Union[np.ndarray, bytes]): The video frame to encode.
-            timestamp (int): The timestamp for the frame in nanoseconds.
+            timestamp (int): The timestamp for the frame in the time base or nanoseconds (if ns_to_base is True).
+            ns_to_base (bool): Whether to convert the timestamp from nanoseconds to the time base.
         """
         # start = time.monotonic()
         assert isinstance(timestamp, int), "Timestamp must be an integer"
+        timestamp = timestamp // self._ns2base if ns_to_base else timestamp
         if self._start_time == 0:
             assert timestamp > 0, "Timestamp must be greater than 0"
             self._start_time = timestamp
@@ -179,49 +203,61 @@ class AvCoder(InitConfigMixin):
     def encode_frame(
         self,
         frame: Union[np.ndarray, bytes],
-        timestamp: int,
+        timestamp: Optional[int] = None,
+        ns_to_base: bool = False,
     ):
         """
         Encode a video frame with the given timestamp.
         Args:
             frame (Union[np.ndarray, bytes]): The video frame to encode.
-            timestamp (int): The timestamp for the frame in nanoseconds.
+            timestamp (Optional[int]): The timestamp for the frame in nanoseconds.
+                If None, the current time will be used.
         """
         with self._encode_lock:
+            timestamp = timestamp if timestamp is not None else time_ns()
             if self._executor is not None:
                 self._last_future = self._executor.submit(
-                    self._encode_frame, frame, timestamp
+                    self._encode_frame, frame, timestamp, ns_to_base
                 )
             else:
-                self._encode_frame(frame, timestamp)
+                self._encode_frame(frame, timestamp, ns_to_base)
 
-    def end(self, file_path: str = "") -> bytes:
+    def end(self, file_path: str = "", reset: bool = True) -> Optional[bytes]:
         """
-        Finalize the encoding process and return the encoded data bytes.
+        Finalize the encoding process.
+        Args:
+            file_path (str): Optional file path to save the encoded video.
+        Returns:
+            Optional[bytes]: The encoded video bytes if no file is given.
         """
         with self._encode_lock:
             if self._last_future:
                 self._last_future.result()
             packets = self.stream.encode()
             self._container.mux(packets)
-            self._container.close()
-            value = self._outbuf.getvalue()
-            self._outbuf.close()
-            self._reset()
-            if file_path:
-                with open(file_path, "wb") as f:
-                    f.write(value)
+            value = None
+            if self._outbuf is not None:
+                value = self._outbuf.getvalue()
+                if file_path:
+                    with open(file_path, "wb") as f:
+                        f.write(value)
+            if reset:
+                self.reset()
             return value
 
-    def reset(self):
+    def _close(self):
+        if self._container is not None:
+            self._container.close()
+        if self._outbuf is not None:
+            self._outbuf.close()
+
+    def close(self):
         """
         Close the encoder and release resources.
         """
         if self._executor is not None:
             self._executor.shutdown(wait=True, cancel_futures=True)
-        self._container.close()
-        self._outbuf.close()
-        self._reset()
+        self._close()
 
     @classmethod
     def get_logger(cls):

@@ -409,7 +409,7 @@ def get_items_by_ext(directory: Union[str, Path], extension: str) -> List[Path]:
     """Get all files or directories in a directory with a specific extension (suffix).
     Args:
         directory (str): The directory to search in.
-        extension (str): The file extension to filter by. If empty, return directories.
+        extension (str): The file extension to filter by. If empty, return all directories.
             If extension is ".", return all files.
         with_directory (bool, optional): Whether to include the directory path in the
             returned file names. Defaults to False.

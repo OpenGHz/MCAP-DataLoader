@@ -41,11 +41,24 @@ class McapDatasetConfig(IterableDatasetConfig):
     """
 
     keys: SetMapping[str] = set()
+    """Keys to read from the MCAP file."""
     topics: Optional[SetMapping[str]] = set()
+    """Topics to read from the MCAP file. If None, read all topics."""
     attachments: Optional[SetMapping[str]] = set()
+    """Attachments to read from the MCAP file. If None, read all attachments."""
     with_timestamp: bool = True
+    """Whether to include timestamps in the samples."""
     strict: bool = True
+    """Whether to enforce strict reading."""
     media_configs: List = []
+    """Media configurations for reading media data, e.g., videos."""
+
+    @property
+    def is_empty(self) -> bool:
+        """
+        Check if the dataset configuration is empty (no keys, topics, or attachments).
+        """
+        return not (self.keys or self.topics or self.attachments)
 
 
 class McapFlatBuffersSampleDatasetConfig(McapDatasetConfig):

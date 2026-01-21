@@ -158,6 +158,7 @@ class InitConfigMixinBasis:
     """A mixin class for initializing with a config."""
 
     def __init__(self, config: ConfigType) -> None:
+        self.config = config
         """Initialize with a config. It is only used for type hinting in the current class;
         subclasses can override it at will. Note that you should try to avoid directly modifying
         the config variable internally, as this may lead to potential problems, such as inconsistent
@@ -173,7 +174,6 @@ class InitConfigMixinBasis:
         circumstances. On the contrary, it forces developers to make more proactive and reasonable designs.
         It is undeniable that shallow copy operations incur additional time consumption, but this is usually
         negligible."""
-        self.config = config
 
     @classmethod
     def get_logger(cls):
