@@ -239,6 +239,8 @@ class AvCoder(InitConfigMixin):
                 self._last_future.result()
             packets = self.stream.encode()
             self._container.mux(packets)
+            self._container.close()  # must close before getting value
+            self._container = None
             value = None
             if self._outbuf is not None:
                 value = self._outbuf.getvalue()
