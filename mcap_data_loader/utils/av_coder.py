@@ -14,6 +14,7 @@ from mcap_data_loader.basis.cfgable import InitConfigMixin
 from pydantic import BaseModel, PositiveInt, NonNegativeInt, ConfigDict
 from enum import auto
 from time import time_ns
+from pathlib import Path
 
 
 class DecodeConfig(BaseModel, frozen=True):
@@ -60,6 +61,9 @@ class AvCoderConfig(BaseModel, frozen=True):
     """Whether to log when frames have the same timestamp."""
 
 
+PathLike = Union[str, Path]
+
+
 class AvCoder(InitConfigMixin):
     """
     A class for encoding video frames using PyAV.
@@ -86,12 +90,12 @@ class AvCoder(InitConfigMixin):
         self._encode_lock = Lock()
         self.reset()
 
-    def reset(self, file_path: str = ""):
+    def reset(self, file_path: PathLike = ""):
         """
         Reset the encoder state.
         This method clears the output buffer and resets the start and last timestamps.
         Args:
-            file_path (str): Optional file path to save the encoded video for the following encoding session.
+            file_path (PathLike): Optional file path to save the encoded video for the following encoding session.
         """
         if self._last_future:
             self._last_future.result()
@@ -103,12 +107,12 @@ class AvCoder(InitConfigMixin):
         self._last_future = None
         self._perf_logs = {}
 
-    def set_output(self, file_path: str):
+    def set_output(self, file_path: PathLike):
         """
         Set the output file path for the encoder.
         This method closes the current container and opens a new one with the specified file path.
         Args:
-            file_path (str): The file path to save the encoded video.
+            file_path (PathLike): The file path to save the encoded video.
         """
         self._outbuf = None if file_path else BytesIO()
         self._container = av.open(file_path or self._outbuf, "w", format="mp4")
@@ -222,11 +226,11 @@ class AvCoder(InitConfigMixin):
             else:
                 self._encode_frame(frame, timestamp, ns_to_base)
 
-    def end(self, file_path: str = "", reset: bool = True) -> Optional[bytes]:
+    def end(self, file_path: PathLike = "", reset: bool = True) -> Optional[bytes]:
         """
         Finalize the encoding process.
         Args:
-            file_path (str): Optional file path to save the encoded video.
+            file_path (PathLike): Optional file path to save the encoded video.
         Returns:
             Optional[bytes]: The encoded video bytes if no file is given.
         """
@@ -241,6 +245,7 @@ class AvCoder(InitConfigMixin):
                 if file_path:
                     with open(file_path, "wb") as f:
                         f.write(value)
+            self._close()
             if reset:
                 self.reset()
             return value
@@ -248,8 +253,10 @@ class AvCoder(InitConfigMixin):
     def _close(self):
         if self._container is not None:
             self._container.close()
+            self._container = None
         if self._outbuf is not None:
             self._outbuf.close()
+            self._outbuf = None
 
     def close(self):
         """
