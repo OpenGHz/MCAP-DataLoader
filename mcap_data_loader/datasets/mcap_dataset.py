@@ -134,7 +134,8 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
 
     def __len__(self) -> int:
         """Get the total number of messages in the MCAP file."""
-        return len(self.reader) if self.reader else 0
+        self._ensure_reader()
+        return len(self.reader)
 
     def __lt__(self, other: Self) -> bool:
         return self.config.data_root < other.config.data_root
