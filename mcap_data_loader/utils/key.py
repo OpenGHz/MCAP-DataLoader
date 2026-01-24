@@ -1,6 +1,7 @@
 from toolz import curry
 from typing import List, Optional, Any, Set, TypeVar, Dict, Tuple, Union
 from collections.abc import Callable, Iterable
+from functools import cache
 import operator
 
 
@@ -183,6 +184,23 @@ def replace(
     return key
 
 
+@curry
+def unique_count(key: str, prefix: str = "") -> str:
+    """Generate a unique key by counting occurrences of the same key.
+    Args:
+        key (str): The original key.
+        prefix (str): The prefix to use for the unique key.
+    Returns:
+        str: A unique key with a count suffix.
+    """
+    if not hasattr(unique_count, "_keys"):
+        unique_count._keys = {}
+    keys = unique_count._keys
+    if key not in keys:
+        keys[key] = f"{prefix}{len(keys)}"
+    return keys[key]
+
+
 if __name__ == "__main__":
     result = reorder_key(
         "/left/leader/arm/pose",
@@ -253,3 +271,11 @@ if __name__ == "__main__":
         [(("leader", "follower"), {}), (("arm", "leg"), {})],
     )
     assert result == "/left/follower/leg/pose", result
+
+    for i, key in enumerate(["keyA", "keyB", "keyA", "keyC", "keyB"]):
+        new_key = unique_count(key, prefix="uid_")
+        print(f"{key} -> {new_key}")
+        assert (
+            new_key
+            == f"uid_{list(dict.fromkeys(['keyA', 'keyB', 'keyA', 'keyC', 'keyB']).keys()).index(key)}"
+        )
