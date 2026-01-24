@@ -1,6 +1,8 @@
-from typing import Optional
+from typing import Optional, Literal
 from collections.abc import Generator
 from pathlib import Path
+from send2trash import send2trash
+import shutil
 
 
 def find_file_paths(
@@ -36,3 +38,22 @@ def find_file_paths(
             print(e)
 
     yield from _walk_with_depth(root, 0)
+
+
+def remove_path(
+    path: Path, mode: Literal["permanent", "trash"] = "permanent", log: bool = False
+) -> bool:
+    """Remove the data from the given or last saved path."""
+    if path.exists():
+        if mode == "permanent":
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        else:
+            send2trash(path)
+        return True
+    else:
+        if log:
+            print(f"Path to be removed {path} does not exist.")
+        return False
