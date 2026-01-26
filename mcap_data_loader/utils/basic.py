@@ -39,6 +39,7 @@ import hashlib
 import operator
 import time
 import sys
+import json
 
 
 BaseModelT = TypeVar("BaseModelT", bound=BaseModel)
@@ -632,6 +633,40 @@ def is_cached(func: Callable) -> bool:
     return hasattr(func, "cache_info") and hasattr(func, "cache_clear")
 
 
+def save_current_command(
+    json_path: str, key: str, as_list: bool = False
+) -> Union[str, List[str]]:
+    """
+    Save the command used to execute the current script to a specified JSON file under a given key.
+    Args:
+        json_path (str): Path to the target JSON file (directories will be created if needed)
+        key (str): The key in the JSON file under which to store the command
+        as_list (bool):
+            - If True, save as a list of command components (e.g., ["python", "script.py", "--arg", "val"])
+            - If False (default), save as a single string (e.g., "python script.py --arg val")
+    Returns:
+        Union[str, List[str]]: The command representation that was saved
+    """
+    command = [sys.executable] + sys.argv
+    command_repr = command if as_list else " ".join(command)
+
+    Path(json_path).parent.mkdir(parents=True, exist_ok=True)
+
+    if Path(json_path).exists():
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {}
+
+    data[key] = command_repr
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+    # print(f"[INFO] Saved current command to {json_path} under key '{key}'")
+    return command_repr
+
+
 if __name__ == "__main__":
     # assert multi_slices_to_indexes(()) == []
     # assert multi_slices_to_indexes(10) == list(range(10))
@@ -705,10 +740,12 @@ if __name__ == "__main__":
 
     # sample_not_implemented()
 
-    class a:
-        class b:
-            class c:
-                pass
+    # class a:
+    #     class b:
+    #         class c:
+    #             pass
 
-    assert get_full_class_name(a.b.c) == "__main__.a.b.c"
-    assert try_to_get_attr(a, ["b.d", "b.c"]) is a.b.c
+    # assert get_full_class_name(a.b.c) == "__main__.a.b.c"
+    # assert try_to_get_attr(a, ["b.d", "b.c"]) is a.b.c
+
+    save_current_command("test_command.json", "last_command", as_list=False)
