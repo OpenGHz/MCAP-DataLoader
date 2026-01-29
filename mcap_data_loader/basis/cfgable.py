@@ -59,7 +59,10 @@ class InitConfigMeta(type):
             if (config is None or isinstance(config, Mapping))
             else type(config)
         )
-        cls_path = kwargs.pop("_target_", None)
+        cls_path = None
+        if isinstance(config, Mapping):
+            cls_path = config.pop("_target_", cls_path)
+        cls_path = kwargs.pop("_target_", cls_path)
         if config_type is None:
             # try to get from _target_
             if cls_path is not None:
