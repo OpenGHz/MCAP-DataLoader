@@ -9,6 +9,16 @@ from cachetools import cached
 T = TypeVar("T")
 
 
+def defaultdict_to_dict(d: defaultdict):
+    if isinstance(d, defaultdict):
+        d = {k: defaultdict_to_dict(v) for k, v in d.items()}
+    elif isinstance(d, dict):
+        d = {k: defaultdict_to_dict(v) for k, v in d.items()}
+    elif isinstance(d, list):
+        d = [defaultdict_to_dict(x) for x in d]
+    return d
+
+
 def invert_and_merge(d: Dict[str, Hashable], joiner=","):
     inv = defaultdict(list)
     for k, v in d.items():
