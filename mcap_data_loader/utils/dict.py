@@ -1,12 +1,31 @@
 from typing import Tuple, TypeVar, Any, Dict, Generic, List, Optional, Union
 from typing_extensions import Annotated
 from collections.abc import Mapping, Iterable, Hashable, Callable
-from pydantic import BeforeValidator, PlainSerializer
-from cachetools import cached
 from collections import defaultdict
+from pydantic import BeforeValidator, PlainSerializer, BaseModel
+from cachetools import cached
 
 
 T = TypeVar("T")
+
+
+def invert_and_merge(d: Dict[str, Hashable], joiner=","):
+    inv = defaultdict(list)
+    for k, v in d.items():
+        inv[v].append(k)
+    return {v: joiner.join(ks) for v, ks in inv.items()}
+
+
+def merge_keys_by_value(d: Dict[str, Hashable], joiner=",") -> Dict[str, Hashable]:
+    """Merge keys in a dictionary based on their values.
+    Args:
+        d: Input dictionary with string keys and hashable values.
+        joiner: String used to join merged keys.
+    Returns:
+        A new dictionary with merged keys.
+    """
+    inv = invert_and_merge(d, joiner=joiner)
+    return {v: k for k, v in inv.items()}
 
 
 def iterable2dict(iterable: Iterable[T]) -> Mapping[int, T]:
@@ -277,14 +296,27 @@ MergeValuesCallType = Annotated[
 
 
 class PredReplaceTo:
-    """A predicate callable that replaces target substrings in keys with specified alternatives."""
-
     def __init__(
         self,
         targets: List[str],
         sources: List[List[str]],
         to_targets: Optional[List[str]] = None,
     ):
+        """A predicate callable that replaces target substrings in keys with specified alternatives.
+        Args:
+            targets: List of target substrings to look for in keys.
+            sources: List of lists of source substrings to replace with corresponding targets.
+            to_targets: Optional list of alternative target substrings to replace targets with. If None, targets are not replaced.
+        Example:
+            pred = PredReplaceTo(
+                targets=["group1", "group2"],
+                sources=[["a", "b"], ["c", "d"]],
+                to_targets=["grp1", "grp2"]
+            )
+            key1 = "This is a test for group1 and a."
+            new_key1, priority1 = pred(key1)
+            # new_key1 will be "This is grp1 and grp1.", priority1 will be 0 (target matched)
+        """
         if len(targets) != len(set(targets)):
             raise ValueError(f"targets must be unique: {targets}")
         self.targets = targets
@@ -307,6 +339,21 @@ class PredReplaceTo:
                 if source in k:
                     return (k.replace(source, target), prior + 1)
         return (k, 0)
+
+
+KeyType = TypeVar("KeyType", bound=Hashable)
+ValueType = TypeVar("ValueType")
+
+
+class BaseModelDictable(BaseModel, Generic[KeyType, ValueType]):
+    """A mixin class that provides an items() method to iterate over key-value pairs of a pydantic BaseModel."""
+
+    def items(self) -> Iterable[Tuple[KeyType, ValueType]]:
+        for field_name in self.__class__.model_fields:
+            yield field_name, getattr(self, field_name)
+
+    def __getitem__(self, key: KeyType) -> ValueType:
+        return getattr(self, key)
 
 
 if __name__ == "__main__":

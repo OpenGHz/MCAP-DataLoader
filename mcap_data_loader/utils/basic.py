@@ -12,6 +12,7 @@ from typing import (
     Protocol,
     Set,
     Literal,
+    Tuple,
     get_origin,
     get_args,
 )
@@ -187,7 +188,7 @@ def sum_auto_start(iterable: Iterable[T]) -> T:
         total += item
     return total
 
-
+# TODO: move to basis/data_stamped.py
 class DataStamped(TypedDict, Generic[T]):
     t: int
     data: T
@@ -199,6 +200,15 @@ class DataStamped(TypedDict, Generic[T]):
         keys: Optional[Iterable[KeyT]] = None,
         output: Optional[dict] = None,
     ) -> Dict[KeyT, "DataStamped[ReturnT]"]:
+        """map a function to the data part of each DataStamped in the dictionary.
+        Args:
+            data (Dict[KeyT, DataStamped[DataT]]): The input dictionary.
+            func (Callable[[DataT], ReturnT]): The function to apply to the data part.
+            keys (Optional[Iterable[KeyT]], optional): The keys to process. If None, process all keys. Defaults to None.
+            output (Optional[dict], optional): The output dictionary to store the results. If None, create a new dictionary. Defaults to None.
+        Returns:
+            Dict[KeyT, DataStamped[ReturnT]]: The output dictionary with the processed data.
+        """
         result = output if output is not None else {}
         keys = data.keys() if keys is None else keys
         for key in keys:
@@ -215,12 +225,37 @@ class DataStamped(TypedDict, Generic[T]):
         d_method: Callable[[List[DataT]], ReturnT] = sum_auto_start,
         t_method: Callable[[List[int]], int] = mean,
     ) -> "DataStamped[ReturnT]":
+        """merge multiple DataStamped into one.
+        Args:
+            values (Iterable[DataStamped[DataT]]): The input DataStamped objects.
+            d_method (Callable[[List[DataT]], ReturnT], optional): The method to merge the data part. Defaults to sum_auto_start.
+            t_method (Callable[[List[int]], int], optional): The method to merge the time part. Defaults to mean.
+        Returns:
+            DataStamped[ReturnT]: The merged DataStamped object.
+        """
         time_list = []
         data_list = []
         for item in values:
             time_list.append(item["t"])
             data_list.append(item["data"])
         return {"t": int(t_method(time_list)), "data": d_method(data_list)}
+
+    @staticmethod
+    def concatenate(
+        values: Iterable["DataStamped[Iterable[DataT]]"],
+    ) -> Tuple[List[int], List[DataT]]:
+        """Concatenate multiple DataStamped with list data into one.
+        Args:
+            values (Iterable[DataStamped[Iterable[DataT]]]): The input DataStamped objects.
+        Returns:
+            Tuple[List[int], List[DataT]]: The concatenated time list and data list.
+        """
+        time_list = []
+        data_list = []
+        for item in values:
+            time_list.append(item["t"])
+            data_list.extend(item["data"])
+        return time_list, data_list
 
     @staticmethod
     def create(data: T, t: int = 0) -> "DataStamped[T]":
@@ -232,7 +267,9 @@ map_dict_data_stamped = curry(DataStamped.map_dict)
 merge_data_stamped = curry(DataStamped.merge)
 
 
-def copy_dict_data_stamped(data: DictDataStamped[T], deep: bool = False):
+def copy_dict_data_stamped(
+    data: DictDataStamped[T], deep: bool = False
+) -> DictDataStamped[T]:
     """Copy a DictDataStamped object.
     Args:
         data (DictDataStamped[T]): The DictDataStamped object to copy.
