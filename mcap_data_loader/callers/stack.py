@@ -6,10 +6,11 @@ from mcap_data_loader.utils.array_like import (
     ArrayTransferConfig,
 )
 from mcap_data_loader.callers.basis import CallerBasis
-from mcap_data_loader.pipelines.horizon import HorizonItem
+from mcap_data_loader.pipelines.horizon import HorizonItem, HorizonElement
 from typing import Tuple, List, Dict, Union, Annotated
 from pydantic import PositiveInt, AfterValidator, ConfigDict
 from threading import Lock
+from collections import defaultdict
 
 
 DictBatch = Dict[str, Union[Array, List[Array], int]]
@@ -151,14 +152,19 @@ class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
         return batch_stack
 
 
-class HorizonStackerConfig(ArrayTransferConfig):
-    """Configuration for HorizonStacker caller."""
+KeyDictType = Dict[str, Union[List[str], str]]
 
-    past: Dict[str, List[str]] = {}
+
+class HorizonStackerConfig(ArrayTransferConfig):
+    """Configuration for HorizonStacker caller.
+    The key of the stack dict is the new key for the stacked result, and the value specifies the keys to stack for that new key. If the value is empty, the key of the dict will be treated as the original key and no concatenating will be performed. If the value is a single string, it will be mapped to the target key and no concatenating will be
+    performed."""
+
+    past: KeyDictType = {}
     """Keys for past horizon to stack."""
-    future: Dict[str, List[str]] = {}
+    future: KeyDictType = {}
     """Keys for future horizon to stack."""
-    now: Dict[str, List[str]] = {}
+    now: KeyDictType = {}
     """Keys for current step to stack."""
 
 
@@ -167,18 +173,48 @@ class HorizonStacker(CallerBasis[Dict], ArrayTransferMixin):
 
     def __init__(self, config: HorizonStackerConfig):
         self.config = config
-        self._past_keys = config.past
-        self._future_keys = config.future
-        self._now_keys = config.now
+        self._key_dicts = {
+            "past": self.config.past,
+            "future": self.config.future,
+            "now": self.config.now,
+        }
+        self._process_keys()
         self._first_call = True
         self._lock = Lock()
         self._one_key = ""
+
+    def _process_keys(self):
+        self._ori_keys = defaultdict(dict)
+        for kind, key_dict in self._key_dicts.items():
+            for new_key in list(key_dict.keys()):
+                keys = key_dict[new_key]
+                if isinstance(keys, str) or not keys:
+                    key_dict.pop(new_key)
+                    self._ori_keys[kind][new_key] = new_key if not keys else keys
+
+    def _check_keys(self, available_keys: set):
+        for kind, key_dict in self._key_dicts.items():
+            for new_key, keys in key_dict.items():
+                keys = keys or [new_key]
+                for key in keys:
+                    if key not in available_keys:
+                        raise KeyError(
+                            f"Key '{key}' not found in available {kind} keys: {available_keys}."
+                        )
+        for kind, key_dict in self._ori_keys.items():
+            for key in key_dict.values():
+                if key not in available_keys:
+                    raise KeyError(
+                        f"Key '{key}' not found in available {kind} keys: {available_keys}."
+                    )
 
     def _init_info(self, first_sample: HorizonItem[SampleStamped]):
         with self._lock:
             if not self._first_call:
                 return
-            self._one_key, one_value = next(iter(first_sample[0][0].items()))
+            first_dict = first_sample[0][0]
+            self._check_keys(set(first_dict.keys()))
+            self._one_key, one_value = next(iter(first_dict.items()))
             self._determine_from_array(
                 one_value["data"],
                 self.config.backend_out,
@@ -188,15 +224,15 @@ class HorizonStacker(CallerBasis[Dict], ArrayTransferMixin):
             )
             self._first_call = False
 
-    def _stack(
+    def _concat_stack(
         self,
-        key_dict: Dict[str, List[str]],
-        horizon: Tuple[Dict, ...],
+        key_dict: KeyDictType,
+        horizon_elem: HorizonElement,
         stacked_item: Dict[str, list],
     ):
         for new_key, keys in key_dict.items():
             stacked_item[new_key] = []
-            for sample in horizon:
+            for sample in horizon_elem:
                 stacked_item[new_key].append(
                     self._xp_in.concatenate(
                         [sample[key]["data"] for key in keys], axis=-1
@@ -206,19 +242,34 @@ class HorizonStacker(CallerBasis[Dict], ArrayTransferMixin):
                 self._xp_in.stack(stacked_item[new_key])
             )
 
+    def _stack(
+        self,
+        keys: Dict[str, str],
+        horizon_elem: HorizonElement,
+        stacked_item: Dict[str, list],
+    ):
+        for new_key, key in keys.items():
+            stacked_item[new_key] = self.convert_func(
+                self._xp_in.stack([sample[key]["data"] for sample in horizon_elem])
+            )
+
     def __call__(self, horizon_item: HorizonItem[SampleStamped]):
         if self._first_call:
             self._init_info(horizon_item)
         past, future = horizon_item
         stacked_item = {}
-        self._stack(self._past_keys, past, stacked_item)
-        self._stack(self._future_keys, future, stacked_item)
+        self._concat_stack(self._key_dicts["past"], past, stacked_item)
+        self._concat_stack(self._key_dicts["future"], future, stacked_item)
         cur_data = horizon_item[0][-1]
-        for new_key, keys in self._now_keys.items():
+        for new_key, keys in self._key_dicts["now"].items():
             stacked_item[new_key] = self.convert_func(
                 self._xp_in.concatenate(
                     [cur_data[key]["data"] for key in keys], axis=-1
                 )
             )
+        self._stack(self._ori_keys["past"], past, stacked_item)
+        self._stack(self._ori_keys["future"], future, stacked_item)
+        for new_key, key in self._ori_keys["now"].items():
+            stacked_item[new_key] = self.convert_func(cur_data[key]["data"])
         stacked_item["timestamp"] = cur_data[self._one_key]["t"]
         return stacked_item

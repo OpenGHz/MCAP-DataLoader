@@ -7,6 +7,7 @@ import time
 item = {
     "/follow/arm/joint_state/position": {"data": [0.0, 0.1], "t": 0.0},
     "/follow/eef/joint_state/position": {"data": [1.0, 1.1], "t": 0.0},
+    "/follow/arm/joint_state/effort": {"data": [0.5, 0.6], "t": 0.0},
     "/lead/arm/joint_state/position": {"data": [2.0, 2.1], "t": 0.0},
     "/lead/eef/joint_state/position": {"data": [3.0, 3.1], "t": 0.0},
 }
@@ -32,7 +33,8 @@ config = HorizonStackerConfig(
         "observation.state": [
             "/follow/arm/joint_state/position",
             "/follow/eef/joint_state/position",
-        ]
+        ],
+        "observation.effort": "/follow/arm/joint_state/effort",
     },
     backend_out="torch",
     dtype="float32",

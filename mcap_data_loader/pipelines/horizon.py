@@ -5,7 +5,8 @@ from typing import Any, Tuple
 from collections.abc import Iterable
 
 
-HorizonItem = Tuple[Tuple[T, ...], Tuple[T, ...]]
+HorizonElement = Tuple[T, ...]
+HorizonItem = Tuple[HorizonElement[T], HorizonElement[T]]
 
 
 class HorizonConfig(BaseModel, frozen=True):
@@ -43,9 +44,7 @@ class Horizon(Pipe):
         self._past_future = Reusablizer(past_future)
         setattr(self._past_future, "future_span", config.future_span)
 
-    def on_call(
-        self, iterable: Iterable[T]
-    ) -> Iterable[HorizonItem[T]]:
+    def on_call(self, iterable: Iterable[T]) -> Iterable[HorizonItem[T]]:
         return self._past_future(iterable, **self.config_dict)
 
 
