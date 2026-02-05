@@ -1,6 +1,5 @@
 from mcap_data_loader.callers.chain import CallerChain, CallerChainConfig
 from mcap_data_loader.callers.dict_tuple import DictTuple, DictTupleConfig
-from mcap_data_loader.callers.curry import Curry, CurryConfig
 from mcap_data_loader.callers.dataset import DatasetCaller, DatasetCallerConfig
 from mcap_data_loader.callers.map import Map, MapConfig
 from mcap_data_loader.callers.multi import MultiCaller, MultiCallerConfig

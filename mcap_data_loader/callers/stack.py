@@ -1,13 +1,14 @@
 from mcap_data_loader.datasets.mcap_dataset import SampleStamped
 from mcap_data_loader.utils.basic import float_range, ListMapping
-from typing import Tuple, List, Dict, Union, Annotated
-from pydantic import PositiveInt, AfterValidator, ConfigDict
 from mcap_data_loader.utils.array_like import (
     Array,
     ArrayTransferMixin,
     ArrayTransferConfig,
 )
 from mcap_data_loader.callers.basis import CallerBasis
+from mcap_data_loader.pipelines.horizon import HorizonItem
+from typing import Tuple, List, Dict, Union, Annotated
+from pydantic import PositiveInt, AfterValidator, ConfigDict
 from threading import Lock
 
 
@@ -15,7 +16,11 @@ DictBatch = Dict[str, Union[Array, List[Array], int]]
 NormStackValue = List[List[str]]
 StackTypeRaw = Dict[
     str,
-    Union[NormStackValue, ListMapping[str], Tuple[List[str], List[Union[float, PositiveInt]]]],
+    Union[
+        NormStackValue,
+        ListMapping[str],
+        Tuple[List[str], List[Union[float, PositiveInt]]],
+    ],
 ]
 
 
@@ -144,3 +149,76 @@ class BatchStacker(CallerBasis[DictBatch], ArrayTransferMixin):
             batch_stack[catkey] = convert_func(batch_stack[catkey])
         batch_stack["batch_size"] = batch_size
         return batch_stack
+
+
+class HorizonStackerConfig(ArrayTransferConfig):
+    """Configuration for HorizonStacker caller."""
+
+    past: Dict[str, List[str]] = {}
+    """Keys for past horizon to stack."""
+    future: Dict[str, List[str]] = {}
+    """Keys for future horizon to stack."""
+    now: Dict[str, List[str]] = {}
+    """Keys for current step to stack."""
+
+
+class HorizonStacker(CallerBasis[Dict], ArrayTransferMixin):
+    """A caller that stacks specified keys from horizon tuple."""
+
+    def __init__(self, config: HorizonStackerConfig):
+        self.config = config
+        self._past_keys = config.past
+        self._future_keys = config.future
+        self._now_keys = config.now
+        self._first_call = True
+        self._lock = Lock()
+        self._one_key = ""
+
+    def _init_info(self, first_sample: HorizonItem[SampleStamped]):
+        with self._lock:
+            if not self._first_call:
+                return
+            self._one_key, one_value = next(iter(first_sample[0][0].items()))
+            self._determine_from_array(
+                one_value["data"],
+                self.config.backend_out,
+                self.config.dtype,
+                self.config.device,
+                self.config.backend_in,
+            )
+            self._first_call = False
+
+    def _stack(
+        self,
+        key_dict: Dict[str, List[str]],
+        horizon: Tuple[Dict, ...],
+        stacked_item: Dict[str, list],
+    ):
+        for new_key, keys in key_dict.items():
+            stacked_item[new_key] = []
+            for sample in horizon:
+                stacked_item[new_key].append(
+                    self._xp_in.concatenate(
+                        [sample[key]["data"] for key in keys], axis=-1
+                    )
+                )
+            stacked_item[new_key] = self.convert_func(
+                self._xp_in.stack(stacked_item[new_key])
+            )
+
+    def __call__(self, horizon_item: HorizonItem[SampleStamped]):
+        if self._first_call:
+            self._init_info(horizon_item)
+        past, future = horizon_item
+        stacked_item = {}
+        self._stack(self._past_keys, past, stacked_item)
+        self._stack(self._future_keys, future, stacked_item)
+        cur_data = horizon_item[0][-1]
+        for new_key, keys in self._now_keys.items():
+            stacked_item[new_key] = self.convert_func(
+                self._xp_in.concatenate(
+                    [cur_data[key]["data"] for key in keys], axis=-1
+                )
+            )
+        stacked_item["timestamp"] = cur_data[self._one_key]["t"]
+        return stacked_item

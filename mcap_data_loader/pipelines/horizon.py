@@ -5,6 +5,9 @@ from typing import Any, Tuple
 from collections.abc import Iterable
 
 
+HorizonItem = Tuple[Tuple[T, ...], Tuple[T, ...]]
+
+
 class HorizonConfig(BaseModel, frozen=True):
     """Configuration for the Horizon pipeline."""
 
@@ -42,7 +45,7 @@ class Horizon(Pipe):
 
     def on_call(
         self, iterable: Iterable[T]
-    ) -> Iterable[Tuple[Tuple[T, ...], Tuple[T, ...]]]:
+    ) -> Iterable[HorizonItem[T]]:
         return self._past_future(iterable, **self.config_dict)
 
 

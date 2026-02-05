@@ -40,5 +40,8 @@ if __name__ == "__main__":
     logger.info(f"Iterating {data_loader}...")
     for sample in data_loader:
         pprint(sample)
+        sample.pop("batch_size")
+        for key, value in sample.items():
+            print(f"{key}: {value.shape}")
         break
     logger.info("Done.")

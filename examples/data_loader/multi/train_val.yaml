@@ -43,9 +43,8 @@ registry0:
         _target_: mcap_data_loader.callers.DictTuple
         separate_key: false
     4:
-      # use curry to make any callable compatible with the pipeline
-      _target_: mcap_data_loader.callers.Curry
-      callable: torchdata.nodes.IterableWrapper
+      _target_: torchdata.nodes.IterableWrapper
+      _partial_: true
   to_loader:
     0:
       _target_: mcap_data_loader.callers.nodes.MultiNodeWeightedSampler

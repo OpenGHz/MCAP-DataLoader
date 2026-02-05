@@ -284,8 +284,8 @@ class McapMultiEpisodeDatasetsConfig(BaseModel, frozen=True):
 
     common: Dict[str, Any] = {}
     """Common configuration for all dataset roots."""
-    configs: Dict[Hashable, Dict[str, Any]] = Field(min_length=1)
-    """Dataset configurations. The key is the unique name of the dataset, and the value is the dataset config dict."""
+    configs: Dict[Hashable, Union[Dict[str, Any], BaseModel]] = Field(min_length=1)
+    """Dataset configurations. The key is the unique name of the dataset, and the value is the dataset config."""
 
 
 class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]):
@@ -302,13 +302,20 @@ class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]
         """
         Initialize episode datasets from multiple roots.
         """
-        for name, cfg in self.config.configs.items():
+        config = self.config
+        com_data_root = config.common.get("data_root")
+        for name, cfg in config.configs.items():
             self.get_logger().debug(f"Initializing dataset '{name}' with config: {cfg}")
-            data_root = Path(cfg["data_root"])
-            merge_config = self.config.common.copy()
-            merge_config.update(cfg)
-            config_cls, dataset_cls = get_config_and_class_type(data_root)
-            episode_dataset = dataset_cls(config_cls(**merge_config))
+            if isinstance(cfg, dict):
+                # TODO: support _target_ to specify dataset type
+                data_root = Path(com_data_root or cfg["data_root"])
+                merge_config = config.common.copy()
+                merge_config.update(cfg)
+                config_cls, dataset_cls = get_config_and_class_type(data_root)
+                config_ins = config_cls(**merge_config)
+            else:
+                config_ins = cfg.model_copy(update=config.common)
+            episode_dataset = dataset_cls(config_ins)
             episode_dataset = to_episodic_sequence(episode_dataset)
             self._episode_datasets.append(episode_dataset)
 
