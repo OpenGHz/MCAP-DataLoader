@@ -55,7 +55,7 @@ def dict2tuple_sort(d: Mapping[Any, T]) -> Tuple[T, ...]:
     return tuple(d[k] for k in sorted(d.keys()))
 
 
-def valmap_depth(func: Callable, d: dict, depth: int = -1):
+def valmap_depth(func: Callable, d: dict, depth: int = -1) -> dict:
     """
     Recursively apply `func` to the values of a dictionary, up to a specified depth.
 
@@ -65,6 +65,8 @@ def valmap_depth(func: Callable, d: dict, depth: int = -1):
         depth: Maximum recursion depth.
             - If depth >= 0: apply `func` to values at levels <= depth.
             - If depth < 0: recurse infinitely (i.e., until values are no longer dicts).
+    Returns:
+        A new dictionary with `func` applied to values at the specified depth.
     """
     if depth < 0:
         # Infinite recursion: keep recursing into dicts
