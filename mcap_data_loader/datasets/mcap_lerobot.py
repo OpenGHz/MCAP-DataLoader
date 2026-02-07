@@ -173,6 +173,9 @@ class McapLeRobotDataset(IterableDataset):
             stats[concat_key] = concatenate_statistics(
                 [data_stats[key] for key in keys]
             )
+        # add empty img stats to support modify stats outside
+        for img_key in camera_mappings:
+            stats[img_key] = Statistics.empty((3, 1, 1))
         self._meta = McapLeRobotDatasetMeta(
             features=features, stats=stats, camera_keys=camera_mappings.keys()
         )
