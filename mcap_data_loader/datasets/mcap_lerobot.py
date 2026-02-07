@@ -1,18 +1,22 @@
 from torch.utils.data import IterableDataset
-from torch import Tensor
-from pydantic import BaseModel, field_validator
+from torch import Tensor, asarray
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import List, Union, Dict
-from collections.abc import Mapping, Iterator
+from collections.abc import Mapping
 from mcap_data_loader.datasets.mcap_dataset import (
     McapMultiEpisodeDatasets,
     McapMultiEpisodeDatasetsConfig,
 )
 from mcap_data_loader.utils.hydra_utils import hydra_instance_from_dict
+from mcap_data_loader.utils.basic import force_set_attr
 from mcap_data_loader.pipelines import Pipeline, PipelineConfig, HorizonConfig
+from numpy.typing import NDArray
 
 
-class McapLeRobotDatasetConfig(BaseModel):
+class McapLeRobotDatasetConfig(BaseModel, frozen=True):
     """Configuration for McapLeRobotDataset."""
+
+    model_config = ConfigDict(validate_assignment=True)
 
     data_root: Union[str, Dict[str, List[str]]]
     """The root directory of the dataset."""
@@ -31,9 +35,24 @@ class McapLeRobotDatasetConfig(BaseModel):
             return {"fill_with_last": True} | v
         return v
 
+    @force_set_attr
     def model_post_init(self, context):
         if isinstance(self.data_root, str):
             self.data_root = {self.data_root: self.states + self.images + self.actions}
+
+
+class McapLeRobotDatasetMeta(BaseModel, frozen=True):
+    """Metadata for McapLeRobotDataset."""
+
+    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True)
+
+    features: Dict[str, Dict[str, Union[tuple, str]]]
+    """The dictionary of features, where the key is the feature name and the value is a dictionary containing the shape and dtype of the feature."""
+    stats: Dict[str, Dict[str, NDArray]]
+    """"""
+
+
+ItemType = Dict[str, Tensor]
 
 
 class McapLeRobotDataset(IterableDataset):
@@ -87,7 +106,8 @@ class McapLeRobotDataset(IterableDataset):
                                     for img_key in config.images
                                 },
                                 "future": {"action": config.actions},
-                                "backend_out": "torch",
+                                # NOTE: the same as the input, usually cpu
+                                # "backend_out": "torch",
                                 "dtype": "float32",
                             },
                         },
@@ -109,20 +129,51 @@ class McapLeRobotDataset(IterableDataset):
             )
         )
         pipeline_config = hydra_instance_from_dict(pipeline_dict)
-        pipeline = Pipeline(PipelineConfig(pipeline=pipeline_config))
+        pipeline = Pipeline[ItemType](PipelineConfig(pipeline=pipeline_config))
         self._pipeline = pipeline(self._datasets)
         self._ds_iter = None
+        first_item = next(iter(self._pipeline))
+        self._add_items = {
+            "action_is_pad": asarray([True] * first_item["action"].shape[0]),
+        }
+        first_item.update(self._add_items)
+        # NOTE: the `timestamp` in lerobot dataset is float32, but here
+        # it is int64
+        features = {}
+        for key, value in first_item.items():
+            shape = tuple(value.shape)
+            if len(value.shape) == 3:
+                dtype = "image"
+            else:
+                dtype = str(value.dtype).split(".")[-1]
+            features[key] = {"shape": shape, "dtype": dtype}
+        stats = {}
+        self._meta = McapLeRobotDatasetMeta(features=features, stats=stats)
 
-    def __iter__(self) -> Iterator[Dict[str, Union[int, Tensor]]]:
-        return iter(self._pipeline)
+    def __iter__(self):
+        # return iter(self._pipeline)
+        # TODO: dynamically adjust the `action_is_pad` shape if not fill_with_last
+        for item in self._pipeline:
+            item.update(self._add_items)
+            yield item
 
     def __getitem__(self, index):
         if index == 0:
             self._ds_iter = iter(self._pipeline)
-        return next(self._ds_iter)
+        item = next(self._ds_iter)
+        item.update(self._add_items)
+        return item
+
+    @property
+    def meta(self) -> McapLeRobotDatasetMeta:
+        return self._meta
 
 
 if __name__ == "__main__":
+    import time
+    import statistics
+    from pprint import pprint
+
     root_dir = "data/example"
     dataset = McapLeRobotDataset(
         McapLeRobotDatasetConfig(
@@ -136,11 +187,13 @@ if __name__ == "__main__":
             horizon=HorizonConfig(fill_with_last=True, future_num=1),
         )
     )
+    pprint(dataset.meta.features)
+    time_costs = []
+    start = time.perf_counter()
     for data in dataset:
-        # print(data)
-        for key, value in data.items():
-            if isinstance(value, int):
-                print(f"{key}: {value}")
-            else:
-                print(f"{key}: {value.shape if hasattr(value, 'shape') else value}")
-        break
+        time_costs.append(time.perf_counter() - start)
+        # for key, value in data.items():
+        #     print(f"{key}: {value.shape if hasattr(value, 'shape') else value}")
+        start = time.perf_counter()
+
+    print(statistics.mean(time_costs[1:]))
