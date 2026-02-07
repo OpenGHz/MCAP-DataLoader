@@ -9,8 +9,8 @@ from mcap_data_loader.datasets.mcap_dataset import (
 )
 from mcap_data_loader.utils.hydra_utils import hydra_instance_from_dict
 from mcap_data_loader.utils.basic import force_set_attr
+from mcap_data_loader.utils.stat import concatenate_statistics, Statistics
 from mcap_data_loader.pipelines import Pipeline, PipelineConfig, HorizonConfig
-from numpy.typing import NDArray
 
 
 class McapLeRobotDatasetConfig(BaseModel, frozen=True):
@@ -48,11 +48,21 @@ class McapLeRobotDatasetMeta(BaseModel, frozen=True):
 
     features: Dict[str, Dict[str, Union[tuple, str]]]
     """The dictionary of features, where the key is the feature name and the value is a dictionary containing the shape and dtype of the feature."""
-    stats: Dict[str, Dict[str, NDArray]]
-    """"""
+    stats: Dict[str, Statistics]
+    """The dictionary of statistics, where the key is the feature name and the value is a dictionary containing the statistics of the feature."""
+
+    @field_validator("stats", mode="after")
+    def validate_stats(cls, v: dict):
+        for stat in v.values():
+            stat["count"] = stat["n"]
+        return v
 
 
 ItemType = Dict[str, Tensor]
+
+STATE_KEY = "observation.state"
+ACTION_KEY = "action"
+IMAGE_KEY_PREFIX = "observation.images"
 
 
 class McapLeRobotDataset(IterableDataset):
@@ -97,15 +107,15 @@ class McapLeRobotDataset(IterableDataset):
                             "callable": {
                                 "_target_": "mcap_data_loader.callers.stack.HorizonStacker",
                                 "now": {
-                                    "observation.state": config.states,
+                                    STATE_KEY: config.states,
                                     # "observation.effort": "/follow/arm/joint_state/effort",
                                 }
                                 | {
-                                    "observation.images."
+                                    IMAGE_KEY_PREFIX
                                     + img_key.removeprefix("/").split("/")[0]: img_key
                                     for img_key in config.images
                                 },
-                                "future": {"action": config.actions},
+                                "future": {ACTION_KEY: config.actions},
                                 # NOTE: the same as the input, usually cpu
                                 # "backend_out": "torch",
                                 "dtype": "float32",
@@ -134,7 +144,7 @@ class McapLeRobotDataset(IterableDataset):
         self._ds_iter = None
         first_item = next(iter(self._pipeline))
         self._add_items = {
-            "action_is_pad": asarray([True] * first_item["action"].shape[0]),
+            "action_is_pad": asarray([True] * first_item[ACTION_KEY].shape[0]),
         }
         # NOTE: do not update the `first_item` here, otherwise the `action_is_pad` will
         # be treated as an action feaute
@@ -150,6 +160,13 @@ class McapLeRobotDataset(IterableDataset):
                 dtype = str(value.dtype).split(".")[-1]
             features[key] = {"shape": shape, "dtype": dtype}
         stats = {}
+        data_stats = self._datasets.statistics()
+        for concat_key, keys in zip(
+            (STATE_KEY, ACTION_KEY), (config.states, config.actions)
+        ):
+            stats[concat_key] = concatenate_statistics(
+                [data_stats[key] for key in keys]
+            )
         self._meta = McapLeRobotDatasetMeta(features=features, stats=stats)
 
     def __iter__(self):
@@ -189,7 +206,8 @@ if __name__ == "__main__":
             horizon=HorizonConfig(fill_with_last=True, future_num=1),
         )
     )
-    pprint(dataset.meta.features)
+    # pprint(dataset.meta.features)
+    pprint(dataset.meta.stats)
     time_costs = []
     start = time.perf_counter()
     for data in dataset:
