@@ -567,6 +567,17 @@ class McapFlatBuffersReader:
         """Check if the MCAP file has topic statistics attachment."""
         return "topic_statistics" in self.all_attachment_names()
 
+    def _process_stats(
+        self, stats: Dict[str, StatisticsBasis]
+    ) -> Dict[str, Statistics]:
+        for topic, stat in stats.items():
+            cnt = self.topic_message_counts()[topic]
+            stat["mean"] = stat["sum"] / cnt
+            var = stat["sum_sq"] / cnt - stat["mean"] ** 2
+            stat["std"] = np.maximum(var, 0.0) ** 0.5
+            stat["n"] = cnt
+        return stats
+
     def compute_topic_statistics(self) -> Dict[str, Statistics]:
         """Compute statistics for each topic in the MCAP file."""
         if self.reader is None:
@@ -576,18 +587,17 @@ class McapFlatBuffersReader:
         for schema, channel, message in self.reader.iter_messages():
             if schema.name in stat_schemas:
                 stat_topics.add(channel.topic)
-        stats = defaultdict(lambda: {"sum": 0, "sum_sq": 0})
+        stats = defaultdict(
+            lambda: {"sum": 0, "sum_sq": 0, "min": float("inf"), "max": float("-inf")}
+        )
         for sample in self.iter_message_samples(stat_topics):
             for topic in stat_topics:
                 data = sample[topic]["data"]
                 stats[topic]["sum"] += data
                 stats[topic]["sum_sq"] += data**2
-        for topic, stat in stats.items():
-            cnt = self.topic_message_counts()[topic]
-            stat["mean"] = stat["sum"] / cnt
-            stat["std"] = (stat["sum_sq"] / cnt - stat["mean"] ** 2) ** 0.5
-            stat["n"] = cnt
-        return stats
+                stats[topic]["min"] = np.minimum(stats[topic]["min"], data)
+                stats[topic]["max"] = np.maximum(stats[topic]["max"], data)
+        return self._process_stats(stats)
 
     @cached_property
     def topic_statistics(self) -> Dict[str, Statistics]:
@@ -595,14 +605,10 @@ class McapFlatBuffersReader:
         for attach in self.reader.iter_attachments():
             if attach.name == "topic_statistics":
                 stats: Dict[str, StatisticsBasis] = json.loads(attach.data)
-                for topic, stat in stats.items():
-                    cnt = self.topic_message_counts()[topic]
+                for stat in stats.values():
                     for name, value in stat.items():
                         stat[name] = np.asarray(value)
-                    stat["mean"] = stat["sum"] / cnt
-                    stat["std"] = (stat["sum_sq"] / cnt - stat["mean"] ** 2) ** 0.5
-                    stat["n"] = cnt
-                return stats
+                return self._process_stats(stats)
         self.get_logger().info("Computing topic statistics...")
         return self.compute_topic_statistics()
 

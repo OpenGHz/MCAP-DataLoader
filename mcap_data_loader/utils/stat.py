@@ -1,8 +1,10 @@
 import numpy as np
 from numpy.typing import NDArray
-from typing import List, Tuple, TypedDict, Dict
+from typing import List, Tuple, Dict
+from typing_extensions import TypedDict
 from collections.abc import Iterable
 from collections import defaultdict
+from warnings import warn
 
 
 class StatisticsBasis(TypedDict):
@@ -86,11 +88,17 @@ def combine_groups(groups: List[Statistics]) -> Statistics:
         tx += stat["sum"]
         txx += stat["sum_sq"]
         tn += n
-        min_val = np.minimum(min_val, stat["min"])
-        max_val = np.maximum(max_val, stat["max"])
+        # compatible with old statistics without min/max
+        min_val = np.minimum(min_val, stat.get("min", min_val))
+        max_val = np.maximum(max_val, stat.get("max", max_val))
 
     if tn == 0:
         raise ValueError("Group is empty.")
+
+    if np.isscalar(min_val):
+        min_val = np.full_like(tx, min_val)
+    if np.isscalar(max_val):
+        max_val = np.full_like(tx, max_val)
 
     combined_mean = tx / tn
     combined_sd = (
@@ -116,6 +124,24 @@ def combine_dict_groups(
         for key, stat in dict_group.items():
             groups[key].append(stat)
     return {key: combine_groups(stats) for key, stats in groups.items()}
+
+
+def concatenate_statistics(statistics: Iterable[Statistics]) -> Statistics:
+    """Concatenate multiple Statistics objects into one."""
+    concated = {}
+    all_keys = Statistics.__annotations__.keys()
+    for key in all_keys - {"n"}:  # n should not be concatenated
+        concated[key] = np.concatenate([stat[key] for stat in statistics])
+    # TODO: how to handle the `n` when concatenating? here we just take the max, since it
+    # will be safe to raise an error
+    counts = [stat["n"] for stat in statistics]
+    concated["n"] = max(counts)
+    if min(counts) != concated["n"]:
+        warn(
+            "concatenating statistics with different sample sizes. "
+            "The 'n' field is set to the maximum value."
+        )
+    return concated
 
 
 def combine_two_groups_cochrane(
