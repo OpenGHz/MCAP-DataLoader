@@ -1,7 +1,8 @@
 from torch.utils.data import IterableDataset
+from torch import Tensor
 from pydantic import BaseModel, field_validator
 from typing import List, Union, Dict
-from collections.abc import Mapping
+from collections.abc import Mapping, Iterator
 from mcap_data_loader.datasets.mcap_dataset import (
     McapMultiEpisodeDatasets,
     McapMultiEpisodeDatasetsConfig,
@@ -113,7 +114,7 @@ class McapLeRobotDataset(IterableDataset):
         self._pipeline = pipeline(self._datasets)
         self._ds_iter = None
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Dict[str, Union[int, Tensor]]]:
         return iter(self._pipeline)
 
     def __getitem__(self, index):
