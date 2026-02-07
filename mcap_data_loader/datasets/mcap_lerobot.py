@@ -244,6 +244,12 @@ def make_dataset(cfg) -> McapLeRobotDataset:
     )
 
 
+def run_with_yaml():
+    from mcap_data_loader.scripts.run_with_yaml import main
+
+    return main(exclude=["mcap"])
+
+
 if __name__ == "__main__":
     import time
     import statistics
