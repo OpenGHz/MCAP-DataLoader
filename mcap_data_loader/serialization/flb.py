@@ -57,7 +57,9 @@ class McapFlatBuffersWriter:
                 np.uint8: "8UC3",
             },
         }
-        self._stat = defaultdict(lambda: {"sum": 0, "sum_sq": 0})
+        self._stat = defaultdict(
+            lambda: {"sum": 0, "sum_sq": 0, "min": float("inf"), "max": float("-inf")}
+        )
 
     def set_writer(self, writer: Writer, start: bool = False):
         """Set the MCAP writer for this instance."""
@@ -252,9 +254,12 @@ class McapFlatBuffersWriter:
     def add_float_array(
         self, topic: str, data: Iterable[float], publish_time: int, log_time: int
     ):
+        # TODO: is float64 needed?
         arr = np.asarray(data, dtype=np.float32)
         self._stat[topic]["sum"] += arr
         self._stat[topic]["sum_sq"] += arr**2
+        self._stat[topic]["min"] = np.minimum(self._stat[topic]["min"], arr)
+        self._stat[topic]["max"] = np.maximum(self._stat[topic]["max"], arr)
         vec_data = self.builder.CreateNumpyVector(arr)
         FloatArray.Start(self.builder)
         FloatArray.AddValues(self.builder, vec_data)
@@ -269,9 +274,10 @@ class McapFlatBuffersWriter:
     @property
     def topic_statistics(self) -> Dict[str, StatisticsBasis]:
         """The accumulated statistics of topics (supported schema: FloatArray)."""
+        # NOTE: no `n` in the statistics
         return self._stat
 
-    def _get_image_encoding(self, image: np.ndarray) -> str:
+    def _get_image_encoding(self, image: np.typing.NDArray) -> str:
         """Get the image encoding string for a given channel and dtype."""
         channels = 1 if len(image.shape) == 2 else 3
         return self._img_enc_mapping[channels][image.dtype.type]

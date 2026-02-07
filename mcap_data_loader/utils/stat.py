@@ -1,20 +1,32 @@
 import numpy as np
-from typing import List, Tuple
-from collections.abc import Iterable
 from numpy.typing import NDArray
-from typing import TypedDict, Dict
+from typing import List, Tuple, TypedDict, Dict
+from collections.abc import Iterable
 from collections import defaultdict
 
 
 class StatisticsBasis(TypedDict):
+    """Basic statistics for a group of samples."""
+
     n: int
+    """The number of samples in the group."""
     sum: NDArray[np.floating]
+    """The sum of the samples in the group."""
     sum_sq: NDArray[np.floating]
+    """The sum of the squares of the samples in the group."""
+    min: NDArray[np.floating]
+    """The minimum value among the samples in the group."""
+    max: NDArray[np.floating]
+    """The maximum value among the samples in the group."""
 
 
 class Statistics(StatisticsBasis):
+    """Complete statistics for a group of samples."""
+
     mean: NDArray[np.floating]
+    """The mean of the samples in the group."""
     std: NDArray[np.floating]
+    """The standard deviation of the samples in the group."""
 
 
 StatGroup = Tuple[int, NDArray[np.floating], NDArray[np.floating]]
@@ -63,6 +75,8 @@ def combine_groups(groups: List[Statistics]) -> Statistics:
     tx = 0  # Σx over all groups
     txx = 0  # Σx² over all groups
     tn = 0
+    min_val = np.inf
+    max_val = -np.inf
 
     for stat in groups:
         n = stat["n"]
@@ -72,6 +86,8 @@ def combine_groups(groups: List[Statistics]) -> Statistics:
         tx += stat["sum"]
         txx += stat["sum_sq"]
         tn += n
+        min_val = np.minimum(min_val, stat["min"])
+        max_val = np.maximum(max_val, stat["max"])
 
     if tn == 0:
         raise ValueError("Group is empty.")
@@ -86,6 +102,8 @@ def combine_groups(groups: List[Statistics]) -> Statistics:
         "sum_sq": txx,
         "mean": combined_mean,
         "std": combined_sd,
+        "min": min_val,
+        "max": max_val,
     }
 
 
