@@ -199,24 +199,75 @@ class McapLeRobotDataset(IterableDataset):
         return self._meta
 
 
+def make_dataset(cfg) -> McapLeRobotDataset:
+
+    from pathlib import Path
+    from mcap_data_loader.utils.hydra_utils import hydra_instance_from_config_path
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+    from pydantic import DirectoryPath
+
+    class ConfigSettings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        )
+
+        cfg_root: DirectoryPath = Path("configs")
+        cfg_name: str = "config.yaml"
+
+        @property
+        def cfg_path(self) -> Path:
+            return self.cfg_root / Path(self.cfg_name).with_suffix(".yaml")
+
+    settings = ConfigSettings()
+    # the config file has the hightest priority
+    # print(f"Loading config from {settings.cfg_path}")
+    dict_config = hydra_instance_from_config_path(settings.cfg_path)
+    # cfg.dataset.episodes: list[int] | None
+    data_path = Path(cfg.dataset.root) / cfg.dataset.repo_id
+    # print(f"Loading dataset from {data_path}")
+    action_delta_indices = cfg.policy.action_delta_indices
+    action_num = len(action_delta_indices)
+    if action_num != action_delta_indices[-1] + 1:
+        raise NotImplementedError(
+            f"The action_num should be equal to the max index in action_delta_indices + 1, but got {action_num} and {action_delta_indices}"
+        )
+    base_dict = {"data_root": str(data_path)}
+    base_dict.update(dict_config)
+    return McapLeRobotDataset(
+        McapLeRobotDatasetConfig(
+            **base_dict,
+            horizon=HorizonConfig(fill_with_last=True, future_num=action_num - 1),
+        )
+    )
+
+
 if __name__ == "__main__":
     import time
     import statistics
     from pprint import pprint
+    from types import SimpleNamespace
 
-    root_dir = "data/example"
-    dataset = McapLeRobotDataset(
-        McapLeRobotDatasetConfig(
-            data_root=root_dir,
-            states=[
-                "/follow/arm/joint_state/position",
-                "/follow/eef/joint_state/position",
-            ],
-            images=["/env_camera/color/image_raw"],
-            actions=["/lead/arm/pose/position", "/lead/arm/pose/orientation"],
-            horizon=HorizonConfig(fill_with_last=True, future_num=1),
-        )
-    )
+    root_dir = "data"
+    task_name = "example"
+    task_path = f"{root_dir}/{task_name}"
+
+    # dataset = McapLeRobotDataset(
+    #     McapLeRobotDatasetConfig(
+    #         data_root=task_path,
+    #         states=[
+    #             "/follow/arm/joint_state/position",
+    #             "/follow/eef/joint_state/position",
+    #         ],
+    #         images=["/env_camera/color/image_raw"],
+    #         actions=["/lead/arm/pose/position", "/lead/arm/pose/orientation"],
+    #         horizon=HorizonConfig(fill_with_last=True, future_num=1),
+    #     )
+    # )
+    class Config:
+        dataset = SimpleNamespace(root=root_dir, repo_id=task_name)
+        policy = SimpleNamespace(action_delta_indices=list(range(2)))
+
+    dataset = make_dataset(Config)
     # pprint(dataset.meta.features)
     # pprint(dataset.meta.stats)
     time_costs = []

@@ -208,3 +208,4 @@ __marimo__/
 data/
 tests/test.py
 outputs/
+configs/
