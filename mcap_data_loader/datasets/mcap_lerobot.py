@@ -136,7 +136,9 @@ class McapLeRobotDataset(IterableDataset):
         self._add_items = {
             "action_is_pad": asarray([True] * first_item["action"].shape[0]),
         }
-        first_item.update(self._add_items)
+        # NOTE: do not update the `first_item` here, otherwise the `action_is_pad` will
+        # be treated as an action feaute
+        # first_item.update(self._add_items)
         # NOTE: the `timestamp` in lerobot dataset is float32, but here
         # it is int64
         features = {}
