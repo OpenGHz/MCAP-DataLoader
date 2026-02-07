@@ -2,6 +2,7 @@ from torch.utils.data import IterableDataset
 from torch import Tensor, asarray
 from pydantic import BaseModel, ConfigDict, field_validator
 from typing import List, Union, Dict
+from functools import cached_property
 from collections.abc import Mapping
 from mcap_data_loader.datasets.mcap_dataset import (
     McapMultiEpisodeDatasets,
@@ -170,12 +171,13 @@ class McapLeRobotDataset(IterableDataset):
         for concat_key, keys in zip(
             (STATE_KEY, ACTION_KEY), (config.states, config.actions)
         ):
-            stats[concat_key] = concatenate_statistics(
-                [data_stats[key] for key in keys]
-            )
+            stat = concatenate_statistics([data_stats[key] for key in keys])
+            stat["count"] = stat["n"]
+            stats[concat_key] = stat
         # add empty img stats to support modify stats outside
         for img_key in camera_mappings:
-            stats[img_key] = Statistics.empty((3, 1, 1))
+            # NOTE: assume the data length is the same
+            stats[img_key] = Statistics.empty((3, 1, 1)) | {"count": stat["n"]}
         self._meta = McapLeRobotDatasetMeta(
             features=features, stats=stats, camera_keys=camera_mappings.keys()
         )
@@ -183,6 +185,7 @@ class McapLeRobotDataset(IterableDataset):
     def __iter__(self):
         # return iter(self._pipeline)
         # TODO: dynamically adjust the `action_is_pad` shape if not fill_with_last
+        self._pipeline.reset()
         for item in self._pipeline:
             item.update(self._add_items)
             yield item
@@ -197,6 +200,17 @@ class McapLeRobotDataset(IterableDataset):
     @property
     def meta(self) -> McapLeRobotDatasetMeta:
         return self._meta
+
+    @cached_property
+    def num_frames(self) -> int:
+        # NOTE: now the dataset iter times must be equal to the total frames
+        # NOTE: now all the topic number must be same, so we just take the first one
+        return next(iter(self._meta.stats.values()))["n"]
+
+    @cached_property
+    def num_episodes(self) -> int:
+        # NOTE: the episode number must all be same so we just take the first one
+        return len(self._datasets._episode_datasets[0])
 
 
 def make_dataset(cfg) -> McapLeRobotDataset:
@@ -285,15 +299,21 @@ if __name__ == "__main__":
         policy = SimpleNamespace(action_delta_indices=list(range(2)))
 
     dataset = make_dataset(Config)
+    print(f"{dataset.num_episodes} episodes, {dataset.num_frames} frames")
     # pprint(dataset.meta.features)
     # pprint(dataset.meta.stats)
+    for key, stat in dataset.meta.stats.items():
+        print(f"{key}: {stat['n']}")
     time_costs = []
     start = time.perf_counter()
-    for data in dataset:
+    for i, data in enumerate(dataset):
         time_costs.append(time.perf_counter() - start)
-        if len(time_costs) == 1:
+        if i == 0:
             for key, value in data.items():
                 print(f"{key}: {value.shape} {value.dtype}")
         start = time.perf_counter()
-
+    assert i == dataset.num_frames - 1, (
+        f"Expected {dataset.num_frames} frames, but got {i + 1}"
+    )
+    next(iter(dataset))  # make sure non-iterator
     print(statistics.mean(time_costs[1:]))
