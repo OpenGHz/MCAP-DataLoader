@@ -232,6 +232,9 @@ def make_dataset(cfg) -> McapLeRobotDataset:
             f"The action_num should be equal to the max index in action_delta_indices + 1, but got {action_num} and {action_delta_indices}"
         )
     base_dict = {"data_root": str(data_path)}
+    if "mcap" in dict_config:
+        # print("use mcap field")
+        dict_config = dict_config["mcap"]
     base_dict.update(dict_config)
     return McapLeRobotDataset(
         McapLeRobotDatasetConfig(
