@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
 from typing import List, Tuple, Dict
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Self
 from collections.abc import Iterable
 from collections import defaultdict
 from warnings import warn
@@ -29,6 +29,19 @@ class Statistics(StatisticsBasis):
     """The mean of the samples in the group."""
     std: NDArray[np.floating]
     """The standard deviation of the samples in the group."""
+
+    @classmethod
+    def empty(cls, shape: Tuple[int, ...]) -> Self:
+        """Create an empty StatisticsBasis with the given shape."""
+        return dict(
+            n=0,
+            sum=np.zeros(shape, dtype=np.float64),
+            sum_sq=np.zeros(shape, dtype=np.float64),
+            min=np.full(shape, np.inf, dtype=np.float64),
+            max=np.full(shape, -np.inf, dtype=np.float64),
+            mean=np.zeros(shape, dtype=np.float64),
+            std=np.zeros(shape, dtype=np.float64),
+        )
 
 
 StatGroup = Tuple[int, NDArray[np.floating], NDArray[np.floating]]
