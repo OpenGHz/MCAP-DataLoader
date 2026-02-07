@@ -315,16 +315,16 @@ class McapFlatBuffersReader:
         encoding = raw_img.Encoding().decode("utf-8")
         np_data = raw_img.DataAsNumpy()
 
-        if encoding in ("rgb8", "bgr8", "8UC3"):
+        if encoding in {"rgb8", "bgr8", "8UC3"}:
             channels = 3
             dtype = np.uint8
-        elif encoding in ("rgba8", "bgra8"):
+        elif encoding in {"rgba8", "bgra8"}:
             channels = 4
             dtype = np.uint8
-        elif encoding in ("mono8", "8UC1"):
+        elif encoding in {"mono8", "8UC1"}:
             channels = 1
             dtype = np.uint8
-        elif encoding in ("mono16", "16UC1"):
+        elif encoding in {"mono16", "16UC1"}:
             channels = 1
             dtype = np.uint16
         elif encoding == "32FC1":
