@@ -71,8 +71,7 @@ class McapLeRobotDataset(IterableDataset):
                         },
                         2: {
                             "_target_": "mcap_data_loader.pipelines.Horizon",
-                            "fill_with_last": True,
-                            "future_num": 1,
+                            **config.horizon.model_dump(),
                         },
                         3: {
                             "_target_": "mcap_data_loader.callers.Map",
@@ -134,6 +133,7 @@ if __name__ == "__main__":
             ],
             images=["/env_camera/color/image_raw"],
             actions=["/lead/arm/pose/position", "/lead/arm/pose/orientation"],
+            horizon=HorizonConfig(fill_with_last=True, future_num=1),
         )
     )
     for data in dataset:
