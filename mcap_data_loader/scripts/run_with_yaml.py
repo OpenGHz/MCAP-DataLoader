@@ -35,7 +35,7 @@ def value_to_str(value: Any) -> str:
         return str(value)
 
 
-def main(exclude=None) -> int:
+def parse_args(exclude=None):
     parser = argparse.ArgumentParser(
         description="Run a command with arguments from a YAML config file, "
         "converted to --key.subkey=value style."
@@ -55,6 +55,10 @@ def main(exclude=None) -> int:
     )
 
     args = parser.parse_args()
+    return args
+
+
+def main_func(args):
 
     try:
         with open(args.config, encoding="utf-8") as f:
@@ -94,6 +98,10 @@ def main(exclude=None) -> int:
         sys.exit(127)
 
     return 0
+
+
+def main(exclude=None) -> int:
+    return main_func(parse_args(exclude=exclude))
 
 
 if __name__ == "__main__":

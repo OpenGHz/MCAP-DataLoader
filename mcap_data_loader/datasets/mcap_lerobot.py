@@ -220,7 +220,7 @@ def make_dataset(cfg) -> McapLeRobotDataset:
 
     settings = ConfigSettings()
     # the config file has the hightest priority
-    # print(f"Loading config from {settings.cfg_path}")
+    print(f"Loading config from {settings.cfg_path}")
     dict_config = hydra_instance_from_config_path(settings.cfg_path)
     # cfg.dataset.episodes: list[int] | None
     data_path = Path(cfg.dataset.root) / cfg.dataset.repo_id
@@ -245,9 +245,17 @@ def make_dataset(cfg) -> McapLeRobotDataset:
 
 
 def run_with_yaml():
-    from mcap_data_loader.scripts.run_with_yaml import main
+    from mcap_data_loader.scripts.run_with_yaml import parse_args, main_func
+    from pathlib import Path
+    import os
 
-    return main(exclude=["mcap"])
+    args = parse_args(exclude=["mcap"])
+    cfg_path = Path(args.config)
+    if "cfg_root" not in os.environ:
+        os.environ["cfg_root"] = str(cfg_path.parent)
+    if "cfg_name" not in os.environ:
+        os.environ["cfg_name"] = cfg_path.stem
+    return main_func(args)
 
 
 if __name__ == "__main__":
