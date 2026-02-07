@@ -90,9 +90,13 @@ class McapLeRobotDataset(IterableDataset):
                                 "_partial_": True,
                                 "_args_": [
                                     {
-                                        "_target_": "einops.rearrange",
+                                        # "_target_": "einops.rearrange",
+                                        # "pattern": "h w c -> c h w",
+                                        "_target_": "mcap_data_loader.utils.array_like.rearrange_and_shrink_np",
+                                        "transpose": (2, 0, 1),
+                                        "factor": 255.0,
+                                        "dtype": "float32",
                                         "_partial_": True,
-                                        "pattern": "h w c -> c h w",
                                     }
                                 ],
                                 "keys": config.images,
@@ -112,12 +116,13 @@ class McapLeRobotDataset(IterableDataset):
                                 }
                                 | {
                                     IMAGE_KEY_PREFIX
+                                    + "."
                                     + img_key.removeprefix("/").split("/")[0]: img_key
                                     for img_key in config.images
                                 },
                                 "future": {ACTION_KEY: config.actions},
-                                # NOTE: the same as the input, usually cpu
-                                # "backend_out": "torch",
+                                # NOTE: the device is same as the input, usually cpu
+                                "backend_out": "torch",
                                 "dtype": "float32",
                             },
                         },
@@ -207,13 +212,14 @@ if __name__ == "__main__":
         )
     )
     # pprint(dataset.meta.features)
-    pprint(dataset.meta.stats)
+    # pprint(dataset.meta.stats)
     time_costs = []
     start = time.perf_counter()
     for data in dataset:
         time_costs.append(time.perf_counter() - start)
-        # for key, value in data.items():
-        #     print(f"{key}: {value.shape if hasattr(value, 'shape') else value}")
+        if len(time_costs) == 1:
+            for key, value in data.items():
+                print(f"{key}: {value.shape} {value.dtype}")
         start = time.perf_counter()
 
     print(statistics.mean(time_costs[1:]))

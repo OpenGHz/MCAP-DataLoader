@@ -183,6 +183,16 @@ def tensor_to_ndarray(
     return arr
 
 
+def rearrange_and_shrink_np(
+    arr: np.ndarray,
+    transpose: Tuple[int, ...],
+    factor: float = 1.0,
+    dtype: Union[np.dtype, str] = None,
+) -> np.ndarray:
+    """Rearrange and shrink a numpy array."""
+    return arr.transpose(*transpose).astype(dtype) / factor
+
+
 InputBackend = Literal["torch", "numpy", "auto"]
 AllBackend = Union[InputBackend, Literal["list"]]
 
