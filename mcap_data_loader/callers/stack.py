@@ -272,5 +272,5 @@ class HorizonStacker(CallerBasis[Dict], ArrayTransferMixin):
         self._stack(self._ori_keys["future"], future, stacked_item)
         for new_key, key in self._ori_keys["now"].items():
             stacked_item[new_key] = self.convert_func(cur_data[key]["data"])
-        stacked_item["timestamp"] = cur_data[self._one_key]["t"]
+        stacked_item["timestamp"] = self._xp_out.asarray(cur_data[self._one_key]["t"])
         return stacked_item

@@ -117,7 +117,7 @@ class PipelineConfig(BaseModel, frozen=True):
     the pipe callable or the name of the pipeline in `named_pipelines`."""
 
 
-class Pipeline(CallerBasis[Iterable[T]]):
+class Pipeline(CallerBasis[NonIteratorIterable[T]]):
     """Pipeline connects multiple pipes together to work together to complete tasks.
     In a pipeline, the output of one command is passed to the input of the next command,
     so that a series of commands can work together to complete more complex tasks."""
@@ -127,7 +127,7 @@ class Pipeline(CallerBasis[Iterable[T]]):
         self._chained = _chain_pipes(config.pipeline)
         self.get_logger().info(f"Chained pipeline:\n{pformat(self._chained)}")
 
-    def __call__(self, iterable: NonIteratorIterable):
+    def __call__(self, iterable: NonIteratorIterable) -> NonIteratorIterable[T]:
         """Apply the pipeline to the given iterable."""
         return pipe(iterable, *self._chained)
 
