@@ -1,8 +1,5 @@
-from mcap_data_loader.utils.basic import (
-    NonIteratorIterable,
-    is_not_implemented,
-    not_implemented,
-)
+from mcap_data_loader.utils.basic import is_not_implemented, not_implemented
+from mcap_data_loader.basis.tydantic import NonIteratorIterable
 from mcap_data_loader.callers.basis import CallerBasis
 from pydantic import BaseModel, validate_call
 from toolz import pipe

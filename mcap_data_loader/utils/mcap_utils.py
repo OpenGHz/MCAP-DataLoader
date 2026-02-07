@@ -1,3 +1,8 @@
+import shutil
+import uuid
+import json
+import tempfile
+import logging
 from pymcap import PyMCAP
 from pymcap.core import McapCLIOutput
 from mcap.writer import Writer
@@ -5,12 +10,7 @@ from mcap.reader import McapReader, make_reader
 from typing import Optional, List, Dict, Union, Literal, Any
 from pathlib import Path
 from time import time_ns
-from mcap_data_loader.utils.basic import StrEnum
-import shutil
-import uuid
-import json
-import tempfile
-import logging
+from mcap_data_loader.basis import StrEnum
 
 
 class McapCLI(PyMCAP):

@@ -11,7 +11,8 @@ from typing import (
     runtime_checkable,
 )
 from collections.abc import Iterable, Callable, Hashable, Mapping
-from mcap_data_loader.utils.basic import StrEnum, NonIteratorIterable
+from mcap_data_loader.basis import StrEnum
+from mcap_data_loader.basis.tydantic import NonIteratorIterable
 from mcap_data_loader.pipelines import NamedPipelines
 from mcap_data_loader.basis.cfgable import ConfigurableBasis, dump_or_repr
 from enum import auto

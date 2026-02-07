@@ -3,7 +3,7 @@ from typing import Tuple, Literal, Generic, TypeVar, List, Dict
 from collections.abc import Callable, Iterable
 from pydantic import BaseModel, ConfigDict, Field
 from mcap_data_loader.basis.cfgable import ConfigurableBasis
-from mcap_data_loader.utils.basic import NonIteratorIterable
+from mcap_data_loader.basis.tydantic import NonIteratorIterable
 
 
 ReturnT = TypeVar("ReturnT")

@@ -9,7 +9,8 @@ from importlib.resources import read_binary
 from enum import Enum
 from functools import cache, cached_property
 from mcap_data_loader.schemas.airbot_fbs import FloatArray
-from mcap_data_loader.utils.basic import zip, DictDataStamped
+from mcap_data_loader.basis import DictDataStamped
+from mcap_data_loader.utils.basic import zip
 from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig
 from mcap_data_loader.utils.stat import StatisticsBasis, Statistics
 from pathlib import Path

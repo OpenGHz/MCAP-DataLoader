@@ -82,6 +82,20 @@ def valmap_depth(func: Callable, d: dict, depth: int = -1) -> dict:
         }
 
 
+def valmap_include(func: Callable, d: dict, keys: set) -> dict:
+    """Apply `func` to values of a dictionary for keys in the `keys` set.
+    Other key-value pairs are left unchanged.
+    Args:
+        func: A callable applied to values of specified keys.
+        d: Input dictionary.
+        keys: A set of keys to which `func` should be applied.
+    Returns:
+        A new dictionary with `func` applied to values of specified keys."""
+    for key in keys:
+        d[key] = func(d[key])
+    return d
+
+
 def update_if(
     target: dict,
     source: dict,

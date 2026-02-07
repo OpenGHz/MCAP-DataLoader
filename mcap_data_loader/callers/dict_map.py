@@ -1,4 +1,4 @@
-from mcap_data_loader.utils.basic import DictDataStamped, DataStamped, T
+from mcap_data_loader.basis import DictDataStamped, DataStamped
 from mcap_data_loader.callers.basis import CallerBasis
 from mcap_data_loader.utils.array_like import (
     ArrayTransferConfig,
@@ -6,8 +6,11 @@ from mcap_data_loader.utils.array_like import (
     AllBackend,
     Array,
 )
-from typing import Set
+from typing import Set, TypeVar
 from collections import defaultdict
+
+
+T = TypeVar("T")
 
 
 class DictMapConfig(ArrayTransferConfig, frozen=True):
@@ -90,7 +93,7 @@ class DictMap(CallerBasis[DictDataStamped[T]]):
             self._first_call = False
         transfered = data if self._replace else data.copy() if self._include else {}
         for keys, convert_func in self._transfers:
-            DataStamped.map_dict(data, convert_func, keys, transfered)
+            DataStamped.map_dict(convert_func, data, keys, transfered)
         return transfered
 
 

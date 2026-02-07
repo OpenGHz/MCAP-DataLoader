@@ -14,12 +14,9 @@ from pydantic import (
     DirectoryPath,
 )
 from mcap_data_loader.serialization.flb import McapFlatBuffersReader
-from mcap_data_loader.utils.basic import (
-    get_items_by_ext,
-    file_hash,
-    DictDataStamped,
-    SetMapping,
-)
+from mcap_data_loader.utils.basic import get_items_by_ext, file_hash
+from mcap_data_loader.basis import DictDataStamped
+from mcap_data_loader.basis.tydantic import SetMapping
 from mcap_data_loader.utils.stat import combine_dict_groups
 from mcap_data_loader.datasets.dataset import (
     IterableDatasetABC,

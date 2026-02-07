@@ -10,32 +10,18 @@ from typing import (
     Type,
     Optional,
     Protocol,
-    Set,
     Literal,
-    Tuple,
     get_origin,
     get_args,
 )
-from typing_extensions import Annotated, TypedDict, runtime_checkable
-from enum import Enum
+from collections.abc import Callable
+from typing_extensions import runtime_checkable
 from pathlib import Path
-from collections.abc import Iterable, Iterator, Callable, Mapping, Hashable
-from pydantic import (
-    BaseModel,
-    PlainValidator,
-    AfterValidator,
-    ConfigDict,
-    ImportString,
-    validate_call,
-)
+from pydantic import BaseModel, ConfigDict, ImportString, validate_call
 from functools import wraps
 from inspect import isclass
 from logging import getLogger
 from contextlib import suppress
-from copy import deepcopy
-from statistics import mean
-from toolz import curry
-from copy import copy
 import hashlib
 import operator
 import time
@@ -94,57 +80,6 @@ def force_set_attr(method):
 force_validate_field = force_set_attr(validate_field)
 
 
-def validate_call_once(func):
-    validated_func = validate_call(func)
-    called = False
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        nonlocal called
-        if not called:
-            called = True
-            return validated_func(*args, **kwargs)
-        else:
-            # 后续调用直接使用原始函数，不验证
-            return func(*args, **kwargs)
-
-    return wrapper
-
-
-def validate_iterable(value: Iterable, base_types=(str, bytes, Mapping)) -> Iterable:
-    if not isinstance(value, Iterable):
-        raise ValueError("Value must be an Iterable")
-    if isinstance(value, base_types):
-        raise ValueError(f"Value must not be of type {base_types}")
-    return value
-
-
-def validate_iterable_not_iterator(
-    value: Iterable, base_types=(str, bytes, Mapping)
-) -> Iterable:
-    if isinstance(value, Iterator):
-        raise ValueError("Value must not be an Iterator")
-    return validate_iterable(value, base_types)
-
-
-def _mapping2list(value: Union[Dict, List]) -> List:
-    if isinstance(value, Mapping):
-        return list(value.values())
-    return value
-
-
-def _mapping2list_sorted(value: Union[Dict, List]) -> List:
-    if isinstance(value, Mapping):
-        return [value[key] for key in sorted(value.keys())]
-    return value
-
-
-def _mapping2set(value: Union[Dict, Set]) -> Set:
-    if isinstance(value, Mapping):
-        return set(value.values())
-    return value
-
-
 @runtime_checkable
 class DataClassProto(Protocol):
     """Protocol for dataclass types."""
@@ -153,134 +88,9 @@ class DataClassProto(Protocol):
     def __dataclass_fields__(cls) -> Dict[str, Any]: ...
 
 
-NonIteratorIterable = Annotated[
-    Iterable[T],
-    PlainValidator(validate_iterable_not_iterator),
-]
-ConstrainedIterable = Annotated[Iterable[T], PlainValidator(validate_iterable)]
-ReturnT = TypeVar("ReturnT")
-KeyT = TypeVar("KeyT", bound=Hashable)
-DataT = TypeVar("DataT")
-
-# convert Mapping to List of values with the original order of keys
-ListMapping = Annotated[
-    Union[List[T], Mapping[Hashable, T]], AfterValidator(_mapping2list)
-]
-# convert Mapping to List of values with sorted order of keys
-ListMappingSorted = Annotated[
-    Union[List[T], Mapping[Hashable, T]], AfterValidator(_mapping2list_sorted)
-]
-SetMapping = Annotated[
-    Union[Set[T], Mapping[Hashable, T]], AfterValidator(_mapping2set)
-]
-
 SlicesType = Union[List[tuple], tuple, int]
 DictableSlicesType = Union[Dict[str, SlicesType], SlicesType]
 DictableIndexesType = Union[Dict[str, List[int]], List[int]]
-
-
-@curry
-def sum_auto_start(iterable: Iterable[T]) -> T:
-    """Sum the items in the iterable, starting from the first item."""
-    iterator = iter(iterable)
-    total = copy(next(iterator))
-    for item in iterator:
-        total += item
-    return total
-
-# TODO: move to basis/data_stamped.py
-class DataStamped(TypedDict, Generic[T]):
-    t: int
-    data: T
-
-    @staticmethod
-    def map_dict(
-        data: Dict[KeyT, "DataStamped[DataT]"],
-        func: Callable[[DataT], ReturnT],
-        keys: Optional[Iterable[KeyT]] = None,
-        output: Optional[dict] = None,
-    ) -> Dict[KeyT, "DataStamped[ReturnT]"]:
-        """map a function to the data part of each DataStamped in the dictionary.
-        Args:
-            data (Dict[KeyT, DataStamped[DataT]]): The input dictionary.
-            func (Callable[[DataT], ReturnT]): The function to apply to the data part.
-            keys (Optional[Iterable[KeyT]], optional): The keys to process. If None, process all keys. Defaults to None.
-            output (Optional[dict], optional): The output dictionary to store the results. If None, create a new dictionary. Defaults to None.
-        Returns:
-            Dict[KeyT, DataStamped[ReturnT]]: The output dictionary with the processed data.
-        """
-        result = output if output is not None else {}
-        keys = data.keys() if keys is None else keys
-        for key in keys:
-            stamped = data[key]
-            result[key] = {
-                "t": stamped["t"],
-                "data": func(stamped["data"]),
-            }
-        return result
-
-    @staticmethod
-    def merge(
-        values: Iterable["DataStamped[DataT]"],
-        d_method: Callable[[List[DataT]], ReturnT] = sum_auto_start,
-        t_method: Callable[[List[int]], int] = mean,
-    ) -> "DataStamped[ReturnT]":
-        """merge multiple DataStamped into one.
-        Args:
-            values (Iterable[DataStamped[DataT]]): The input DataStamped objects.
-            d_method (Callable[[List[DataT]], ReturnT], optional): The method to merge the data part. Defaults to sum_auto_start.
-            t_method (Callable[[List[int]], int], optional): The method to merge the time part. Defaults to mean.
-        Returns:
-            DataStamped[ReturnT]: The merged DataStamped object.
-        """
-        time_list = []
-        data_list = []
-        for item in values:
-            time_list.append(item["t"])
-            data_list.append(item["data"])
-        return {"t": int(t_method(time_list)), "data": d_method(data_list)}
-
-    @staticmethod
-    def concatenate(
-        values: Iterable["DataStamped[Iterable[DataT]]"],
-    ) -> Tuple[List[int], List[DataT]]:
-        """Concatenate multiple DataStamped with list data into one.
-        Args:
-            values (Iterable[DataStamped[Iterable[DataT]]]): The input DataStamped objects.
-        Returns:
-            Tuple[List[int], List[DataT]]: The concatenated time list and data list.
-        """
-        time_list = []
-        data_list = []
-        for item in values:
-            time_list.append(item["t"])
-            data_list.extend(item["data"])
-        return time_list, data_list
-
-    @staticmethod
-    def create(data: T, t: int = 0) -> "DataStamped[T]":
-        return {"t": t, "data": data}
-
-
-DictDataStamped = Dict[str, DataStamped[T]]
-map_dict_data_stamped = curry(DataStamped.map_dict)
-merge_data_stamped = curry(DataStamped.merge)
-
-
-def copy_dict_data_stamped(
-    data: DictDataStamped[T], deep: bool = False
-) -> DictDataStamped[T]:
-    """Copy a DictDataStamped object.
-    Args:
-        data (DictDataStamped[T]): The DictDataStamped object to copy.
-        deep (bool, optional): Whether to perform a deep copy. Defaults to False.
-    Returns:
-        DictDataStamped[T]: The copied DictDataStamped object.
-    """
-    if deep:
-        return deepcopy(data)
-    else:
-        return {key: value.copy() for key, value in data.items()}
 
 
 if sys.version_info >= (3, 10):
@@ -300,49 +110,6 @@ class DataBasicConfig(BaseModel, frozen=True):
     """Device to use for data processing, e.g., 'cpu' or 'cuda'."""
     dtype: Optional[Union[Literal["auto"], str]] = None
     """Data type to use for data processing, e.g., 'float32' or 'int64'."""
-
-
-class ReprEnum(Enum):
-    """
-    Only changes the repr(), leaving str() and format() to the mixed-in type.
-    """
-
-
-class StrEnum(str, ReprEnum):
-    """
-    Enum where members are also (and must be) strings
-    """
-
-    def __new__(cls, *values):
-        "values must already be of type `str`"
-        if len(values) > 3:
-            raise TypeError(f"too many arguments for str(): {values!r}")
-        if len(values) == 1:
-            # it must be a string
-            if not isinstance(values[0], str):
-                raise TypeError(f"{values[0]!r} is not a string")
-        if len(values) >= 2:
-            # check that encoding argument is a string
-            if not isinstance(values[1], str):
-                raise TypeError(f"encoding must be a string, not {values[1]!r}")
-        if len(values) == 3:
-            # check that errors argument is a string
-            if not isinstance(values[2], str):
-                raise TypeError("errors must be a string, not %r" % (values[2]))
-        value = str(*values)
-        member = str.__new__(cls, value)
-        member._value_ = value
-        return member
-
-    @staticmethod
-    def _generate_next_value_(name, start, count, last_values):
-        """
-        Return the lower-cased version of the member name.
-        """
-        return name.lower()
-
-    def __str__(self):
-        return self.value
 
 
 class Rate:
@@ -736,20 +503,6 @@ if __name__ == "__main__":
     # assert result == "ab34", result
     # assert remove_util("12ab34", "567") == "12ab34"
 
-    # import numpy as np
-    # import time
-
-    # data = {
-    #     "a": {"t": 1, "data": [1, 2]},
-    #     "b": {"t": 2, "data": [3, 4]},
-    # }
-    # start = time.perf_counter()
-    # result = DataStamped.map_dict(data, np.array)
-    # print("Time taken:", time.perf_counter() - start)
-    # for value in result.values():
-    #     print(value["t"])
-    #     print(value["data"].shape)
-
     # class A(Generic[T]):
     #     class B(Generic[T]):
     #         pass
@@ -785,4 +538,5 @@ if __name__ == "__main__":
     # assert get_full_class_name(a.b.c) == "__main__.a.b.c"
     # assert try_to_get_attr(a, ["b.d", "b.c"]) is a.b.c
 
-    save_current_command("test_command.json", "last_command", as_list=False)
+    # save_current_command("test_command.json", "last_command", as_list=False)
+    pass

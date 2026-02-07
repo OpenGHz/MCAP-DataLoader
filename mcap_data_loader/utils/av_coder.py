@@ -9,7 +9,7 @@ from turbojpeg import TurboJPEG
 from logging import getLogger
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
-from mcap_data_loader.utils.basic import DataStamped, StrEnum
+from mcap_data_loader.basis import DataStamped, StrEnum
 from mcap_data_loader.basis.cfgable import InitConfigMixin
 from pydantic import BaseModel, PositiveInt, NonNegativeInt, ConfigDict
 from enum import auto

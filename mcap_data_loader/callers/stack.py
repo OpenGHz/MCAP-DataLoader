@@ -1,5 +1,6 @@
 from mcap_data_loader.datasets.mcap_dataset import SampleStamped
-from mcap_data_loader.utils.basic import float_range, ListMapping
+from mcap_data_loader.utils.basic import float_range
+from mcap_data_loader.basis.tydantic import ListMapping
 from mcap_data_loader.utils.array_like import (
     Array,
     ArrayTransferMixin,

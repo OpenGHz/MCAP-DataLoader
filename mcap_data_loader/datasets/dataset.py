@@ -7,11 +7,11 @@ from abc import abstractmethod
 from functools import cached_property, cache
 from logging import getLogger
 from mcap_data_loader.utils.basic import (
-    StrEnum,
     multi_slices_to_indexes,
     DictableSlicesType,
     DictableIndexesType,
 )
+from mcap_data_loader.basis import StrEnum
 from mcap_data_loader.basis.cfgable import InitConfigABCMixin
 from enum import auto
 from more_itertools import nth, ilen

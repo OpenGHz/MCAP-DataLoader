@@ -3,7 +3,7 @@ from collections.abc import Mapping, Callable, Iterable
 from mcap_data_loader.callers.basis import CallerBasis
 from mcap_data_loader.utils.extra_itertools import recursive_map_reusable
 from mcap_data_loader.utils.dict import valmap_depth
-from mcap_data_loader.utils.basic import StrEnum
+from mcap_data_loader.basis import StrEnum
 from enum import auto
 from typing import Literal, Optional, Union
 
@@ -23,15 +23,24 @@ class MappingStrategy(StrEnum):
     """Apply the callable to the items of the mapping if the input data is a mapping."""
 
 
-class DictStrategyMapConfig(BaseModel, frozen=True):
-    """Configuration for Map caller when the input data is a dict."""
+class DictApplyConfig(BaseModel, frozen=True):
+    """Configuration for applying a callable to dict data."""
 
-    callable: Callable
     """The callable to apply to the dict data."""
     strategy: MappingStrategy = MappingStrategy.VALUE
     """Strategy for the Map caller when the input data is a dict."""
     depth: int = 0
     """The depth to apply the callable to the dict data."""
+    # include: Set[str] = set()
+    # """The keys to include when applying the callable to the dict data. If empty, all keys will be included."""
+    # exclude: Set[str] = set()
+    # """The keys to exclude when applying the callable to the dict data. If empty, no keys will be excluded."""
+
+
+class DictStrategyMapConfig(DictApplyConfig):
+    """Configuration for Map caller when the input data is a dict."""
+
+    callable: Callable
 
 
 class DictStrategyMap(CallerBasis[Union[Mapping, Iterable]]):
@@ -65,7 +74,10 @@ class DictStrategyMap(CallerBasis[Union[Mapping, Iterable]]):
     def _reusable_map(self, data: Iterable, depth: int = 0) -> Iterable:
         return recursive_map_reusable(self._call, data, depth)
 
-    def __call__(self, data):
+    def __call__(self, data: Mapping):
+        # bad performance, so we don't support include and exclude for now
+        # `valmap_include` can be used instead
+        # self._keys = (self.config.include or data.keys()) - self.config.exclude
         return self._strategies[self._strategy](data)
 
 
