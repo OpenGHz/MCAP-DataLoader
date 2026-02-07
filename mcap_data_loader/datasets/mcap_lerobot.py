@@ -50,6 +50,8 @@ class McapLeRobotDatasetMeta(BaseModel, frozen=True):
     """The dictionary of features, where the key is the feature name and the value is a dictionary containing the shape and dtype of the feature."""
     stats: Dict[str, Statistics]
     """The dictionary of statistics, where the key is the feature name and the value is a dictionary containing the statistics of the feature."""
+    camera_keys: List[str] = []
+    """The list of camera keys."""
 
     @field_validator("stats", mode="after")
     def validate_stats(cls, v: dict):
@@ -68,6 +70,10 @@ IMAGE_KEY_PREFIX = "observation.images"
 class McapLeRobotDataset(IterableDataset):
     def __init__(self, config: McapLeRobotDatasetConfig):
         self.config = config
+        camera_mappings = {
+            IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
+            for img_key in config.images
+        }
         pipeline_dict = {
             0: {
                 "_target_": "mcap_data_loader.pipelines.NestedZip",
@@ -114,12 +120,7 @@ class McapLeRobotDataset(IterableDataset):
                                     STATE_KEY: config.states,
                                     # "observation.effort": "/follow/arm/joint_state/effort",
                                 }
-                                | {
-                                    IMAGE_KEY_PREFIX
-                                    + "."
-                                    + img_key.removeprefix("/").split("/")[0]: img_key
-                                    for img_key in config.images
-                                },
+                                | camera_mappings,
                                 "future": {ACTION_KEY: config.actions},
                                 # NOTE: the device is same as the input, usually cpu
                                 "backend_out": "torch",
@@ -172,7 +173,9 @@ class McapLeRobotDataset(IterableDataset):
             stats[concat_key] = concatenate_statistics(
                 [data_stats[key] for key in keys]
             )
-        self._meta = McapLeRobotDatasetMeta(features=features, stats=stats)
+        self._meta = McapLeRobotDatasetMeta(
+            features=features, stats=stats, camera_keys=camera_mappings.keys()
+        )
 
     def __iter__(self):
         # return iter(self._pipeline)
