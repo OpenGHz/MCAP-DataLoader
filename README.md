@@ -78,7 +78,13 @@ More examples and detailed usage can be found in the [examples](examples) direct
 
 ## Integration with LeRobot training
 
-MCAP Data Loader provides a CLI to train LeRobot models using MCAP data files.
+MCAP Data Loader provides a CLI to train LeRobot models using MCAP data files. This allows you to use MCAP datasets directly as the training data source for LeRobot, without needing to convert them into a different format.
+
+You should have LeRobot installed in your environment to use this feature. You can install it from PyPI:
+
+```bash
+pip install lerobot
+```
 
 ### Train with an MCAP dataset
 
@@ -112,20 +118,22 @@ mcap:
   states:
     - /follow/arm/joint_state/position
     - /follow/eef/joint_state/position
-  images:
-    - /env_camera/color/image_raw
   actions:
     - /lead/arm/pose/position
     - /lead/arm/pose/orientation
+  images:
+    - /env_camera/color/image_raw
 ```
+
+其中`states`和`actions`指定的topic列表将被加载和分别拼接成lerobot需要的`observation.state`和`action`，作为训练数据中的低维状态和动作输入，而
+`images`则会按名称中的第一部分，例如上述中的`env_camera`，作为图像输入的后缀，添加到`observation.images`字段下，例如`observation.images.env_camera`，以供训练时使用。
 
 Notes:
 - `dataset.root` and `dataset.repo_id` are reused to specify the MCAP dataset root directory and dataset name.
 - Command-line overrides compatible with LeRobot are supported and take the highest priority (they override values in the config file). For example:
-
-```bash
-mcap_lerobot_train -c configs/config.yaml --dataset.repo_id=example_task
-```
+  ```bash
+  mcap_lerobot_train -c configs/config.yaml --dataset.repo_id=example_task
+  ```
 
 ### Train with LeRobot’s original dataset format
 
