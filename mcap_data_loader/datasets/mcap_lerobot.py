@@ -282,18 +282,22 @@ def train():
     from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
     import sys
 
-    args = parse_args(exclude=["mcap"])
-    _, extracted_dict = extract_and_remove_args(["-c", "--config", "--ori"])
-    config_root, config_name = _process_config_path(args.config)
+    argv_set = set(sys.argv)
+    if ("--ori" not in argv_set) or ({"-c", "--config"} & argv_set):
+        args = parse_args(["mcap"], False, False)
+        if args is not None:
+            _, extracted_dict = extract_and_remove_args(["-c", "--config", "--ori"])
+            # print(f"Extracted args: {extracted_dict}")
+            config_root, config_name = _process_config_path(args.config)
 
-    if "--ori" not in extracted_dict:
-        lerobot_train.make_dataset = partial(
-            make_dataset, config_root=config_root, config_name=config_name
-        )
+            if "--ori" not in extracted_dict:
+                lerobot_train.make_dataset = partial(
+                    make_dataset, config_root=config_root, config_name=config_name
+                )
 
-    # the cli args in lerobot_train will override the config file args
-    extend_args(sys.argv, get_args_list(args))
-    # print(sys.argv)
+            # the cli args in lerobot_train will override the config file args
+            extend_args(sys.argv, get_args_list(args))
+    # print(sys.argv), exit(0)
     return lerobot_train.main()
 
 

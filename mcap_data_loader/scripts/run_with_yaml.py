@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import subprocess
 import sys
@@ -35,14 +34,18 @@ def value_to_str(value: Any) -> str:
         return str(value)
 
 
-def parse_args(exclude=None):
+def parse_args(exclude=None, add_help=True, add_command_args=True):
     parser = argparse.ArgumentParser(
         description="Run a command with arguments from a YAML config file, "
-        "converted to --key.subkey=value style."
+        "converted to --key.subkey=value style.",
+        add_help=add_help,
     )
-    parser.add_argument(
-        "command", nargs="+", help="The command to run (e.g., python train.py)"
-    )
+    if add_command_args:
+        parser.add_argument(
+            "command",
+            nargs="+",
+            help="The command to run (e.g., python train.py)",
+        )
     parser.add_argument(
         "--config", "-c", required=True, help="Path to the YAML config file"
     )
@@ -53,13 +56,12 @@ def parse_args(exclude=None):
         default=exclude or [],
         help="Top-level keys to exclude from the config",
     )
+    if not add_help and "-h" in sys.argv:
+        return None
+    return parser.parse_known_args()[0]
 
-    args = parser.parse_args()
-    return args
 
-
-def main_func(args):
-
+def get_flat_args_dict(args) -> Dict[str, Any]:
     try:
         with open(args.config, encoding="utf-8") as f:
             config = yaml.safe_load(f)
@@ -75,15 +77,21 @@ def main_func(args):
         sys.exit(1)
     for field in args.exclude:
         config.pop(field, None)
-    # 扁平化配置
     flat_config = flatten_dict(config)
+    return flat_config
 
-    # 构造 --key=value 参数列表
+
+def get_args_list(args) -> list:
+    flat_config = get_flat_args_dict(args)
     extra_args = []
     for key, value in flat_config.items():
         arg_str = f"--{key}={value_to_str(value)}"
         extra_args.append(arg_str)
+    return extra_args
 
+
+def main_func(args):
+    extra_args = get_args_list(args)
     # 完整命令 = 用户命令 + 额外参数
     full_cmd = args.command + extra_args
 

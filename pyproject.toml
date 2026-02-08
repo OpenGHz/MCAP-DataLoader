@@ -44,4 +44,4 @@ include = ["mcap_data_loader*"]
 include-package-data = true
 
 [project.scripts]
-mcap_run = "mcap_data_loader.datasets.mcap_lerobot:run_with_yaml"
+mcap_lerobot_train = "mcap_data_loader.datasets.mcap_lerobot:train"
