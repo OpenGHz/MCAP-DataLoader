@@ -161,13 +161,14 @@ class McapLeRobotDataset(IterableDataset):
         # it is int64
         features = {}
         for key, value in first_item.items():
-            shape = tuple(value.shape)
             if len(value.shape) == 3:
                 dtype = "image"
                 names = ["channel", "height", "width"]
+                shape = tuple(value.shape)
             else:
                 dtype = str(value.dtype).split(".")[-1]
                 names = {"motors": []}
+                shape = (value.shape[-1],)
             features[key] = {"shape": shape, "dtype": dtype, "names": names}
         stats = {}
         data_stats = self._datasets.statistics()
@@ -216,7 +217,9 @@ class McapLeRobotDataset(IterableDataset):
         return len(self._datasets._episode_datasets[0])
 
 
-def make_dataset(cfg) -> McapLeRobotDataset:
+def make_dataset(
+    cfg, config_root: str = "configs", config_name: str = "config.yaml"
+) -> McapLeRobotDataset:
 
     from pathlib import Path
     from mcap_data_loader.utils.hydra_utils import hydra_instance_from_config_path
@@ -228,8 +231,8 @@ def make_dataset(cfg) -> McapLeRobotDataset:
             env_file=".env", env_file_encoding="utf-8", extra="ignore"
         )
 
-        cfg_root: DirectoryPath = Path("configs")
-        cfg_name: str = "config.yaml"
+        cfg_root: DirectoryPath = Path(config_root)
+        cfg_name: str = config_name
 
         @property
         def cfg_path(self) -> Path:
@@ -261,26 +264,44 @@ def make_dataset(cfg) -> McapLeRobotDataset:
     )
 
 
+def _process_config_path(path):
+    from pathlib import Path
+
+    path = Path(path)
+    return str(path.parent), path.stem
+
+
 def train():
     from lerobot.scripts import lerobot_train
     from mcap_data_loader.datasets.mcap_lerobot import make_dataset
+    from mcap_data_loader.utils.cli import extract_and_remove_args, extend_args
+    from functools import partial
+    from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
+    import sys
 
-    lerobot_train.make_dataset = make_dataset
+    args = parse_args(exclude=["mcap"])
+    extract_and_remove_args(["-c", "--config"])
+    config_root, config_name = _process_config_path(args.config)
+    kwargs = {"config_root": config_root, "config_name": config_name}
 
+    lerobot_train.make_dataset = partial(make_dataset, **kwargs)
+
+    # the cli args in lerobot_train will override the config file args
+    extend_args(sys.argv, get_args_list(args))
+    # print(sys.argv)
     return lerobot_train.main()
 
 
 def run_with_yaml():
     from mcap_data_loader.scripts.run_with_yaml import parse_args, main_func
-    from pathlib import Path
     import os
 
     args = parse_args(exclude=["mcap"])
-    cfg_path = Path(args.config)
+    cfg_root, cfg_name = _process_config_path(args.config)
     if "cfg_root" not in os.environ:
-        os.environ["cfg_root"] = str(cfg_path.parent)
+        os.environ["cfg_root"] = cfg_root
     if "cfg_name" not in os.environ:
-        os.environ["cfg_name"] = cfg_path.stem
+        os.environ["cfg_name"] = cfg_name
     return main_func(args)
 
 
