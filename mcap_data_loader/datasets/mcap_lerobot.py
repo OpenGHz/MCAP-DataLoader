@@ -47,7 +47,7 @@ class McapLeRobotDatasetMeta(BaseModel, frozen=True):
 
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True)
 
-    features: Dict[str, Dict[str, Union[tuple, str]]]
+    features: Dict[str, Dict[str, Union[tuple, str, Dict[str, List[str]]]]]
     """The dictionary of features, where the key is the feature name and the value is a dictionary containing the shape and dtype of the feature."""
     stats: Dict[str, Statistics]
     """The dictionary of statistics, where the key is the feature name and the value is a dictionary containing the statistics of the feature."""
@@ -163,9 +163,11 @@ class McapLeRobotDataset(IterableDataset):
             shape = tuple(value.shape)
             if len(value.shape) == 3:
                 dtype = "image"
+                names = ["channel", "height", "width"]
             else:
                 dtype = str(value.dtype).split(".")[-1]
-            features[key] = {"shape": shape, "dtype": dtype}
+                names = {"motors": []}
+            features[key] = {"shape": shape, "dtype": dtype, "names": names}
         stats = {}
         data_stats = self._datasets.statistics()
         for concat_key, keys in zip(
@@ -258,6 +260,15 @@ def make_dataset(cfg) -> McapLeRobotDataset:
     )
 
 
+def train():
+    from lerobot.scripts import lerobot_train
+    from mcap_data_loader.datasets.mcap_lerobot import make_dataset
+
+    lerobot_train.make_dataset = make_dataset
+
+    return lerobot_train.main()
+
+
 def run_with_yaml():
     from mcap_data_loader.scripts.run_with_yaml import parse_args, main_func
     from pathlib import Path
@@ -300,7 +311,7 @@ if __name__ == "__main__":
 
     dataset = make_dataset(Config)
     print(f"{dataset.num_episodes} episodes, {dataset.num_frames} frames")
-    # pprint(dataset.meta.features)
+    pprint(dataset.meta.features)
     # pprint(dataset.meta.stats)
     for key, stat in dataset.meta.stats.items():
         print(f"{key}: {stat['n']}")
