@@ -125,8 +125,7 @@ mcap:
     - /env_camera/color/image_raw
 ```
 
-其中`states`和`actions`指定的topic列表将被加载和分别拼接成lerobot需要的`observation.state`和`action`，作为训练数据中的低维状态和动作输入，而
-`images`则会按名称中的第一部分，例如上述中的`env_camera`，作为图像输入的后缀，添加到`observation.images`字段下，例如`observation.images.env_camera`，以供训练时使用。
+The lists of topics specified by `states` and `actions` will be loaded and concatenated to form the `observation.state` and `action` required by lerobot, serving as low-dimensional state and action inputs in the training data. Meanwhile, `images` will be appended to the `observation.images` field, using the first part of the name (e.g., `env_camera` in the example above) as a suffix for image input, such as `observation.images.env_camera`, for use during training.
 
 Notes:
 - `dataset.root` and `dataset.repo_id` are reused to specify the MCAP dataset root directory and dataset name.
