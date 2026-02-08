@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import List
+from mcap_data_loader.basis import StrEnum  # noqa: F401
 
 
 class Time(BaseModel):
