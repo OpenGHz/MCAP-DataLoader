@@ -1,6 +1,14 @@
-# MCAP Data Loader
+<div align="center">
+
+<h1>MCAP Data Loader</h1>
+
+[![PyPI](https://img.shields.io/pypi/v/mcap-data-loader)](https://pypi.org/project/mcap-data-loader/)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/github/license/OpenGHz/MCAP-DataLoader)](LICENSE)
 
 A Python library for loading and processing MCAP data files in a way that is more suitable for machine learning and robotics training pipelines.
+
+</div>
 
 ## Features
 
@@ -142,3 +150,7 @@ If the output is long, redirect to a file:
 ```bash
 mcap_lerobot_train -h > lerobot_help.txt
 ```
+
+## License
+
+See [LICENSE](LICENSE).
