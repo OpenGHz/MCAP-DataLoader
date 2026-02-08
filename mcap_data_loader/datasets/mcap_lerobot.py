@@ -123,9 +123,10 @@ class McapLeRobotDataset(IterableDataset):
                                 }
                                 | camera_mappings,
                                 "future": {ACTION_KEY: config.actions},
-                                # NOTE: the device is same as the input, usually cpu
                                 "backend_out": "torch",
                                 "dtype": "float32",
+                                # must be cpu: RuntimeError: Cannot re-initialize CUDA in forked subprocess. To use CUDA with multiprocessing, you must use the 'spawn' start method
+                                "device": "cpu",
                             },
                         },
                         4: {
@@ -321,7 +322,7 @@ if __name__ == "__main__":
         time_costs.append(time.perf_counter() - start)
         if i == 0:
             for key, value in data.items():
-                print(f"{key}: {value.shape} {value.dtype}")
+                print(f"{key}: {value.shape} {value.dtype} {value.device}")
         start = time.perf_counter()
     assert i == dataset.num_frames - 1, (
         f"Expected {dataset.num_frames} frames, but got {i + 1}"
