@@ -1,14 +1,23 @@
-# MCAP Data Loader: A Python library for loading and processing MCAP data files in a way that is more suitable for machine learning.
+# MCAP Data Loader
+
+A Python library for loading and processing MCAP data files in a way that is more suitable for machine learning and robotics training pipelines.
+
+## Features
+
+- Dataset-style APIs for iterating MCAP data as episodes/samples
+- Built-in statistics utilities (dataset-level and episode-level)
+- Convenient access to topics and attachments
+- Integration CLI for training with LeRobot using MCAP as the dataset backend
 
 ## Installation
 
-You can install the MCAP Data Loader using pip:
+Install from PyPI:
 
 ```bash
 pip install mcap-data-loader
 ```
 
-or from source:
+Or install from source:
 
 ```bash
 git clone https://github.com/OpenGHz/MCAP-DataLoader.git --depth 1
@@ -16,9 +25,9 @@ cd MCAP-DataLoader
 pip install -e .
 ```
 
-## Usage
+## Quickstart (basic usage)
 
-Here is an basic example showing how to load MCAP data files from a given directory, get statistics and iterate through the data:
+A basic example showing how to load MCAP files from a directory, inspect statistics, and iterate through episodes/samples:
 
 ```python
 from mcap_data_loader.datasets.mcap_dataset import (
@@ -30,38 +39,52 @@ from pprint import pprint
 dataset = McapFlatBuffersEpisodeDataset(
     McapFlatBuffersEpisodeDatasetConfig(
         data_root="data/example",
+        # keys typically include topic names and optional special fields (e.g. "log_stamps")
         keys=["/follow/arm/joint_state/position", "log_stamps"],
     )
 )
+
 print(f"All files: {dataset.all_files}")
 print(f"Dataset length: {len(dataset)}")
+
 print("Dataset statistics:")
 pprint(dataset.statistics())
+
 for episode in dataset:
     print(f"Current file: {episode.config.data_root}")
+
     for sample in episode:
         print(f"Sample keys: {sample.keys()}")
         break
+
     print(f"Episode length: {len(episode)}")
     print(f"All topics: {episode.reader.all_topic_names()}")
     print(f"All attachments: {episode.reader.all_attachment_names()}")
+
     print("Episode statistics:")
     pprint(episode.statistics())
     print("----" * 10)
 ```
-For more examples and detailed usage, please refer to the [examples](examples) directory.
 
+More examples and detailed usage can be found in the [examples](examples) directory.
 
-## Integration with lerobot training
+## Integration with LeRobot training
 
-The Mcap Data Loader provides a convenient way to train lerobot models using Mcap data files.
-To train using the MCAP dataset, execute the following command (it is recommended to place the configuration file in the configs folder under the current working directory):
+MCAP Data Loader provides a CLI to train LeRobot models using MCAP data files.
+
+### Train with an MCAP dataset
+
+Run:
 
 ```bash
 mcap_lerobot_train -c configs/config.yaml
 ```
 
-Here is a configuration file reference (the top level contains LeRobot's configuration, with an additional mcap field for MCAP dataset loading-related settings):
+Recommended: place your config file under a `configs/` directory in your current working directory.
+
+#### Configuration reference
+
+The top level is the standard LeRobot configuration, with an additional `mcap` section for MCAP dataset loading settings:
 
 ```yaml
 batch_size: 2
@@ -71,7 +94,7 @@ policy:
   push_to_hub: false
   chunk_size: 2
   n_action_steps: 2
-  # batch_size: 2
+
 dataset:
   root: data
   repo_id: example
@@ -88,28 +111,33 @@ mcap:
     - /lead/arm/pose/orientation
 ```
 
-This reuses the root and repo_id fields under the original dataset configuration in LeRobot to specify the root directory and dataset name for the MCAP dataset, respectively.
-Additionally, command-line parameter passing compatible with the original LeRobot is also supported. These have the highest priority and will override parameters in the configuration file. For example:
+Notes:
+- `dataset.root` and `dataset.repo_id` are reused to specify the MCAP dataset root directory and dataset name.
+- Command-line overrides compatible with LeRobot are supported and take the highest priority (they override values in the config file). For example:
 
 ```bash
 mcap_lerobot_train -c configs/config.yaml --dataset.repo_id=example_task
 ```
 
-If you wish to use LeRobot's original data format and reuse the configuration file parameter passing functionality, simply add --ori to the command:
+### Train with LeRobot’s original dataset format
+
+If you want to use LeRobot’s original data format (while still using this CLI), add `--ori`:
 
 ```bash
 mcap_lerobot_train -c configs/ori.yaml --ori
 ```
 
-Make sure to modify the dataset path in the configuration to the actual LeRobot dataset path.
-For MCAP dataset training, the -c parameter is required, as the MCAP dataset loading configuration needs to be specified via the configuration file. For training with LeRobot data format, -c can be omitted, in which case the usage is identical to the original LeRobot.
-Regardless of the data format, you can view the supported LeRobot command-line parameters by executing:
+Make sure the dataset path in your config points to the actual LeRobot dataset location.
+
+### Help / supported CLI args
+
+Show supported parameters:
 
 ```bash
 mcap_lerobot_train -h
 ```
 
-Currently, the displayed parameters are numerous; you can redirect the output to a text file for easier viewing:
+If the output is long, redirect to a file:
 
 ```bash
 mcap_lerobot_train -h > lerobot_help.txt
