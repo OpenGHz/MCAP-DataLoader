@@ -168,7 +168,10 @@ class McapLeRobotDataset(IterableDataset):
             else:
                 dtype = str(value.dtype).split(".")[-1]
                 names = {"motors": []}
-                shape = (value.shape[-1],)
+                if len(value.shape) > 1:
+                    shape = (value.shape[-1],)
+                else:
+                    shape = value.shape
             features[key] = {"shape": shape, "dtype": dtype, "names": names}
         stats = {}
         data_stats = self._datasets.statistics()
@@ -280,11 +283,13 @@ def train():
     import sys
 
     args = parse_args(exclude=["mcap"])
-    extract_and_remove_args(["-c", "--config"])
+    _, extracted_dict = extract_and_remove_args(["-c", "--config", "--ori"])
     config_root, config_name = _process_config_path(args.config)
-    kwargs = {"config_root": config_root, "config_name": config_name}
 
-    lerobot_train.make_dataset = partial(make_dataset, **kwargs)
+    if "--ori" not in extracted_dict:
+        lerobot_train.make_dataset = partial(
+            make_dataset, config_root=config_root, config_name=config_name
+        )
 
     # the cli args in lerobot_train will override the config file args
     extend_args(sys.argv, get_args_list(args))
