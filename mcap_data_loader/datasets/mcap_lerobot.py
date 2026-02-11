@@ -117,10 +117,15 @@ class McapLeRobotDataset(IterableDataset):
                             "_target_": "mcap_data_loader.callers.Map",
                             "callable": {
                                 "_target_": "mcap_data_loader.callers.stack.HorizonStacker",
-                                "now": {
-                                    STATE_KEY: config.states,
-                                    # "observation.effort": "/follow/arm/joint_state/effort",
-                                }
+                                "now": (
+                                    {
+                                        STATE_KEY: config.states,
+                                        # "observation.effort": "/follow/arm/joint_state/effort",
+                                    }
+                                    # TODO: empty keys may should not be considered as stackable
+                                    if config.states
+                                    else {}
+                                )
                                 | camera_mappings,
                                 "future": {ACTION_KEY: config.actions},
                                 "backend_out": "torch",
@@ -154,6 +159,9 @@ class McapLeRobotDataset(IterableDataset):
         self._add_items = {
             "action_is_pad": asarray([True] * first_item[ACTION_KEY].shape[0]),
         }
+        # NOTE: there is a bug in lerobot act model that we must use a dummy state
+        if not config.states:
+            self._add_items[STATE_KEY] = asarray([])
         # NOTE: do not update the `first_item` here, otherwise the `action_is_pad` will
         # be treated as an action feaute
         # first_item.update(self._add_items)
@@ -178,6 +186,8 @@ class McapLeRobotDataset(IterableDataset):
         for concat_key, keys in zip(
             (STATE_KEY, ACTION_KEY), (config.states, config.actions)
         ):
+            if not keys:
+                continue
             stat = concatenate_statistics([data_stats[key] for key in keys])
             stat["count"] = stat["n"]
             stats[concat_key] = stat
