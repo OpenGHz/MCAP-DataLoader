@@ -12,6 +12,7 @@ from mcap_data_loader.utils.hydra_utils import hydra_instance_from_dict
 from mcap_data_loader.utils.basic import force_set_attr
 from mcap_data_loader.utils.stat import concatenate_statistics, Statistics
 from mcap_data_loader.pipelines import Pipeline, PipelineConfig, HorizonConfig
+from mcap_data_loader.utils.av_coder import DecodeConfig
 
 
 class McapLeRobotDatasetConfig(BaseModel, frozen=True):
@@ -28,6 +29,7 @@ class McapLeRobotDatasetConfig(BaseModel, frozen=True):
     actions: List[str]
     """The list of action keys."""
     horizon: HorizonConfig = {}
+    """The horizon configuration."""
 
     @field_validator("horizon", mode="before")
     def validate_horizon(cls, v):
@@ -145,6 +147,7 @@ class McapLeRobotDataset(IterableDataset):
         }
         self._datasets = McapMultiEpisodeDatasets(
             McapMultiEpisodeDatasetsConfig(
+                common={"media_configs": [DecodeConfig(frame_format="rgb24")]},
                 configs={
                     data_root: {"data_root": data_root, "keys": keys}
                     for data_root, keys in config.data_root.items()
