@@ -157,7 +157,7 @@ class McapLeRobotDataset(IterableDataset):
         self._ds_iter = None
         first_item = next(iter(self._pipeline))
         self._add_items = {
-            "action_is_pad": asarray([True] * first_item[ACTION_KEY].shape[0]),
+            "action_is_pad": asarray([False] * first_item[ACTION_KEY].shape[0]),
         }
         # NOTE: there is a bug in lerobot act model that we must use a dummy state
         if not config.states:

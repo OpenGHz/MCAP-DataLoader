@@ -80,7 +80,7 @@ More examples and detailed usage can be found in the [examples](examples) direct
 
 MCAP Data Loader provides a CLI to train LeRobot models using MCAP data files. This allows you to use MCAP datasets directly as the training data source for LeRobot, without needing to convert them into a different format.
 
-You should have LeRobot installed in your environment to use this feature. You can install it from PyPI:
+You should have LeRobot installed in your environment to use this feature. You can install it from PyPI (0.4.3 is tested):
 
 ```bash
 pip install lerobot
