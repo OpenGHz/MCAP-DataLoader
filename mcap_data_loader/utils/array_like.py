@@ -309,7 +309,7 @@ class ArrayTransferMixin:
     def _np_to_torch(self, array: NDArray) -> Tensor:
         # no need to check dtype here, as the empty_func already creates the correct dtype
         return self._xp_out.from_numpy(array).to(
-            device=self._device_out, non_blocking=True
+            device=self._device_out, non_blocking=True, dtype=self._dtype_out
         )
 
     def _torch_to_device(self, tensor: Tensor) -> Tensor:

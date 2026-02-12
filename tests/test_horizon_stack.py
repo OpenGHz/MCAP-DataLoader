@@ -16,6 +16,16 @@ for value in item.values():
 horizon_data = ((item,), (item, item))
 
 
+def before_fn(stacked_item):
+    stacked_item["/follow/arm/joint_state/position"] += 20
+    return stacked_item
+
+
+def after_fn(stacked_item):
+    stacked_item["action"] += 10
+    return stacked_item
+
+
 config = HorizonStackerConfig(
     # past={
     #     "/past_state": [
@@ -38,6 +48,9 @@ config = HorizonStackerConfig(
     },
     backend_out="torch",
     dtype="float32",
+    device="cpu",
+    # before=before_fn,
+    # after=after_fn,
 )
 stacker = HorizonStacker(config)
 
@@ -51,6 +64,8 @@ print(f"Average time per call: {(time.time() - start) / 10 * 1000:.6f} ms")
 pprint(stacked)
 for k, v in stacked.items():
     if not isinstance(v, float):
-        print(f"{k:12s} -> shape {v.shape}, dtype {v.dtype}")
+        print(f"{k:12s} -> shape {v.shape}")
     else:
         print(f"{k:12s} -> {v}")
+    assert str(v.dtype) == "torch.float32"
+    assert str(v.device) == "cpu"
