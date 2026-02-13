@@ -291,6 +291,7 @@ class McapFlatBuffersReader:
 
     def __init__(self, file: IO[bytes]):
         self.file_io = file
+        self._file_path = getattr(file, "name", None)
         self.reader = make_reader(file)
         self._decoders = {
             FlatBuffersSchemas.FLOAT_ARRAY.value[0]: self._decode_array,
@@ -456,6 +457,8 @@ class McapFlatBuffersReader:
         attachments: Optional[Iterable[str]] = None,
         reverse: bool = False,
         strict: bool = True,
+        with_step: bool = False,
+        with_file: bool = False,
         configs: Optional[list] = None,
     ) -> Generator[DictDataStamped[np.ndarray]]:
         """Iterate over messages and attachments in the MCAP file.
@@ -469,6 +472,8 @@ class McapFlatBuffersReader:
                 If None, will include all attachments.
             reverse (bool): Whether to iterate in reverse order.
             strict (bool): Whether to enforce strict length matching between topic and attachment iterators.
+            with_step (bool): Whether to include the step information in the yielded data.
+            with_file (bool): Whether to include the file path in the yielded data.
         Returns:
             Generator[Dict[str, Any]]: A generator yielding dictionaries containing message and attachment data.
         Raises:
@@ -510,11 +515,16 @@ class McapFlatBuffersReader:
             if attachments
             else empty_iter()
         )
+        file_path = np.array(self._file_path)
         try:
-            for msg_data, att_data in zip(topic_iter, attachment_iter):
-                data = {}
-                data.update(msg_data)
-                data.update(att_data)
+            for step, (msg_data, att_data) in enumerate(
+                zip(topic_iter, attachment_iter)
+            ):
+                data = msg_data | att_data
+                if with_step:
+                    data["step"] = {"t": 0, "data": np.array(step)}
+                if with_file:
+                    data["file"] = {"t": 0, "data": file_path}
                 yield data
         except ValueError as e:
             error = "Topic and attachment iterators have different lengths"

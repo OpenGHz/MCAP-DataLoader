@@ -77,6 +77,51 @@ class McapLeRobotDataset(IterableDataset):
             IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
             for img_key in config.images
         }
+        rela_pose = True
+        rot6d = False
+        # NOTE: position and orientation keys must be in pairs
+        positions = []
+        orientations = []
+        for key in config.states + config.actions:
+            if key.endswith("pose/position"):
+                positions.append(key)
+            elif key.endswith("pose/orientation"):
+                orientations.append(key)
+        rela_pose_config = (
+            {
+                "_target_": "mcap_data_loader.callers.Map",
+                "callable": {
+                    "_target_": "mcap_data_loader.callers.rela_pose.RelaPose",
+                    "positions": positions,
+                    "orientations": orientations,
+                    "reference": {
+                        "_target_": "mcap_data_loader.datasets.mcap_lerobot.McapLeRobotDataset.is_reference",
+                        "_partial_": True,
+                    },
+                    "rot6d": rot6d,
+                },
+            }
+            if rela_pose
+            else None
+        )
+        rot6d_config = (
+            {
+                "_target_": "mcap_data_loader.callers.Map",
+                "callable": {
+                    "_target_": "mcap_data_loader.basis.DataStamped.map_dict",
+                    "_partial_": True,
+                    "_args_": [
+                        {
+                            "_target_": "mcap_data_loader.utils.rot6d.Rotation6D.quat_to_rot6d",
+                            "_partial_": True,
+                        }
+                    ],
+                    "keys": orientations,
+                },
+            }
+            if rot6d and not rela_pose
+            else None
+        )
         pipeline_dict = {
             0: {
                 "_target_": "mcap_data_loader.pipelines.NestedZip",
@@ -94,6 +139,7 @@ class McapLeRobotDataset(IterableDataset):
                         1: {
                             "_target_": "mcap_data_loader.callers.Map",
                             "callable": {
+                                # "_target_": "mcap_data_loader.callers.chain.CallerChain",
                                 # "_target_": "mcap_data_loader.utils.dict.valmap_include",
                                 "_target_": "mcap_data_loader.basis.DataStamped.map_dict",
                                 "_partial_": True,
@@ -111,6 +157,7 @@ class McapLeRobotDataset(IterableDataset):
                                 "keys": config.images,
                             },
                         },
+                        1.5: rela_pose_config or rot6d_config,
                         2: {
                             "_target_": "mcap_data_loader.pipelines.Horizon",
                             **config.horizon.model_dump(),
@@ -147,7 +194,10 @@ class McapLeRobotDataset(IterableDataset):
         }
         self._datasets = McapMultiEpisodeDatasets(
             McapMultiEpisodeDatasetsConfig(
-                common={"media_configs": [DecodeConfig(frame_format="rgb24")]},
+                common={
+                    # "with_file": True,
+                    "media_configs": [DecodeConfig(frame_format="rgb24")],
+                },
                 configs={
                     data_root: {"data_root": data_root, "keys": keys}
                     for data_root, keys in config.data_root.items()
@@ -159,6 +209,7 @@ class McapLeRobotDataset(IterableDataset):
         self._pipeline = pipeline(self._datasets)
         self._ds_iter = None
         first_item = next(iter(self._pipeline))
+        # print(f"First item keys: {first_item.keys()}")
         self._add_items = {
             "action_is_pad": asarray([False] * first_item[ACTION_KEY].shape[0]),
         }
@@ -206,11 +257,13 @@ class McapLeRobotDataset(IterableDataset):
         # return iter(self._pipeline)
         # TODO: dynamically adjust the `action_is_pad` shape if not fill_with_last
         self._pipeline.reset()
+        # print("Pipeline reset")
         for item in self._pipeline:
             item.update(self._add_items)
             yield item
 
     def __getitem__(self, index):
+        # print(f"Getting item {index}")
         if index == 0:
             self._ds_iter = iter(self._pipeline)
         item = next(self._ds_iter)
@@ -231,6 +284,12 @@ class McapLeRobotDataset(IterableDataset):
     def num_episodes(self) -> int:
         # NOTE: the episode number must all be same so we just take the first one
         return len(self._datasets._episode_datasets[0])
+
+    @staticmethod
+    def is_reference(data):
+        # print(f"step: {data['step']['data']}")
+        # print(f"file: {data['file']['data']}")
+        return data["step"]["data"] == 0
 
 
 def make_dataset(
@@ -362,6 +421,7 @@ if __name__ == "__main__":
     time_costs = []
     start = time.perf_counter()
     for i, data in enumerate(dataset):
+        input("Press Enter to continue...")
         time_costs.append(time.perf_counter() - start)
         if i == 0:
             for key, value in data.items():

@@ -55,7 +55,72 @@ def quat_to_rotation_matrix(q):
     return R
 
 
-def to_relative_pose(pos_serial, quat_serial):
+def to_relative_pose(ref_pos, ref_quat, pos, quat):
+    """
+    输入:
+        ref_pos: [3,] in xyz
+        ref_quat: [4,] in [x,y,z,w] (unit quat, scalar-last)
+        pos: [3,] in xyz
+        quat: [4,] in [x,y,z,w] (unit quat, scalar-last)
+    输出:
+        rel_pos: [3,] —— 相对位置（在 ref 坐标系下）
+        rel_quat: [4,] —— 相对四元数（q_rel = q_ref^{-1} * q）
+        rel_rot6d: [6,] —— 相对6D旋转表示（R_rel 前两列按行展开）
+    """
+    ref_pos = np.asarray(ref_pos)
+    ref_quat = np.asarray(ref_quat)
+    pos = np.asarray(pos)
+    quat = np.asarray(quat)
+
+    assert ref_pos.shape == (3,)
+    assert pos.shape == (3,)
+    assert ref_quat.shape == (4,)
+    assert quat.shape == (4,)
+
+    # q_ref_inv = conjugate(q_ref) for unit quaternion
+    qrx, qry, qrz, qrw = ref_quat
+    iqx, iqy, iqz, iqw = -qrx, -qry, -qrz, qrw
+
+    # rel_pos = rotate(delta, q_ref_inv) using fast quat-vector rotation
+    dx, dy, dz = pos - ref_pos
+    # t = 2 * cross(q_vec, v)
+    tx = 2.0 * (iqy * dz - iqz * dy)
+    ty = 2.0 * (iqz * dx - iqx * dz)
+    tz = 2.0 * (iqx * dy - iqy * dx)
+    # v' = v + w*t + cross(q_vec, t)
+    rel_x = dx + iqw * tx + (iqy * tz - iqz * ty)
+    rel_y = dy + iqw * ty + (iqz * tx - iqx * tz)
+    rel_z = dz + iqw * tz + (iqx * ty - iqy * tx)
+    rel_pos = np.array([rel_x, rel_y, rel_z], dtype=pos.dtype)
+
+    # rel_quat = q_ref_inv * quat (scalar-last)
+    qx, qy, qz, qw = quat
+    rw = iqw * qw - iqx * qx - iqy * qy - iqz * qz
+    rx = iqw * qx + iqx * qw + iqy * qz - iqz * qy
+    ry = iqw * qy - iqx * qz + iqy * qw + iqz * qx
+    rz = iqw * qz + iqx * qy - iqy * qx + iqz * qw
+    rel_quat = np.array([rx, ry, rz, rw], dtype=quat.dtype)
+
+    # rel_rot6d from quaternion -> first two columns of R, then flatten by rows:
+    # [r00,r01,r10,r11,r20,r21]
+    x, y, z, w = rx, ry, rz, rw
+    x2, y2, z2 = x + x, y + y, z + z
+    xx, xy, xz = x * x2, x * y2, x * z2
+    yy, yz, zz = y * y2, y * z2, z * z2
+    wx, wy, wz = w * x2, w * y2, w * z2
+
+    r00 = 1.0 - (yy + zz)
+    r01 = xy - wz
+    r10 = xy + wz
+    r11 = 1.0 - (xx + zz)
+    r20 = xz - wy
+    r21 = yz + wx
+    rel_rot6d = np.array([r00, r01, r10, r11, r20, r21], dtype=rel_quat.dtype)
+
+    return rel_pos, rel_quat, rel_rot6d
+
+
+def to_relative_pose_serial(pos_serial, quat_serial):
     """
     输入:
         pos_serial: [N, 3]
@@ -187,13 +252,13 @@ def rel_rot6d_to_abs(pos_0, quat_0, rel_pos, rel_rot6d):
 if __name__ == "__main__":
     # 原始绝对序列
     N = 4
-    np.random.seed(42)  # 固定随机种子
+    # np.random.seed(42)  # 固定随机种子
     pos_serial = np.random.rand(N, 3) * 10  # 随机生成位置 [N, 3]
     quat_serial = np.random.rand(N, 4)
     quat_serial /= np.linalg.norm(quat_serial, axis=1, keepdims=True)  # 单位化四元数
 
     # Step 1: 转为相对表示
-    rel_pos, rel_quat, rel_rot6d = to_relative_pose(pos_serial, quat_serial)
+    rel_pos, rel_quat, rel_rot6d = to_relative_pose_serial(pos_serial, quat_serial)
     # Step 2: 从相对 + 第0帧恢复绝对
     ref_pos = pos_serial[0]
     ref_quat = quat_serial[0]
@@ -211,3 +276,16 @@ if __name__ == "__main__":
     err2 = np.max(np.abs(quat_serial + abs_quat_rec))
     print("四元数误差（考虑符号）:", min(err1, err2))
     assert min(err1, err2) < 1e-6, "四元数恢复不准确！"
+
+    rela_pos, rela_quat, rela_rot6d = to_relative_pose(
+        pos_serial[0], quat_serial[0], pos_serial[1], quat_serial[1]
+    )
+    assert np.allclose(rel_pos[1], rela_pos), (
+        "to_relative_pose 与 to_relative_pose_serial 结果不一致！"
+    )
+    assert np.allclose(rel_quat[1], rela_quat), (
+        "to_relative_pose 与 to_relative_pose_serial 结果不一致！"
+    )
+    assert np.allclose(rel_rot6d[1], rela_rot6d), (
+        "to_relative_pose 与 to_relative_pose_serial 结果不一致！"
+    )

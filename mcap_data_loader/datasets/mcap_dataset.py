@@ -47,6 +47,10 @@ class McapDatasetConfig(IterableDatasetConfig):
     """Whether to include timestamps in the samples."""
     strict: bool = True
     """Whether to enforce strict reading."""
+    with_step: bool = True
+    """Whether to include step information in the samples."""
+    with_file: bool = False
+    """Whether to include file information in the samples."""
     media_configs: List = []
     """Media configurations for reading media data, e.g., videos."""
 
@@ -109,6 +113,8 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
             config.attachments,
             config.rearrange.episode is RearrangeType.REVERSE,
             config.strict,
+            config.with_step,
+            config.with_file,
             config.media_configs,
         )
         if self.config.with_timestamp:
