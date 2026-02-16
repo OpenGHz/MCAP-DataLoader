@@ -1,4 +1,10 @@
 import numpy as np
+from mcap_data_loader.utils.transformations import (
+    quaternion_matrix,
+    quaternion_multiply,
+    quaternion_inverse,
+)
+from functools import wraps
 
 
 def quat_conjugate(q):
@@ -120,6 +126,44 @@ def to_relative_pose(ref_pos, ref_quat, pos, quat):
     return rel_pos, rel_quat, rel_rot6d
 
 
+def to_absolute_pose(ref_pos, ref_quat, rel_pos, rel_quat):
+    """
+    输入:
+        ref_pos: [3,] in xyz
+        ref_quat: [4,] in [x,y,z,w] (unit quat, scalar-last)
+        rel_pos: [3,] in xyz (relative position in ref frame)
+        rel_quat: [4,] in [x,y,z,w] (relative rotation)
+    输出:
+        abs_pos: [3,] in xyz
+        abs_quat: [4,] in [x,y,z,w]
+    """
+    ref_pos = np.asarray(ref_pos)
+    ref_quat = np.asarray(ref_quat)
+    rel_pos = np.asarray(rel_pos)
+    rel_quat = np.asarray(rel_quat)
+
+    assert ref_pos.shape == (3,)
+    assert rel_pos.shape == (3,)
+    assert ref_quat.shape == (4,)
+    assert rel_quat.shape == (4,)
+
+    # abs_quat = q_ref * q_rel
+    qrx, qry, qrz, qrw = ref_quat
+    rqx, rqy, rqz, rqw = rel_quat
+
+    rw = qrw * rqw - qrx * rqx - qry * rqy - qrz * rqz
+    rx = qrw * rqx + qrx * rqw + qry * rqz - qrz * rqy
+    ry = qrw * rqy - qrx * rqz + qry * rqw + qrz * rqx
+    rz = qrw * rqz + qrx * rqy - qry * rqx + qrz * rqw
+    abs_quat = np.array([rx, ry, rz, rw], dtype=rel_quat.dtype)
+
+    # abs_pos = R_ref @ rel_pos + t_ref
+    R_ref = quaternion_matrix(ref_quat)[:3, :3]  # [3, 3]
+    abs_pos = R_ref @ rel_pos + ref_pos  # [3]
+
+    return abs_pos, abs_quat
+
+
 def to_relative_pose_serial(pos_serial, quat_serial):
     """
     输入:
@@ -229,7 +273,6 @@ def rel_rot6d_to_abs(pos_0, quat_0, rel_pos, rel_rot6d):
         abs_pos: [N, 3]
         abs_quat: [N, 4]  （可选，也可只输出旋转矩阵）
     """
-    N = rel_pos.shape[0]
     pos_0 = np.asarray(pos_0).reshape(1, 3)
     quat_0 = np.asarray(quat_0).reshape(1, 4)
 
@@ -247,6 +290,80 @@ def rel_rot6d_to_abs(pos_0, quat_0, rel_pos, rel_rot6d):
     abs_quat = rotation_matrix_to_quat(R_abs)  # [N, 4]
 
     return abs_pos, abs_quat
+
+
+class RelaAbsBasis:
+    def __init__(self, tolist: bool = False):
+        self.tolist = tolist
+        self.to_relative = self._to_list_wrapper(self.to_relative)
+        self.to_absolute = self._to_list_wrapper(self.to_absolute)
+
+    def set_ref(self, pose):
+        pos, quat = pose
+        self.ref_pos = np.asarray(pos)
+        self.ref_quat = np.asarray(quat)
+        # assert self.ref_pos.shape == (3,)
+        # assert self.ref_quat.shape == (4,)
+
+    def _to_list_wrapper(self, func):
+        if self.tolist:
+
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                result = func(*args, **kwargs)
+                return tuple(r.tolist() for r in result)
+
+            return wrapper
+        else:
+            return func
+
+    def to_relative(self, pose):
+        raise NotImplementedError
+
+    def to_absolute(self, pose):
+        raise NotImplementedError
+
+
+class PoseLocalRelaAbs(RelaAbsBasis):
+    def to_relative(self, pose):
+        pos, quat = pose
+        return to_relative_pose(self.ref_pos, self.ref_quat, pos, quat)
+
+    def to_absolute(self, pose):
+        rel_pos, rel_quat = pose
+        return to_absolute_pose(self.ref_pos, self.ref_quat, rel_pos, rel_quat)
+
+
+class PoseGlobalRelaAbs(RelaAbsBasis):
+    def to_relative(self, pose):
+        pos, quat = pose
+        return pos - self.ref_pos, quaternion_multiply(
+            quat, quaternion_inverse(self.ref_quat)
+        )
+
+    def to_absolute(self, pose):
+        rel_pos, rel_quat = pose
+        return self.ref_pos + rel_pos, quaternion_multiply(rel_quat, self.ref_quat)
+
+
+class VectorRelaAbs:
+    def __init__(self, tolist: bool = False):
+        self.tolist = tolist
+
+    def set_ref(self, vec):
+        self.ref_vec = np.asarray(vec)
+
+    def to_relative(self, vec):
+        rela = np.asarray(vec) - self.ref_vec
+        if self.tolist:
+            return rela.tolist()
+        return rela
+
+    def to_absolute(self, rel_vec):
+        abs_vec = np.asarray(rel_vec) + self.ref_vec
+        if self.tolist:
+            return abs_vec.tolist()
+        return abs_vec
 
 
 if __name__ == "__main__":
@@ -289,3 +406,25 @@ if __name__ == "__main__":
     assert np.allclose(rel_rot6d[1], rela_rot6d), (
         "to_relative_pose 与 to_relative_pose_serial 结果不一致！"
     )
+
+    pose = (pos_serial[0], quat_serial[0])
+    local_rela_abs = PoseLocalRelaAbs()
+    local_rela_abs.set_ref(pose)
+    rel_pos, rel_quat, _ = local_rela_abs.to_relative((pos_serial[1], quat_serial[1]))
+    abs_pose = local_rela_abs.to_absolute((rel_pos, rel_quat))
+    assert np.allclose(pos_serial[1], abs_pose[0]), "PoseLocalRelaAbs 恢复位置不准确！"
+    assert np.allclose(quat_serial[1], abs_pose[1]) or np.allclose(
+        quat_serial[1], -abs_pose[1]
+    ), "PoseLocalRelaAbs 恢复四元数不准确！"
+    global_rela_abs = PoseGlobalRelaAbs()
+    global_rela_abs.set_ref(pose)
+    rel_pose_global = global_rela_abs.to_relative((pos_serial[1], quat_serial[1]))
+    abs_pose_global = global_rela_abs.to_absolute(rel_pose_global)
+    assert np.allclose(pos_serial[1], abs_pose_global[0]), (
+        "PoseGlobalRelaAbs 恢复位置不准确！"
+    )
+    assert np.allclose(quat_serial[1], abs_pose_global[1]) or np.allclose(
+        quat_serial[1], -abs_pose_global[1]
+    ), "PoseGlobalRelaAbs 恢复四元数不准确！"
+
+    print("所有测试通过！")

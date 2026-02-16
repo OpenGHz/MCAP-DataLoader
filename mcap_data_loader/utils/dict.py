@@ -19,6 +19,23 @@ def defaultdict_to_dict(d: defaultdict):
     return d
 
 
+def nested_defaultdict(depth: int, final_factory: Callable[[], Any]) -> defaultdict:
+    """
+    Create a nested defaultdict with specified depth and final factory.
+    Args:
+        depth: The depth of the nested defaultdict. Must be a positive integer.
+        final_factory: A callable that returns the default value for the innermost level.
+    Returns:
+        A nested defaultdict with the specified depth and final factory.
+    """
+    if depth <= 0:
+        raise ValueError("Depth must be a positive integer.")
+    if depth == 1:
+        return defaultdict(final_factory)
+    else:
+        return defaultdict(lambda: nested_defaultdict(depth - 1, final_factory))
+
+
 def invert_and_merge(d: Dict[str, Hashable], joiner=","):
     inv = defaultdict(list)
     for k, v in d.items():
