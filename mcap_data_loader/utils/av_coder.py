@@ -101,7 +101,7 @@ class AvCoder(InitConfigMixin):
             self._last_future.result()
         self._close()
         self.set_output(file_path)
-        self._start_time = 0
+        self._start_time = None
         self._last_time = 0
         self._configured = False
         self._last_future = None
@@ -172,8 +172,9 @@ class AvCoder(InitConfigMixin):
         # start = time.monotonic()
         assert isinstance(timestamp, int), "Timestamp must be an integer"
         timestamp = timestamp // self._ns2base if ns_to_base else timestamp
-        if self._start_time == 0:
-            assert timestamp > 0, "Timestamp must be greater than 0"
+        if self._start_time is None:
+            if timestamp < 0:
+                raise ValueError("Timestamp must not be negative")
             self._start_time = timestamp
             self._container.metadata["comment"] = json.dumps({"base_stamp": timestamp})
         if self._preprocess is None:
