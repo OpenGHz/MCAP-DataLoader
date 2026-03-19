@@ -99,7 +99,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         self.config = config
         # delay the reader initialization until read_stream is called
         # to support multiprocessing data reading
-        self.reader = None
+        self._reader = None
 
     def read_stream(self):
         """
@@ -107,7 +107,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         """
         self._ensure_reader()
         config = self.config
-        samples_iter = self.reader.iter_samples(
+        samples_iter = self._reader.iter_samples(
             config.keys,
             config.topics,
             config.attachments,
@@ -124,20 +124,19 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
                 yield {key: value["data"] for key, value in sample.items()}
 
     def close(self):
-        if self.reader is not None:
-            return self.reader.close()
+        if self._reader is not None:
+            return self._reader.close()
 
     def statistics(self):
-        self._ensure_reader()
         return self.reader.topic_statistics
 
     def _ensure_reader(self):
-        if self.reader is None:
-            self.reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
+        if self._reader is None:
+            self._reader = McapFlatBuffersReader(open(self.config.data_root, "rb"))
+        return self._reader
 
     def __len__(self) -> int:
         """Get the total number of messages in the MCAP file."""
-        self._ensure_reader()
         return len(self.reader)
 
     def __lt__(self, other: Self) -> bool:
@@ -150,6 +149,11 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
     def stem(self) -> str:
         """Get the stem of the MCAP file."""
         return self.config.data_root.stem
+
+    @property
+    def reader(self) -> McapFlatBuffersReader:
+        """Get the MCAP reader, initialize it if not already initialized."""
+        return self._ensure_reader()
 
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
