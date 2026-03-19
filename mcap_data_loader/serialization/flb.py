@@ -281,20 +281,16 @@ class McapFlatBuffersWriter:
     def add_multi_channel_image(
         self,
         topic: str,
-        image: np.ndarray,
+        data: np.ndarray,
         publish_time: int,
         log_time: int,
-        frame_id: str = "",
     ):
         """Add a multi-channel image message to the MCAP writer."""
-        img_data = encode_multi_channel_image(image)
-        self.add_compressed_image(
-            topic=topic,
-            data=img_data,
-            publish_time=publish_time,
-            log_time=log_time,
-            format="multi_channel_image",
-            frame_id=frame_id,
+        self._writer.add_message(
+            self._cmapping[topic],
+            log_time,
+            encode_multi_channel_image(self.builder, data),
+            publish_time,
         )
 
     @property

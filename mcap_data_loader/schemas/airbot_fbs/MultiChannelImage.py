@@ -29,7 +29,7 @@ class MultiChannelImage(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
             x = o + self._tab.Pos
-            from airbot_fbs.ImageShape import ImageShape
+            from mcap_data_loader.schemas.airbot_fbs.ImageShape import ImageShape
             obj = ImageShape()
             obj.Init(self._tab.Bytes, x)
             return obj
