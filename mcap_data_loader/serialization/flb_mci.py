@@ -1,10 +1,7 @@
 """Encode and decode example for the airbot_fbs.MultiChannelImage schema."""
 
-from __future__ import annotations
-
 import flatbuffers
 import numpy as np
-
 from mcap_data_loader.schemas.airbot_fbs import DataType, ImageShape, MultiChannelImage
 
 
