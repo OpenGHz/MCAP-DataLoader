@@ -8,7 +8,11 @@ from foxglove_schemas_flatbuffer import CompressedImage, RawImage, Time, get_sch
 from importlib.resources import read_binary
 from enum import Enum
 from functools import cache, cached_property
-from mcap_data_loader.schemas.airbot_fbs import FloatArray
+from mcap_data_loader.schemas.airbot_fbs import FloatArray, MultiChannelImage
+from mcap_data_loader.serialization.flb_mci import (
+    encode_multi_channel_image,
+    decode_multi_channel_image,
+)
 from mcap_data_loader.basis import DictDataStamped
 from mcap_data_loader.utils.basic import zip
 from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig
@@ -21,19 +25,22 @@ import flatbuffers
 import logging
 
 
+def get_airbot_fbs_tuple(fbs_cls: type) -> tuple[str, bytes]:
+    name = fbs_cls.__name__.split(".")[-1]
+    return (
+        f"airbot_fbs.{name}",
+        read_binary("mcap_data_loader.schemas.airbot_fbs.bfbs", f"{name}.bfbs"),
+    )
+
+
 class FlatBuffersSchemas(Enum):
     """Enum for FlatBuffers schemas used in MCAP files."""
 
     NONE = ()
     RAW_IMAGE = ("foxglove.RawImage", get_schema("RawImage"))
     COMPRESSED_IMAGE = ("foxglove.CompressedImage", get_schema("CompressedImage"))
-    FLOAT_ARRAY = (
-        "airbot_fbs.FloatArray",
-        read_binary(
-            "mcap_data_loader.schemas.airbot_fbs.bfbs",
-            "FloatArray.bfbs",
-        ),
-    )
+    FLOAT_ARRAY = get_airbot_fbs_tuple(FloatArray)
+    MULTI_CHANNEL_IMAGE = get_airbot_fbs_tuple(MultiChannelImage)
 
     def __bool__(self):
         return self is not FlatBuffersSchemas.NONE
@@ -271,6 +278,25 @@ class McapFlatBuffersWriter:
         )
         self.builder.Clear()
 
+    def add_multi_channel_image(
+        self,
+        topic: str,
+        image: np.ndarray,
+        publish_time: int,
+        log_time: int,
+        frame_id: str = "",
+    ):
+        """Add a multi-channel image message to the MCAP writer."""
+        img_data = encode_multi_channel_image(image)
+        self.add_compressed_image(
+            topic=topic,
+            data=img_data,
+            publish_time=publish_time,
+            log_time=log_time,
+            format="multi_channel_image",
+            frame_id=frame_id,
+        )
+
     @property
     def topic_statistics(self) -> Dict[str, StatisticsBasis]:
         """The accumulated statistics of topics (supported schema: FloatArray)."""
@@ -297,6 +323,7 @@ class McapFlatBuffersReader:
             FlatBuffersSchemas.FLOAT_ARRAY.value[0]: self._decode_array,
             FlatBuffersSchemas.RAW_IMAGE.value[0]: self._decode_raw_image,
             FlatBuffersSchemas.COMPRESSED_IMAGE.value[0]: self._decode_compressed_image,
+            FlatBuffersSchemas.MULTI_CHANNEL_IMAGE.value[0]: decode_multi_channel_image,
         }
         self._jpeg = TurboJPEG()
 

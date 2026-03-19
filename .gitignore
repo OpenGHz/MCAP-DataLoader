@@ -209,3 +209,4 @@ data/
 tests/test.py
 outputs/
 configs/
+.vscode/
