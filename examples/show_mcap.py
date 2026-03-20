@@ -5,6 +5,7 @@ from mcap_data_loader.datasets.mcap_dataset import (
 from pprint import pprint
 import argparse
 import logging
+import json
 
 
 logging.basicConfig(level=logging.INFO)
@@ -24,11 +25,12 @@ dataset = McapFlatBuffersEpisodeDataset(
     McapFlatBuffersEpisodeDatasetConfig(
         data_root=path,
         keys=[
-            "/follow/arm/joint_state/position",
-            "/follow/eef/joint_state/position",
-            # "/env_camera/color/image_raw",
+            "arm/joint_state/position",
+            "eef/joint_state/position",
+            "hand_cam/mask/heat_map",
+            "hand_cam/color/image_raw",
         ],
-        strict=False,
+        strict=True,
     )
 )
 
@@ -39,7 +41,12 @@ dataset = McapFlatBuffersEpisodeDataset(
 
 for index, episode in enumerate(dataset):
     pprint(f"{episode.config.data_root}: {len(episode)} samples")
+    for attachment in episode.reader.reader.iter_attachments():
+        if attachment.name == "component_info":
+            data = json.loads(attachment.data)
+            pprint(data)
     for sample in episode:
-        pprint(sample)
+        print(sample.keys())
+        # pprint(sample)
         break
     break

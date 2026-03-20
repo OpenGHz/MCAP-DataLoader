@@ -4,14 +4,28 @@ from mcap.well_known import SchemaEncoding, MessageEncoding
 from turbojpeg import TurboJPEG
 from typing import Dict, IO, Set, Optional, Any, Union, Tuple
 from collections.abc import Iterable
-from foxglove_schemas_flatbuffer import CompressedImage, RawImage, Time, get_schema
+from foxglove_schemas_flatbuffer import (
+    CompressedImage,
+    RawImage,
+    Time,
+    PointCloud,
+    get_schema,
+)
 from importlib.resources import read_binary
 from enum import Enum
-from mcap_data_loader.schemas.airbot_fbs import FloatArray, MultiChannelImage
+from mcap_data_loader.schemas.airbot_fbs import (
+    FloatArray,
+    MultiChannelImage,
+    PointCloud2,
+)
 from mcap_data_loader.serialization.basis import McapReaderBasis
 from mcap_data_loader.serialization.flb_mci import (
     encode_multi_channel_image,
     decode_multi_channel_image,
+)
+from mcap_data_loader.serialization.flb_pc2 import (
+    encode_pointcloud2_dict,
+    decode_pointcloud2_dict,
 )
 from mcap_data_loader.utils.av_coder import AvCoder
 from mcap_data_loader.utils.stat import StatisticsBasis
@@ -35,8 +49,10 @@ class FlatBuffersSchemas(Enum):
     NONE = ()
     RAW_IMAGE = ("foxglove.RawImage", get_schema("RawImage"))
     COMPRESSED_IMAGE = ("foxglove.CompressedImage", get_schema("CompressedImage"))
+    POINT_CLOUD = ("foxglove.PointCloud", get_schema("PointCloud"))
     FLOAT_ARRAY = get_airbot_fbs_tuple(FloatArray)
     MULTI_CHANNEL_IMAGE = get_airbot_fbs_tuple(MultiChannelImage)
+    POINT_CLOUD2 = get_airbot_fbs_tuple(PointCloud2)
 
     def __bool__(self):
         return self is not FlatBuffersSchemas.NONE
@@ -235,6 +251,46 @@ class McapFlatBuffersWriter:
         )
         builder.Clear()
 
+    def add_point_cloud(
+        self,
+        topic: str,
+        data: np.ndarray,
+        publish_time: int,
+        log_time: int,
+        frame_id: str = "",
+    ):
+        """Add a point cloud message to the MCAP writer."""
+        vec_data = self.builder.CreateNumpyVector(data)
+        PointCloud.Start(self.builder)
+        PointCloud.AddData(self.builder, vec_data)
+        end_data = PointCloud.End(self.builder)
+        self.builder.Finish(end_data)
+        msg_data = self.builder.Output()
+        self._writer.add_message(
+            channel_id=self._cmapping[topic],
+            data=bytes(msg_data),
+            publish_time=publish_time,
+            log_time=log_time,
+        )
+        self.builder.Clear()
+
+    def add_point_cloud2(
+        self,
+        topic: str,
+        data: dict,
+        publish_time: int,
+        log_time: int,
+    ):
+        """Add a PointCloud2 message to the MCAP writer."""
+        encoded = encode_pointcloud2_dict(self.builder, data)
+        self._writer.add_message(
+            channel_id=self._cmapping[topic],
+            data=encoded,
+            publish_time=publish_time,
+            log_time=log_time,
+        )
+        self.builder.Clear()
+
     def add_field_array(
         self,
         topics: Dict[str, str],
@@ -310,6 +366,8 @@ class McapFlatBuffersReader(McapReaderBasis):
             FlatBuffersSchemas.RAW_IMAGE.value[0]: self._decode_raw_image,
             FlatBuffersSchemas.COMPRESSED_IMAGE.value[0]: self._decode_compressed_image,
             FlatBuffersSchemas.MULTI_CHANNEL_IMAGE.value[0]: decode_multi_channel_image,
+            FlatBuffersSchemas.POINT_CLOUD.value[0]: self._decode_point_cloud,
+            FlatBuffersSchemas.POINT_CLOUD2.value[0]: decode_pointcloud2_dict,
         }
         self._stat_schemas = (FlatBuffersSchemas.FLOAT_ARRAY.value[0],)
 
@@ -365,6 +423,11 @@ class McapFlatBuffersReader(McapReaderBasis):
         img_format = compressed_img.Format().decode("utf-8")
         assert img_format == "jpeg", f"Expected JPEG format, but got {img_format}"
         return self._jpeg.decode(compressed_img.DataAsNumpy())
+
+    def _decode_point_cloud(self, data: bytes) -> np.ndarray:
+        """Decode a PointCloud FlatBuffers message."""
+        point_cloud = PointCloud.PointCloud.GetRootAs(data, 0)
+        return point_cloud.DataAsNumpy()
 
     def _decode(self, schema, message):
         return self._decoders[schema.name](message.data)
