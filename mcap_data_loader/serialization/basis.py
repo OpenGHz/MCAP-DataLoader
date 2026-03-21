@@ -25,7 +25,13 @@ class McapReaderBasis(ABC):
         self.file_io = file
         self._file_path = getattr(file, "name", None)
         self.reader = make_reader(file, False, self.decoder_factories)
-        self._jpeg = TurboJPEG()
+        try:
+            self._jpeg = TurboJPEG()
+        except Exception as e:
+            self.get_logger().warning(
+                f"Failed to initialize TurboJPEG, JPEG decoding will not be supported. Error: {e}"
+            )
+            self._jpeg = None
         self._stat_schemas = ()
         self._post_init()
 
