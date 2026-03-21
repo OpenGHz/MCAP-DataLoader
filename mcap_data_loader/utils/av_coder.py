@@ -102,7 +102,7 @@ class AvCoder(InitConfigMixin):
         self._close()
         self.set_output(file_path)
         self._start_time = None
-        self._last_time = 0
+        self._last_time = -1
         self._configured = False
         self._last_future = None
         self._perf_logs = {}
