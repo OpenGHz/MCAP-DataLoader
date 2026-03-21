@@ -7,6 +7,7 @@ from pymcap import PyMCAP
 from pymcap.core import McapCLIOutput
 from mcap.writer import Writer
 from mcap.reader import McapReader, make_reader
+from mcap.exceptions import RecordLengthLimitExceeded
 from typing import Optional, List, Dict, Union, Literal, Any
 from pathlib import Path
 from time import time_ns
@@ -100,6 +101,21 @@ class McapHandlerBasis:
         if self.reader is not None and not replace:
             raise ValueError("Reader is already set. Use `replace=True` to replace it.")
         self.reader = reader
+
+    @staticmethod
+    def validate_file(path: Path, silent: bool = False) -> bool:
+        """Validate the MCAP file at the given path."""
+        try:
+            with open(path, "rb") as f:
+                reader = make_reader(f)
+                reader.get_summary()
+            return True
+        except RecordLengthLimitExceeded as e:
+            if not silent:
+                logging.getLogger(McapHandlerBasis.__name__).error(
+                    f"Failed to validate MCAP file at {path}: {e}"
+                )
+            return False
 
 
 class McapDeriveMetadataHandler(McapHandlerBasis):
