@@ -97,6 +97,7 @@ class Configurer(ConfigurerBasis[T]):
         return instantiate(config, **(overrides or {}))
 
     def __set_dict_config(self, dict_config: DictConfig) -> None:
+        self._job_env = hydra_config.HydraConfig.get().job.env_set
         self._dict_config = dict_config
         self.get_logger().info(
             f"Original working directory : {hydra.utils.get_original_cwd()}"
@@ -110,6 +111,7 @@ class Configurer(ConfigurerBasis[T]):
             exit(0)
 
     def __instantiate_config(self):
+        os.environ.update(self._job_env)
         config_instance = instantiate(self._dict_config)
         if isinstance(config_instance, self.config_class):
             return config_instance
