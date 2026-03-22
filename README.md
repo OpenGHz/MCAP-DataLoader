@@ -4,7 +4,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/mcap-data-loader)](https://pypi.org/project/mcap-data-loader/)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/github/license/OpenGHz/MCAP-DataLoader)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A Python library for loading and processing MCAP data files in a way that is more suitable for machine learning and robotics training pipelines.
 
