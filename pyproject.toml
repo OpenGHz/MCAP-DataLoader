@@ -31,6 +31,7 @@ dependencies = [
     "termcolor",
     "send2trash >=1.8.3",
 ]
+urls = { "repository" = "https://github.com/OpenGHz/MCAP-DataLoader.git" }
 
 [tool.setuptools.packages.find]
 where = ["."]
