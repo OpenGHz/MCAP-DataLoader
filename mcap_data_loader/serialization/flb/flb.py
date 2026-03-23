@@ -19,13 +19,17 @@ from mcap_data_loader.schemas.airbot_fbs import (
     PointCloud2,
 )
 from mcap_data_loader.serialization.basis import McapReaderBasis
-from mcap_data_loader.serialization.flb_mci import (
+from mcap_data_loader.serialization.flb.mci import (
     encode_multi_channel_image,
     decode_multi_channel_image,
 )
-from mcap_data_loader.serialization.flb_pc2 import (
+from mcap_data_loader.serialization.flb.pc2 import (
     encode_pointcloud2_dict,
     decode_pointcloud2_dict,
+)
+from mcap_data_loader.serialization.flb.pose import (
+    encode_pose_in_frame_dict,
+    decode_pose_in_frame_dict,
 )
 from mcap_data_loader.utils.av_coder import AvCoder
 from mcap_data_loader.utils.stat import StatisticsBasis
@@ -50,6 +54,9 @@ class FlatBuffersSchemas(Enum):
     RAW_IMAGE = ("foxglove.RawImage", get_schema("RawImage"))
     COMPRESSED_IMAGE = ("foxglove.CompressedImage", get_schema("CompressedImage"))
     POINT_CLOUD = ("foxglove.PointCloud", get_schema("PointCloud"))
+    POSE_IN_FRAME = ("foxglove.PoseInFrame", get_schema("PoseInFrame"))
+    # JOINT_STATES = ("foxglove.JointStates", get_schema("JointStates"))
+    # JOINT_STATE = ("foxglove.JointState", get_schema("JointState"))
     FLOAT_ARRAY = get_airbot_fbs_tuple(FloatArray)
     MULTI_CHANNEL_IMAGE = get_airbot_fbs_tuple(MultiChannelImage)
     POINT_CLOUD2 = get_airbot_fbs_tuple(PointCloud2)
@@ -291,6 +298,23 @@ class McapFlatBuffersWriter:
         )
         self.builder.Clear()
 
+    def add_pose_in_frame(
+        self,
+        topic: str,
+        data: dict,
+        publish_time: int,
+        log_time: int,
+    ):
+        """Add a PoseInFrame message to the MCAP writer."""
+        encoded = encode_pose_in_frame_dict(self.builder, data)
+        self._writer.add_message(
+            channel_id=self._cmapping[topic],
+            data=encoded,
+            publish_time=publish_time,
+            log_time=log_time,
+        )
+        self.builder.Clear()
+
     def add_field_array(
         self,
         topics: Dict[str, str],
@@ -368,6 +392,7 @@ class McapFlatBuffersReader(McapReaderBasis):
             FlatBuffersSchemas.MULTI_CHANNEL_IMAGE.value[0]: decode_multi_channel_image,
             FlatBuffersSchemas.POINT_CLOUD.value[0]: self._decode_point_cloud,
             FlatBuffersSchemas.POINT_CLOUD2.value[0]: decode_pointcloud2_dict,
+            FlatBuffersSchemas.POSE_IN_FRAME.value[0]: self._decode_pose_in_frame,
         }
         self._stat_schemas = (FlatBuffersSchemas.FLOAT_ARRAY.value[0],)
 
@@ -428,6 +453,11 @@ class McapFlatBuffersReader(McapReaderBasis):
         """Decode a PointCloud FlatBuffers message."""
         point_cloud = PointCloud.PointCloud.GetRootAs(data, 0)
         return point_cloud.DataAsNumpy()
+
+    def _decode_pose_in_frame(self, data: bytes) -> dict[str, Any]:
+        """Decode a PoseInFrame FlatBuffers message."""
+        pose_in_frame = decode_pose_in_frame_dict(data)
+        return pose_in_frame
 
     def _decode(self, schema, message):
         return self._decoders[schema.name](message.data)

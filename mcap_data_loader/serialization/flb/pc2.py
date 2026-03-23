@@ -28,13 +28,10 @@ Note:
 """
 
 from __future__ import annotations
-
-from typing import Any
-
 import flatbuffers
 import numpy as np
+from typing import Any
 from foxglove_schemas_flatbuffer import NumericType, PackedElementField, Time
-
 from mcap_data_loader.schemas.airbot_fbs import PointCloud2 as AirbotPointCloud2
 
 

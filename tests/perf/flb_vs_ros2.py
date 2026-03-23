@@ -5,7 +5,7 @@ from time import perf_counter
 import numpy as np
 
 
-path = Path("data/ros/0.mcap")
+path = Path("data/perf/ros/0.mcap")
 assert path.exists(), f"Data file does not exist: {path}"
 
 with open(path, "rb") as f:
@@ -21,7 +21,7 @@ with open(path, "rb") as f:
     end = perf_counter()
     print(f"Time taken to read {i+1} samples: {end - start:.4f} seconds")
 
-path = Path("data/flb/0.mcap")
+path = Path("data/perf/flb/0.mcap")
 assert path.exists(), f"Data file does not exist: {path}"
 
 with open(path, "rb") as f:
