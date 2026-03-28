@@ -158,6 +158,27 @@ If the output is long, redirect to a file:
 mcap_lerobot_train -h > lerobot_help.txt
 ```
 
+### Data Processing
+
+For pose-topic post-processing, see [docs/poses.md](docs/poses.md).
+
+The script [mcap_data_loader/scripts/data_process/poses.py](mcap_data_loader/scripts/data_process/poses.py) can be used to generate:
+
+- relative pose topics with `_rela` suffix
+- `rotation_6d` topics converted from quaternion pose topics
+
+Example:
+
+```bash
+python mcap_data_loader/scripts/data_process/poses.py \
+  data/example \
+  --keys /follow/arm/pose/position /follow/arm/pose/orientation \
+  --targets rela rotation_6d
+```
+
+
+
+
 ## License
 
 See [LICENSE](LICENSE).
