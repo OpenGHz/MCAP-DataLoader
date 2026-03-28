@@ -201,10 +201,13 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
                 f"No MCAP files found in {self.config.data_root}, please check the path."
             )
         self._episode_files = files
+        self.refresh_config()
+
+    def refresh_config(self):
         self._sample_ds_cfg = self.config.model_dump(
             exclude={"data_root", "media_configs"}
         )
-        self._sample_ds_cfg["rearrange"] = config.rearrange.model_copy(
+        self._sample_ds_cfg["rearrange"] = self.config.rearrange.model_copy(
             update={"dataset": RearrangeType.NONE}
         )
 

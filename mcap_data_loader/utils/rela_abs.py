@@ -4,6 +4,7 @@ from mcap_data_loader.utils.transformations import (
     quaternion_multiply,
     quaternion_inverse,
 )
+from mcap_data_loader.utils.rot6d import Rotation6D
 from functools import wraps
 
 
@@ -334,12 +335,51 @@ class PoseLocalRelaAbs(RelaAbsBasis):
         return to_absolute_pose(self.ref_pos, self.ref_quat, rel_pos, rel_quat)
 
 
+class PoseGlobalRelaAbsTool:
+    @staticmethod
+    def to_rela_position(position, ref_position):
+        return position - ref_position
+
+    @staticmethod
+    def to_rela_orientation(quat, ref_quat):
+        # abs = rela * ref  =>  rela = abs * ref^{-1}
+        return quaternion_multiply(quat, quaternion_inverse(ref_quat))
+
+    @staticmethod
+    def to_rela_rot6d(rot6d, ref_rot6d):
+        R_ref = Rotation6D.rot6d_to_matrix(ref_rot6d)  # [3, 3]
+        R = Rotation6D.rot6d_to_matrix(rot6d)  # [3, 3]
+        # 计算相对旋转矩阵：R_rel = R_ref^{-1} @ R
+        R_rel = R_ref.T @ R  # [3, 3]
+        return Rotation6D.matrix_to_rot6d(R_rel)
+
+    @staticmethod
+    def to_abs_position(rela_position, ref_position):
+        return rela_position + ref_position
+
+    @staticmethod
+    def to_abs_orientation(rela_quat, ref_quat):
+        # abs = rela * ref
+        return quaternion_multiply(rela_quat, ref_quat)
+
+    @staticmethod
+    def to_abs_rot6d(rela_rot6d, ref_rot6d):
+        R_ref = Rotation6D.rot6d_to_matrix(ref_rot6d)  # [3, 3]
+        R_rel = Rotation6D.rot6d_to_matrix(rela_rot6d)  # [3, 3]
+        R = R_ref @ R_rel
+        return Rotation6D.matrix_to_rot6d(R)
+
+
 class PoseGlobalRelaAbs(RelaAbsBasis):
     def to_relative(self, pose):
         pos, quat = pose
-        return pos - self.ref_pos, quaternion_multiply(
-            quat, quaternion_inverse(self.ref_quat)
-        )
+        return self.to_rela_position(pos), self.to_rela_orientation(quat)
+
+    def to_rela_position(self, pos):
+        return PoseGlobalRelaAbsTool.to_rela_position(pos, self.ref_pos)
+
+    def to_rela_orientation(self, quat):
+        return PoseGlobalRelaAbsTool.to_rela_orientation(quat, self.ref_quat)
 
     def to_absolute(self, pose):
         rel_pos, rel_quat = pose
@@ -426,5 +466,16 @@ if __name__ == "__main__":
     assert np.allclose(quat_serial[1], abs_pose_global[1]) or np.allclose(
         quat_serial[1], -abs_pose_global[1]
     ), "PoseGlobalRelaAbs 恢复四元数不准确！"
+
+    quat = np.array([0.7071068, 0, 0, 0.7071068])  # 90度绕X轴旋转
+    quat_ref = np.array([0.9238795, 0, 0.3826834, 0])  # 45度绕X轴旋转
+    rot6d = Rotation6D.quat_to_rot6d(quat)
+    rot6d_ref = Rotation6D.quat_to_rot6d(quat_ref)
+    rot6d_rela = PoseGlobalRelaAbsTool.to_rela_rot6d(rot6d, rot6d_ref)
+    rot6d_abs = PoseGlobalRelaAbsTool.to_abs_rot6d(rot6d_rela, rot6d_ref)
+    assert np.allclose(rot6d, rot6d_abs), "to_rela_rot6d 和 to_abs_rot6d 结果不一致！"
+    assert np.allclose(Rotation6D.rot6d_to_quat(rot6d_abs), quat) or np.allclose(
+        Rotation6D.rot6d_to_quat(rot6d_abs), -quat
+    ), "to_rela_rot6d 和 to_abs_rot6d 恢复四元数不准确！"
 
     print("所有测试通过！")
