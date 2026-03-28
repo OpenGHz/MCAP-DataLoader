@@ -210,3 +210,4 @@ tests/test.py
 outputs/
 configs/
 .vscode/
+AGENTS.md
