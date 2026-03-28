@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Tuple, Union
 from collections.abc import Generator, Iterable, Mapping
 from mcap_data_loader.pipelines.basis import Pipe, T
+from mcap_data_loader.utils.basic import zip
 
 
 class NestedZipConfig(BaseModel, frozen=True):

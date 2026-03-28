@@ -1,8 +1,9 @@
 from pydantic import BaseModel, ConfigDict
 from collections.abc import Mapping, Generator
 from collections import ChainMap
-from mcap_data_loader.pipelines.basis import Pipe, T
 from typing import Literal
+from mcap_data_loader.pipelines.basis import Pipe, T
+from mcap_data_loader.utils.basic import zip
 
 
 Methods = Literal["auto", "ChainMap", "+", "|", "none"]

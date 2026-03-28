@@ -77,8 +77,6 @@ class McapLeRobotDataset(IterableDataset):
             IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
             for img_key in config.images
         }
-        rela_pose = True
-        rot6d = False
         # NOTE: position and orientation keys must be in pairs
         positions = []
         orientations = []
@@ -87,41 +85,6 @@ class McapLeRobotDataset(IterableDataset):
                 positions.append(key)
             elif key.endswith("pose/orientation"):
                 orientations.append(key)
-        rela_pose_config = (
-            {
-                "_target_": "mcap_data_loader.callers.Map",
-                "callable": {
-                    "_target_": "mcap_data_loader.callers.rela_pose.RelaPose",
-                    "positions": positions,
-                    "orientations": orientations,
-                    "reference": {
-                        "_target_": "mcap_data_loader.datasets.mcap_lerobot.McapLeRobotDataset.is_reference",
-                        "_partial_": True,
-                    },
-                    "rot6d": rot6d,
-                },
-            }
-            if rela_pose
-            else None
-        )
-        rot6d_config = (
-            {
-                "_target_": "mcap_data_loader.callers.Map",
-                "callable": {
-                    "_target_": "mcap_data_loader.basis.DataStamped.map_dict",
-                    "_partial_": True,
-                    "_args_": [
-                        {
-                            "_target_": "mcap_data_loader.utils.rot6d.Rotation6D.quat_to_rot6d",
-                            "_partial_": True,
-                        }
-                    ],
-                    "keys": orientations,
-                },
-            }
-            if rot6d and not rela_pose
-            else None
-        )
         pipeline_dict = {
             0: {
                 "_target_": "mcap_data_loader.pipelines.NestedZip",
@@ -157,7 +120,6 @@ class McapLeRobotDataset(IterableDataset):
                                 "keys": config.images,
                             },
                         },
-                        1.5: rela_pose_config or rot6d_config,
                         2: {
                             "_target_": "mcap_data_loader.pipelines.Horizon",
                             **config.horizon.model_dump(),
