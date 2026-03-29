@@ -447,7 +447,7 @@ class McapFlatBuffersReader(McapReaderBasis):
         compressed_img = CompressedImage.CompressedImage.GetRootAs(data, 0)
         img_format = compressed_img.Format().decode("utf-8")
         assert img_format == "jpeg", f"Expected JPEG format, but got {img_format}"
-        return self._jpeg.decode(compressed_img.DataAsNumpy())
+        return self.jpeg.decode(compressed_img.DataAsNumpy())
 
     def _decode_point_cloud(self, data: bytes) -> np.ndarray:
         """Decode a PointCloud FlatBuffers message."""
