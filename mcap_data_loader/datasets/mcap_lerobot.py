@@ -13,6 +13,7 @@ from mcap_data_loader.utils.basic import force_set_attr
 from mcap_data_loader.utils.stat import concatenate_statistics, Statistics
 from mcap_data_loader.pipelines import Pipeline, PipelineConfig, HorizonConfig
 from mcap_data_loader.utils.av_coder import DecodeConfig
+from ast import literal_eval
 
 
 class McapLeRobotDatasetConfig(BaseModel, frozen=True):
@@ -20,8 +21,8 @@ class McapLeRobotDatasetConfig(BaseModel, frozen=True):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    data_root: Union[str, Dict[str, List[str]]]
-    """The root directory of the dataset."""
+    data_root: Union[str, Dict[str, List[str]], List[str]]
+    """The root directories of the dataset."""
     states: List[str] = []
     """The list of state keys."""
     images: List[str] = []
@@ -42,6 +43,11 @@ class McapLeRobotDatasetConfig(BaseModel, frozen=True):
     def model_post_init(self, context):
         if isinstance(self.data_root, str):
             self.data_root = {self.data_root: self.states + self.images + self.actions}
+        elif isinstance(self.data_root, list):
+            self.data_root = {
+                root: self.states + self.images + self.actions
+                for root in self.data_root
+            }
 
 
 class McapLeRobotDatasetMeta(BaseModel, frozen=True):
@@ -77,14 +83,6 @@ class McapLeRobotDataset(IterableDataset):
             IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
             for img_key in config.images
         }
-        # NOTE: position and orientation keys must be in pairs
-        positions = []
-        orientations = []
-        for key in config.states + config.actions:
-            if key.endswith("pose/position"):
-                positions.append(key)
-            elif key.endswith("pose/orientation"):
-                orientations.append(key)
         pipeline_dict = {
             0: {
                 "_target_": "mcap_data_loader.pipelines.NestedZip",
@@ -154,10 +152,12 @@ class McapLeRobotDataset(IterableDataset):
             },
             2: {"_target_": "mcap_data_loader.callers.nodes.MultiNodeWeightedSampler"},
         }
+
         self._datasets = McapMultiEpisodeDatasets(
             McapMultiEpisodeDatasetsConfig(
                 common={
                     # "with_file": True,
+                    "extra_keys": True,
                     "media_configs": [DecodeConfig(frame_format="rgb24")],
                 },
                 configs={
@@ -247,12 +247,6 @@ class McapLeRobotDataset(IterableDataset):
         # NOTE: the episode number must all be same so we just take the first one
         return len(self._datasets._episode_datasets[0])
 
-    @staticmethod
-    def is_reference(data):
-        # print(f"step: {data['step']['data']}")
-        # print(f"file: {data['file']['data']}")
-        return data["step"]["data"] == 0
-
 
 def make_dataset(
     cfg, config_root: str = "configs", config_name: str = "config.yaml"
@@ -280,7 +274,14 @@ def make_dataset(
     print(f"Loading config from {settings.cfg_path}")
     dict_config = hydra_instance_from_config_path(settings.cfg_path)
     # cfg.dataset.episodes: list[int] | None
-    data_path = Path(cfg.dataset.root) / cfg.dataset.repo_id
+    try:
+        data_dirs = literal_eval(cfg.dataset.repo_id)
+    except SyntaxError:
+        data_dirs = [cfg.dataset.repo_id]
+    if isinstance(data_dirs, str):
+        data_dirs = [data_dirs]
+    # print(f"Data directories: {data_dirs}")
+    data_paths = [str(Path(cfg.dataset.root) / data_dir) for data_dir in data_dirs]
     # print(f"Loading dataset from {data_path}")
     action_delta_indices = cfg.policy.action_delta_indices
     action_num = len(action_delta_indices)
@@ -288,7 +289,8 @@ def make_dataset(
         raise NotImplementedError(
             f"The action_num should be equal to the max index in action_delta_indices + 1, but got {action_num} and {action_delta_indices}"
         )
-    base_dict = {"data_root": str(data_path)}
+    # print(data_paths)
+    base_dict = {"data_root": data_paths}
     if "mcap" in dict_config:
         # print("use mcap field")
         dict_config = dict_config["mcap"]

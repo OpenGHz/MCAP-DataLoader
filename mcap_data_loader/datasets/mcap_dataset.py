@@ -53,6 +53,8 @@ class McapDatasetConfig(IterableDatasetConfig):
     """Whether to include file information in the samples."""
     media_configs: List = []
     """Media configurations for reading media data, e.g., videos."""
+    extra_keys: bool = False
+    """What to do when the requested keys are not found in the MCAP file. If False, raise an error. If True, ignore the missing keys and return the existing keys. """
 
     @property
     def is_empty(self) -> bool:
@@ -107,16 +109,22 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         """
         self._ensure_reader()
         config = self.config
-        samples_iter = self._reader.iter_samples(
-            config.keys,
-            config.topics,
-            config.attachments,
-            config.rearrange.episode is RearrangeType.REVERSE,
-            config.strict,
-            config.with_step,
-            config.with_file,
-            config.media_configs,
+        kwargs = config.model_dump(
+            exclude={
+                "data_root",
+                "rearrange",
+                "media_configs",
+                "slices",
+                "with_timestamp",
+            }
         )
+        kwargs.update(
+            {
+                "reverse": config.rearrange.episode is RearrangeType.REVERSE,
+                "configs": config.media_configs,
+            }
+        )
+        samples_iter = self._reader.iter_samples(**kwargs)
         if self.config.with_timestamp:
             yield from samples_iter
         else:

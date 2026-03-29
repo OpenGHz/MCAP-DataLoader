@@ -147,6 +147,7 @@ class McapReaderBasis(ABC):
         strict: bool = True,
         with_step: bool = False,
         with_file: bool = False,
+        extra_keys: bool = False,
         configs: Optional[list] = None,
     ) -> Generator[DictDataStamped[np.ndarray]]:
         """Iterate over messages and attachments in the MCAP file.
@@ -181,7 +182,7 @@ class McapReaderBasis(ABC):
             if key in all_attachments:
                 attachments.add(key)
                 flag += 1
-            if flag == 0:
+            if flag == 0 and not extra_keys:
                 raise ValueError(
                     f"Key '{key}' not found in topics or attachments. Available topics: {all_topics}, attachments: {all_attachments}."
                 )
@@ -189,6 +190,19 @@ class McapReaderBasis(ABC):
                 raise ValueError(
                     f"Key '{key}' found in both topics and attachments, please specify only one."
                 )
+
+        if extra_keys:
+            removed = set()
+            for topic in topics.copy():
+                if topic not in all_topics:
+                    topics.remove(topic)
+                    removed.add(topic)
+            for attachment in attachments.copy():
+                if attachment not in all_attachments:
+                    attachments.remove(attachment)
+                    removed.add(attachment)
+            if removed:
+                self.get_logger().info(f"Keys {removed} not found and will be ignored.")
 
         def empty_iter():
             for _ in range(len(self)):

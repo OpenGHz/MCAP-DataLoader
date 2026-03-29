@@ -44,12 +44,12 @@ parser.add_argument(
     help="Directory to save the processed MCAP files.",
 )
 args = parser.parse_args()
-path = args.path
+path = Path(args.path)
 keys = args.keys
 targets = set(args.targets)
 out_dir = args.out_dir
 
-out_dir = Path(path).parent / "processed" if out_dir is None else Path(out_dir)
+out_dir = path.parent / f"{path.name}_processed" if out_dir is None else Path(out_dir)
 out_dir.mkdir(parents=True, exist_ok=True)
 
 dataset = McapFlatBuffersEpisodeDataset(
