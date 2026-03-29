@@ -5,6 +5,8 @@ from typing import List, Union, Dict
 from functools import cached_property
 from collections.abc import Mapping
 import random
+from queue import Queue, Empty, Full
+from threading import Thread, Event
 from mcap_data_loader.datasets.mcap_dataset import (
     McapMultiEpisodeDatasets,
     McapMultiEpisodeDatasetsConfig,
@@ -36,6 +38,8 @@ class McapLeRobotDatasetConfig(BaseModel, frozen=True):
     """Whether to shuffle the merged episode order for each new pass."""
     shuffle_seed: int = 0
     """Base random seed for episode-level shuffling."""
+    prefetch_items: int = 8
+    """Number of items to prefetch on a background thread. Set to 0 to disable."""
 
     @field_validator("horizon", mode="before")
     def validate_horizon(cls, v):
@@ -79,6 +83,7 @@ ItemType = Dict[str, Tensor]
 STATE_KEY = "observation.state"
 ACTION_KEY = "action"
 IMAGE_KEY_PREFIX = "observation.images"
+_QUEUE_SENTINEL = object()
 
 
 class McapLeRobotDataset(IterableDataset):
@@ -236,8 +241,54 @@ class McapLeRobotDataset(IterableDataset):
         for episode_iter in episode_iters:
             yield from episode_iter
 
-    def __iter__(self):
+    def _iter_prefetched(self, item_iter):
+        queue = Queue(maxsize=max(self.config.prefetch_items, 1))
+        stop_event = Event()
+
+        def producer():
+            try:
+                for item in item_iter:
+                    if stop_event.is_set():
+                        break
+                    while not stop_event.is_set():
+                        try:
+                            queue.put(item, timeout=0.1)
+                            break
+                        except Full:
+                            continue
+                if not stop_event.is_set():
+                    queue.put(_QUEUE_SENTINEL)
+            except BaseException as exc:  # pragma: no cover - forwarded to consumer
+                if not stop_event.is_set():
+                    queue.put(exc)
+
+        thread = Thread(target=producer, name="mcap-prefetch", daemon=True)
+        thread.start()
+        try:
+            while True:
+                try:
+                    value = queue.get(timeout=0.1)
+                except Empty:
+                    if stop_event.is_set() and not thread.is_alive():
+                        break
+                    continue
+                if value is _QUEUE_SENTINEL:
+                    break
+                if isinstance(value, BaseException):
+                    raise value
+                yield value
+        finally:
+            stop_event.set()
+            thread.join(timeout=1.0)
+
+    def _build_item_iter(self):
         item_iter = self._iter_items(self._datasets)
+        if self.config.prefetch_items > 0:
+            item_iter = self._iter_prefetched(item_iter)
+        return item_iter
+
+    def __iter__(self):
+        item_iter = self._build_item_iter()
         self._epoch += 1
         for item in item_iter:
             item.update(self._add_items)
@@ -245,7 +296,7 @@ class McapLeRobotDataset(IterableDataset):
 
     def __getitem__(self, index):
         if index == 0 or self._ds_iter is None:
-            self._ds_iter = self._iter_items(self._datasets)
+            self._ds_iter = self._build_item_iter()
             self._epoch += 1
         item = next(self._ds_iter)
         item.update(self._add_items)
