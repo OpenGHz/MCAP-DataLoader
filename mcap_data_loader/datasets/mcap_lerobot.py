@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import List, Union, Dict
 from functools import cached_property
 from collections.abc import Mapping
+import random
 from mcap_data_loader.datasets.mcap_dataset import (
     McapMultiEpisodeDatasets,
     McapMultiEpisodeDatasetsConfig,
@@ -31,6 +32,10 @@ class McapLeRobotDatasetConfig(BaseModel, frozen=True):
     """The list of action keys."""
     horizon: HorizonConfig = {}
     """The horizon configuration."""
+    shuffle_episodes: bool = True
+    """Whether to shuffle the merged episode order for each new pass."""
+    shuffle_seed: int = 0
+    """Base random seed for episode-level shuffling."""
 
     @field_validator("horizon", mode="before")
     def validate_horizon(cls, v):
@@ -150,7 +155,8 @@ class McapLeRobotDataset(IterableDataset):
 
         self._datasets = self._make_datasets()
         self._ds_iter = None
-        first_item = next(self._iter_items(self._make_datasets()))
+        self._epoch = 0
+        first_item = next(self._iter_items(self._make_datasets(), shuffle=False))
         # print(f"First item keys: {first_item.keys()}")
         self._add_items = {
             "action_is_pad": asarray([False] * first_item[ACTION_KEY].shape[0]),
@@ -215,22 +221,32 @@ class McapLeRobotDataset(IterableDataset):
         pipeline = Pipeline[ItemType](PipelineConfig(pipeline=pipeline_config))
         return pipeline(datasets)
 
-    def _iter_items(self, datasets: McapMultiEpisodeDatasets):
+    def _iter_items(
+        self, datasets: McapMultiEpisodeDatasets, shuffle: bool | None = None
+    ):
         # Iterate merged episodes sequentially so that only one episode stream is
         # active at a time. The old MultiNodeWeightedSampler interleaved hundreds
         # of episode iterators, which kept many image decoders/buffers alive and
         # made memory grow with the number of partially-consumed episodes.
-        for episode_iter in self._make_episode_pipeline(datasets):
+        episode_iters = list(self._make_episode_pipeline(datasets))
+        if shuffle is None:
+            shuffle = self.config.shuffle_episodes
+        if shuffle and len(episode_iters) > 1:
+            random.Random(self.config.shuffle_seed + self._epoch).shuffle(episode_iters)
+        for episode_iter in episode_iters:
             yield from episode_iter
 
     def __iter__(self):
-        for item in self._iter_items(self._datasets):
+        item_iter = self._iter_items(self._datasets)
+        self._epoch += 1
+        for item in item_iter:
             item.update(self._add_items)
             yield item
 
     def __getitem__(self, index):
         if index == 0 or self._ds_iter is None:
             self._ds_iter = self._iter_items(self._datasets)
+            self._epoch += 1
         item = next(self._ds_iter)
         item.update(self._add_items)
         return item
