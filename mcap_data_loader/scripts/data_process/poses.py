@@ -93,7 +93,7 @@ for index, episode in enumerate(dataset):
     pprint(f"{episode.config.data_root}: {len(episode)} samples")
     save_path = mcap_sampler.compose_path(out_dir, int(episode.config.data_root.stem))
     init = episode[0]
-    print(f"Initial keys: {list(init.keys())}")
+    print(f"[Episode {index}] Initial keys: {list(init.keys())}")
 
     left_data = defaultdict(list)
     for sample in episode:
