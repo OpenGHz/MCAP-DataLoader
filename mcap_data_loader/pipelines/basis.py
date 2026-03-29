@@ -125,7 +125,7 @@ class Pipeline(CallerBasis[NonIteratorIterable[T]]):
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config
         self._chained = _chain_pipes(config.pipeline)
-        self.get_logger().info(f"Chained pipeline:\n{pformat(self._chained)}")
+        self.get_logger().debug(f"Chained pipeline:\n{pformat(self._chained)}")
 
     def __call__(self, iterable: NonIteratorIterable) -> NonIteratorIterable[T]:
         """Apply the pipeline to the given iterable."""

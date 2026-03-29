@@ -7,6 +7,10 @@ from collections.abc import Mapping
 import random
 from queue import Queue, Empty, Full
 from threading import Thread, Event
+from datetime import datetime
+from pathlib import Path
+import json
+import os
 from mcap_data_loader.datasets.mcap_dataset import (
     McapMultiEpisodeDatasets,
     McapMultiEpisodeDatasetsConfig,
@@ -34,11 +38,11 @@ class McapLeRobotDatasetConfig(BaseModel, frozen=True):
     """The list of action keys."""
     horizon: HorizonConfig = {}
     """The horizon configuration."""
-    shuffle_episodes: bool = True
+    shuffle_episodes: bool = False
     """Whether to shuffle the merged episode order for each new pass."""
     shuffle_seed: int = 0
     """Base random seed for episode-level shuffling."""
-    prefetch_items: int = 8
+    prefetch_items: int = 0
     """Number of items to prefetch on a background thread. Set to 0 to disable."""
 
     @field_validator("horizon", mode="before")
@@ -86,6 +90,67 @@ IMAGE_KEY_PREFIX = "observation.images"
 _QUEUE_SENTINEL = object()
 
 
+def _read_proc_status_value_mb(field_name: str) -> float | None:
+    try:
+        with open("/proc/self/status", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith(field_name):
+                    value_kb = int(line.split()[1])
+                    return value_kb / 1024.0
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
+        return None
+    return None
+
+
+def _get_memory_snapshot() -> dict[str, float | int | str | None]:
+    snapshot = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "pid": os.getpid(),
+        "rss_mb": _read_proc_status_value_mb("VmRSS:"),
+        "hwm_mb": _read_proc_status_value_mb("VmHWM:"),
+    }
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            snapshot["cuda_allocated_mb"] = (
+                torch.cuda.memory_allocated() / 1024.0 / 1024.0
+            )
+            snapshot["cuda_reserved_mb"] = (
+                torch.cuda.memory_reserved() / 1024.0 / 1024.0
+            )
+            snapshot["cuda_max_allocated_mb"] = (
+                torch.cuda.max_memory_allocated() / 1024.0 / 1024.0
+            )
+            snapshot["cuda_max_reserved_mb"] = (
+                torch.cuda.max_memory_reserved() / 1024.0 / 1024.0
+            )
+    except Exception:
+        pass
+    return snapshot
+
+
+def _start_memory_logger(
+    log_dir: Path, interval_s: int = 30
+) -> tuple[Path, Event, Thread]:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"memory_{datetime.now():%Y%m%d_%H%M%S}.jsonl"
+    stop_event = Event()
+
+    def writer():
+        with open(log_path, "a", encoding="utf-8") as f:
+            while not stop_event.is_set():
+                f.write(json.dumps(_get_memory_snapshot(), ensure_ascii=True) + "\n")
+                f.flush()
+                stop_event.wait(interval_s)
+            f.write(json.dumps(_get_memory_snapshot(), ensure_ascii=True) + "\n")
+            f.flush()
+
+    thread = Thread(target=writer, name="mcap-memory-logger", daemon=True)
+    thread.start()
+    return log_path, stop_event, thread
+
+
 class McapLeRobotDataset(IterableDataset):
     def __init__(self, config: McapLeRobotDatasetConfig):
         self.config = config
@@ -93,67 +158,48 @@ class McapLeRobotDataset(IterableDataset):
             IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
             for img_key in config.images
         }
-        self._episode_pipeline_dict = {
+        self._sample_pipeline_dict = {
             0: {
-                "_target_": "mcap_data_loader.pipelines.NestedZip",
-                "depth": 1,
+                "_target_": "mcap_data_loader.pipelines.Merge",
+                "replace": True,
             },
             1: {
                 "_target_": "mcap_data_loader.callers.Map",
                 "callable": {
-                    "_target_": "mcap_data_loader.pipelines.Pipeline",
-                    "pipeline": {
-                        0: {
-                            "_target_": "mcap_data_loader.pipelines.Merge",
-                            "replace": True,
-                        },
-                        1: {
-                            "_target_": "mcap_data_loader.callers.Map",
-                            "callable": {
-                                # "_target_": "mcap_data_loader.callers.chain.CallerChain",
-                                # "_target_": "mcap_data_loader.utils.dict.valmap_include",
-                                "_target_": "mcap_data_loader.basis.DataStamped.map_dict",
-                                "_partial_": True,
-                                "_args_": [
-                                    {
-                                        # "_target_": "einops.rearrange",
-                                        # "pattern": "h w c -> c h w",
-                                        "_target_": "mcap_data_loader.utils.array_like.rearrange_and_shrink_np",
-                                        "transpose": (2, 0, 1),
-                                        "factor": 255.0,
-                                        "dtype": "float32",
-                                        "_partial_": True,
-                                    }
-                                ],
-                                "keys": config.images,
-                            },
-                        },
-                        2: {
-                            "_target_": "mcap_data_loader.pipelines.Horizon",
-                            **config.horizon.model_dump(),
-                        },
-                        3: {
-                            "_target_": "mcap_data_loader.callers.Map",
-                            "callable": {
-                                "_target_": "mcap_data_loader.callers.stack.HorizonStacker",
-                                "now": (
-                                    {
-                                        STATE_KEY: config.states,
-                                        # "observation.effort": "/follow/arm/joint_state/effort",
-                                    }
-                                    # TODO: empty keys may should not be considered as stackable
-                                    if config.states
-                                    else {}
-                                )
-                                | self._camera_mappings,
-                                "future": {ACTION_KEY: config.actions},
-                                "backend_out": "torch",
-                                "dtype": "float32",
-                                # must be cpu: RuntimeError: Cannot re-initialize CUDA in forked subprocess. To use CUDA with multiprocessing, you must use the 'spawn' start method
-                                "device": "cpu",
-                            },
-                        },
-                    },
+                    "_target_": "mcap_data_loader.basis.DataStamped.map_dict",
+                    "_partial_": True,
+                    "_args_": [
+                        {
+                            "_target_": "mcap_data_loader.utils.array_like.rearrange_and_shrink_np",
+                            "transpose": (2, 0, 1),
+                            "factor": 255.0,
+                            "dtype": "float16",
+                            "_partial_": True,
+                        }
+                    ],
+                    "keys": config.images,
+                },
+            },
+            2: {
+                "_target_": "mcap_data_loader.pipelines.Horizon",
+                **config.horizon.model_dump(),
+            },
+            3: {
+                "_target_": "mcap_data_loader.callers.Map",
+                "callable": {
+                    "_target_": "mcap_data_loader.callers.stack.HorizonStacker",
+                    "now": (
+                        {
+                            STATE_KEY: config.states,
+                        }
+                        if config.states
+                        else {}
+                    )
+                    | self._camera_mappings,
+                    "future": {ACTION_KEY: config.actions},
+                    "backend_out": "torch",
+                    "dtype": "float32",
+                    "device": "cpu",
                 },
             },
         }
@@ -221,25 +267,28 @@ class McapLeRobotDataset(IterableDataset):
             )
         )
 
-    def _make_episode_pipeline(self, datasets: McapMultiEpisodeDatasets):
-        pipeline_config = hydra_instance_from_dict(self._episode_pipeline_dict)
+    def _make_sample_pipeline(self, sample_datasets):
+        pipeline_config = hydra_instance_from_dict(self._sample_pipeline_dict)
         pipeline = Pipeline[ItemType](PipelineConfig(pipeline=pipeline_config))
-        return pipeline(datasets)
+        return pipeline(sample_datasets)
 
     def _iter_items(
         self, datasets: McapMultiEpisodeDatasets, shuffle: bool | None = None
     ):
-        # Iterate merged episodes sequentially so that only one episode stream is
-        # active at a time. The old MultiNodeWeightedSampler interleaved hundreds
-        # of episode iterators, which kept many image decoders/buffers alive and
-        # made memory grow with the number of partially-consumed episodes.
-        episode_iters = list(self._make_episode_pipeline(datasets))
+        # Build and consume one merged episode stream at a time so image buffers
+        # from previous episodes can be released promptly.
+        episode_num = len(datasets._episode_datasets[0])
+        episode_indices = list(range(episode_num))
         if shuffle is None:
             shuffle = self.config.shuffle_episodes
-        if shuffle and len(episode_iters) > 1:
-            random.Random(self.config.shuffle_seed + self._epoch).shuffle(episode_iters)
-        for episode_iter in episode_iters:
-            yield from episode_iter
+        if shuffle and episode_num > 1:
+            random.Random(self.config.shuffle_seed + self._epoch).shuffle(episode_indices)
+        for episode_index in episode_indices:
+            sample_datasets = [
+                episode_dataset[episode_index]
+                for episode_dataset in datasets._episode_datasets
+            ]
+            yield from self._make_sample_pipeline(sample_datasets)
 
     def _iter_prefetched(self, item_iter):
         queue = Queue(maxsize=max(self.config.prefetch_items, 1))
@@ -386,6 +435,7 @@ def train():
     from mcap_data_loader.utils.cli import extract_and_remove_args, extend_args
     from functools import partial
     from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
+    import logging
     import sys
 
     argv_set = set(sys.argv)
@@ -404,7 +454,15 @@ def train():
             # the cli args in lerobot_train will override the config file args
             extend_args(sys.argv, get_args_list(args))
     # print(sys.argv), exit(0)
-    return lerobot_train.main()
+    log_path, stop_event, thread = _start_memory_logger(
+        Path("outputs") / "memory_logs"
+    )
+    logging.warning("Periodic memory logs will be written to %s", log_path)
+    try:
+        return lerobot_train.main()
+    finally:
+        stop_event.set()
+        thread.join(timeout=1.0)
 
 
 def run_with_yaml():
