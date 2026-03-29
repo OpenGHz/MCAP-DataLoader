@@ -127,6 +127,23 @@ mcap:
 
 The lists of topics specified by `states` and `actions` will be loaded and concatenated to form the `observation.state` and `action` required by lerobot, serving as low-dimensional state and action inputs in the training data. Meanwhile, `images` will be appended to the `observation.images` field, using the first part of the name (e.g., `env_camera` in the example above) as a suffix for image input, such as `observation.images.env_camera`, for use during training.
 
+#### Organizing processed data
+
+For processed data, MCAP is better suited to creating a new file that contains only the processed topics, rather than appending processed data back into the original file. For an example of generating processed topics, see [Data Processing](#data-processing).
+
+During training, you can specify both the original dataset directory and the processed dataset directory at the same time. MCAP Data Loader will merge them automatically at runtime, so they can be consumed as if they were read from a single dataset.
+
+A typical configuration looks like this:
+
+```yaml
+dataset:
+  root: data
+  repo_id:
+    - mujoco
+    - mujoco_processed
+  streaming: true
+```
+
 Notes:
 - `dataset.root` and `dataset.repo_id` are reused to specify the MCAP dataset root directory and dataset name.
 - Command-line overrides compatible with LeRobot are supported and take the highest priority (they override values in the config file). For example:
