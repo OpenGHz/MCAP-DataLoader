@@ -79,11 +79,11 @@ IMAGE_KEY_PREFIX = "observation.images"
 class McapLeRobotDataset(IterableDataset):
     def __init__(self, config: McapLeRobotDatasetConfig):
         self.config = config
-        camera_mappings = {
+        self._camera_mappings = {
             IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
             for img_key in config.images
         }
-        pipeline_dict = {
+        self._episode_pipeline_dict = {
             0: {
                 "_target_": "mcap_data_loader.pipelines.NestedZip",
                 "depth": 1,
@@ -135,7 +135,7 @@ class McapLeRobotDataset(IterableDataset):
                                     if config.states
                                     else {}
                                 )
-                                | camera_mappings,
+                                | self._camera_mappings,
                                 "future": {ACTION_KEY: config.actions},
                                 "backend_out": "torch",
                                 "dtype": "float32",
@@ -143,34 +143,14 @@ class McapLeRobotDataset(IterableDataset):
                                 "device": "cpu",
                             },
                         },
-                        4: {
-                            "_target_": "torchdata.nodes.IterableWrapper",
-                            "_partial_": True,
-                        },
                     },
                 },
             },
-            2: {"_target_": "mcap_data_loader.callers.nodes.MultiNodeWeightedSampler"},
         }
 
-        self._datasets = McapMultiEpisodeDatasets(
-            McapMultiEpisodeDatasetsConfig(
-                common={
-                    # "with_file": True,
-                    "extra_keys": True,
-                    "media_configs": [DecodeConfig(frame_format="rgb24")],
-                },
-                configs={
-                    data_root: {"data_root": data_root, "keys": keys}
-                    for data_root, keys in config.data_root.items()
-                },
-            )
-        )
-        pipeline_config = hydra_instance_from_dict(pipeline_dict)
-        pipeline = Pipeline[ItemType](PipelineConfig(pipeline=pipeline_config))
-        self._pipeline = pipeline(self._datasets)
+        self._datasets = self._make_datasets()
         self._ds_iter = None
-        first_item = next(iter(self._pipeline))
+        first_item = next(self._iter_items(self._make_datasets()))
         # print(f"First item keys: {first_item.keys()}")
         self._add_items = {
             "action_is_pad": asarray([False] * first_item[ACTION_KEY].shape[0]),
@@ -208,26 +188,49 @@ class McapLeRobotDataset(IterableDataset):
             stat["count"] = stat["n"]
             stats[concat_key] = stat
         # add empty img stats to support modify stats outside
-        for img_key in camera_mappings:
+        for img_key in self._camera_mappings:
             # NOTE: assume the data length is the same
             stats[img_key] = Statistics.empty((3, 1, 1)) | {"count": stat["n"]}
         self._meta = McapLeRobotDatasetMeta(
-            features=features, stats=stats, camera_keys=camera_mappings.keys()
+            features=features, stats=stats, camera_keys=self._camera_mappings.keys()
         )
 
+    def _make_datasets(self) -> McapMultiEpisodeDatasets:
+        return McapMultiEpisodeDatasets(
+            McapMultiEpisodeDatasetsConfig(
+                common={
+                    # "with_file": True,
+                    "extra_keys": True,
+                    "media_configs": [DecodeConfig(frame_format="rgb24")],
+                },
+                configs={
+                    data_root: {"data_root": data_root, "keys": keys}
+                    for data_root, keys in self.config.data_root.items()
+                },
+            )
+        )
+
+    def _make_episode_pipeline(self, datasets: McapMultiEpisodeDatasets):
+        pipeline_config = hydra_instance_from_dict(self._episode_pipeline_dict)
+        pipeline = Pipeline[ItemType](PipelineConfig(pipeline=pipeline_config))
+        return pipeline(datasets)
+
+    def _iter_items(self, datasets: McapMultiEpisodeDatasets):
+        # Iterate merged episodes sequentially so that only one episode stream is
+        # active at a time. The old MultiNodeWeightedSampler interleaved hundreds
+        # of episode iterators, which kept many image decoders/buffers alive and
+        # made memory grow with the number of partially-consumed episodes.
+        for episode_iter in self._make_episode_pipeline(datasets):
+            yield from episode_iter
+
     def __iter__(self):
-        # return iter(self._pipeline)
-        # TODO: dynamically adjust the `action_is_pad` shape if not fill_with_last
-        self._pipeline.reset()
-        # print("Pipeline reset")
-        for item in self._pipeline:
+        for item in self._iter_items(self._datasets):
             item.update(self._add_items)
             yield item
 
     def __getitem__(self, index):
-        # print(f"Getting item {index}")
-        if index == 0:
-            self._ds_iter = iter(self._pipeline)
+        if index == 0 or self._ds_iter is None:
+            self._ds_iter = self._iter_items(self._datasets)
         item = next(self._ds_iter)
         item.update(self._add_items)
         return item
