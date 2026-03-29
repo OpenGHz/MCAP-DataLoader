@@ -1,9 +1,12 @@
 from torch.utils.data import IterableDataset
 from torch import Tensor, asarray
+import torch
+import numpy as np
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Iterable
 from functools import cached_property
 from collections.abc import Mapping
+from collections import deque
 import random
 from queue import Queue, Empty, Full
 from threading import Thread, Event
@@ -14,11 +17,11 @@ import os
 from mcap_data_loader.datasets.mcap_dataset import (
     McapMultiEpisodeDatasets,
     McapMultiEpisodeDatasetsConfig,
+    SampleStamped,
 )
-from mcap_data_loader.utils.hydra_utils import hydra_instance_from_dict
 from mcap_data_loader.utils.basic import force_set_attr
 from mcap_data_loader.utils.stat import concatenate_statistics, Statistics
-from mcap_data_loader.pipelines import Pipeline, PipelineConfig, HorizonConfig
+from mcap_data_loader.pipelines import HorizonConfig
 from mcap_data_loader.utils.av_coder import DecodeConfig
 from ast import literal_eval
 
@@ -154,55 +157,17 @@ def _start_memory_logger(
 class McapLeRobotDataset(IterableDataset):
     def __init__(self, config: McapLeRobotDatasetConfig):
         self.config = config
+        self._state_keys = tuple(config.states)
+        self._image_keys = tuple(config.images)
+        self._action_keys = tuple(config.actions)
+        self._horizon = config.horizon
         self._camera_mappings = {
             IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
             for img_key in config.images
         }
-        self._sample_pipeline_dict = {
-            0: {
-                "_target_": "mcap_data_loader.pipelines.Merge",
-                "replace": True,
-            },
-            1: {
-                "_target_": "mcap_data_loader.callers.Map",
-                "callable": {
-                    "_target_": "mcap_data_loader.basis.DataStamped.map_dict",
-                    "_partial_": True,
-                    "_args_": [
-                        {
-                            "_target_": "mcap_data_loader.utils.array_like.rearrange_and_shrink_np",
-                            "transpose": (2, 0, 1),
-                            "factor": 255.0,
-                            "dtype": "float16",
-                            "_partial_": True,
-                        }
-                    ],
-                    "keys": config.images,
-                },
-            },
-            2: {
-                "_target_": "mcap_data_loader.pipelines.Horizon",
-                **config.horizon.model_dump(),
-            },
-            3: {
-                "_target_": "mcap_data_loader.callers.Map",
-                "callable": {
-                    "_target_": "mcap_data_loader.callers.stack.HorizonStacker",
-                    "now": (
-                        {
-                            STATE_KEY: config.states,
-                        }
-                        if config.states
-                        else {}
-                    )
-                    | self._camera_mappings,
-                    "future": {ACTION_KEY: config.actions},
-                    "backend_out": "torch",
-                    "dtype": "float32",
-                    "device": "cpu",
-                },
-            },
-        }
+        self._timestamp_key = (
+            self._state_keys + self._image_keys + self._action_keys
+        )[0]
 
         self._datasets = self._make_datasets()
         self._ds_iter = None
@@ -267,10 +232,134 @@ class McapLeRobotDataset(IterableDataset):
             )
         )
 
-    def _make_sample_pipeline(self, sample_datasets):
-        pipeline_config = hydra_instance_from_dict(self._sample_pipeline_dict)
-        pipeline = Pipeline[ItemType](PipelineConfig(pipeline=pipeline_config))
-        return pipeline(sample_datasets)
+    def _merge_episode_samples(
+        self, sample_datasets: list
+    ) -> Iterable[SampleStamped]:
+        streams = [dataset.read_stream() for dataset in sample_datasets]
+        for samples in zip(*streams):
+            merged_sample = {}
+            for sample in samples:
+                merged_sample.update(sample)
+            yield merged_sample
+
+    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+        chw = np.transpose(image, (2, 0, 1)).astype(np.float32, copy=False)
+        chw /= 255.0
+        return chw
+
+    def _preprocess_sample(self, sample: SampleStamped) -> SampleStamped:
+        if not self._image_keys:
+            return sample
+        processed = sample.copy()
+        for key in self._image_keys:
+            stamped = sample[key]
+            processed[key] = {
+                "t": stamped["t"],
+                "data": self._preprocess_image(stamped["data"]),
+            }
+        return processed
+
+    def _iter_episode_horizon_items(
+        self, sample_datasets: list
+    ) -> Iterable[tuple[tuple[SampleStamped, ...], tuple[SampleStamped, ...]]]:
+        sample_iter = self._merge_episode_samples(sample_datasets)
+        sample_iter = map(self._preprocess_sample, sample_iter)
+        iterator = iter(sample_iter)
+        try:
+            first_sample = next(iterator)
+        except StopIteration:
+            return
+
+        past_num = self._horizon.past_num
+        gap = self._horizon.gap
+        future_num = self._horizon.future_num
+        window_size = past_num + gap + future_num + 1
+        window = deque([first_sample] * past_num, maxlen=window_size)
+        window.append(first_sample)
+
+        initial_future_real = 0
+        last_real = first_sample
+        for _ in range(gap + future_num):
+            try:
+                next_sample = next(iterator)
+                initial_future_real += 1
+                last_real = next_sample
+            except StopIteration:
+                if self._horizon.fill_with_last:
+                    next_sample = last_real
+                else:
+                    next_sample = self._horizon.fillvalue
+            window.append(next_sample)
+
+        def build_horizon_item():
+            window_tuple = tuple(window)
+            return (
+                window_tuple[: past_num + 1],
+                window_tuple[past_num + gap :],
+            )
+
+        current_index = 0
+        if current_index % self._horizon.step == 0:
+            yield build_horizon_item()
+
+        for next_sample in iterator:
+            last_real = next_sample
+            window.append(next_sample)
+            current_index += 1
+            if current_index % self._horizon.step == 0:
+                yield build_horizon_item()
+
+        tail_fill = (
+            last_real if self._horizon.fill_with_last else self._horizon.fillvalue
+        )
+        for _ in range(initial_future_real):
+            window.append(tail_fill)
+            current_index += 1
+            if current_index % self._horizon.step == 0:
+                yield build_horizon_item()
+
+    @staticmethod
+    def _stack_sample_keys(
+        samples: tuple[SampleStamped, ...], keys: tuple[str, ...]
+    ) -> Tensor:
+        if len(keys) == 1:
+            stacked = np.stack([sample[keys[0]]["data"] for sample in samples])
+        else:
+            stacked = np.stack(
+                [
+                    np.concatenate([sample[key]["data"] for key in keys], axis=-1)
+                    for sample in samples
+                ]
+            )
+        return torch.as_tensor(stacked, dtype=torch.float32, device="cpu")
+
+    @staticmethod
+    def _sample_key_tensor(sample: SampleStamped, key: str) -> Tensor:
+        return torch.as_tensor(sample[key]["data"], dtype=torch.float32, device="cpu")
+
+    @staticmethod
+    def _sample_keys_tensor(sample: SampleStamped, keys: tuple[str, ...]) -> Tensor:
+        if len(keys) == 1:
+            return torch.as_tensor(
+                sample[keys[0]]["data"], dtype=torch.float32, device="cpu"
+            )
+        merged = np.concatenate([sample[key]["data"] for key in keys], axis=-1)
+        return torch.as_tensor(merged, dtype=torch.float32, device="cpu")
+
+    def _stack_horizon_item(
+        self, horizon_item: tuple[tuple[SampleStamped, ...], tuple[SampleStamped, ...]]
+    ) -> ItemType:
+        past, future = horizon_item
+        current_sample = past[-1]
+        item = {
+            ACTION_KEY: self._stack_sample_keys(future, self._action_keys),
+            "timestamp": asarray(current_sample[self._timestamp_key]["t"]),
+        }
+        if self._state_keys:
+            item[STATE_KEY] = self._sample_keys_tensor(current_sample, self._state_keys)
+        for camera_key, source_key in self._camera_mappings.items():
+            item[camera_key] = self._sample_key_tensor(current_sample, source_key)
+        return item
 
     def _iter_items(
         self, datasets: McapMultiEpisodeDatasets, shuffle: bool | None = None
@@ -288,7 +377,8 @@ class McapLeRobotDataset(IterableDataset):
                 episode_dataset[episode_index]
                 for episode_dataset in datasets._episode_datasets
             ]
-            yield from self._make_sample_pipeline(sample_datasets)
+            for horizon_item in self._iter_episode_horizon_items(sample_datasets):
+                yield self._stack_horizon_item(horizon_item)
 
     def _iter_prefetched(self, item_iter):
         queue = Queue(maxsize=max(self.config.prefetch_items, 1))
