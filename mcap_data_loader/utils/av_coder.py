@@ -17,9 +17,22 @@ from time import time_ns
 from pathlib import Path
 
 
+try:
+    from torchcodec.decoders import VideoDecoder
+except ImportError:
+    VideoDecoder = None
+
+
+class VideoDecodeBackend(StrEnum):
+    PYAV = auto()
+    TORCHCODEC = auto()
+
+
 class DecodeConfig(BaseModel, frozen=True):
     model_config = ConfigDict(extra="forbid")
 
+    backend: VideoDecodeBackend = VideoDecodeBackend.PYAV
+    """Video decoding backend."""
     thread_type: str = "AUTO"
     """Threading type for decoding. `AUTO` lets PyAV decide."""
     frame_format: str = "bgr24"
@@ -30,6 +43,8 @@ class DecodeConfig(BaseModel, frozen=True):
     """If True, ensures that the base timestamp is present in the video metadata."""
     target_time_base: PositiveInt = int(1e9)
     """Time base for the timestamps. If set to 0, timestamps are not returned."""
+    dimension_order: Literal["NHWC", "NCHW"] = "NHWC"
+    """Dimension order for torchcodec frames. PyAV always uses NHWC."""
 
 
 class NonMonotonicTimeMode(StrEnum):
@@ -66,7 +81,7 @@ PathLike = Union[str, Path]
 
 class AvCoder(InitConfigMixin):
     """
-    A class for encoding video frames using PyAV.
+    A class for encoding and decoding video frames using PyAV.
     This class supports encoding frames in various formats and ensures that
     timestamps are strictly increasing.
     It can handle both NumPy arrays and raw byte data for frames.
@@ -277,7 +292,72 @@ class AvCoder(InitConfigMixin):
         return getLogger(cls.__name__)
 
     @classmethod
-    def _init_decode(
+    def _torchcodec_num_ffmpeg_threads(cls, thread_type: str) -> int:
+        if thread_type.upper() == "AUTO":
+            return 0
+        cls.get_logger().warning(
+            "TorchCodec backend does not support PyAV thread_type='%s' directly; using num_ffmpeg_threads=1.",
+            thread_type,
+        )
+        return 1
+
+    @classmethod
+    def _load_torchcodec_decoder(
+        cls,
+        video: Union[str, bytes],
+        dimension_order: Literal["NHWC", "NCHW"] = "NHWC",
+        thread_type: str = "AUTO",
+    ):
+        return VideoDecoder(
+            video,
+            dimension_order=dimension_order,
+            seek_mode="exact",
+            num_ffmpeg_threads=cls._torchcodec_num_ffmpeg_threads(thread_type),
+        )
+
+    @classmethod
+    def _parse_base_stamp(cls, meta_comment: str, ensure_base_stamp: bool) -> int:
+        if not meta_comment:
+            meta_comment = "{}"
+        try:
+            comment: dict = json.loads(meta_comment)
+        except json.JSONDecodeError:
+            meta_comment = meta_comment.replace("'", '"')
+            comment = json.loads(meta_comment)
+
+        base_stamp = comment.get("base_stamp", None)
+        if base_stamp is None:
+            assert not ensure_base_stamp, (
+                "Base timestamp not found in video metadata. "
+                "Set ensure_base_stamp to True to raise an error."
+            )
+            cls.get_logger().warning(
+                "Base timestamp not found in video metadata. Using 0 as base."
+            )
+            return 0
+
+        if not isinstance(base_stamp, int):
+            cls.get_logger().warning(
+                f"Base timestamp is not an integer: {base_stamp}. Converting to integer."
+            )
+            base_stamp = int(base_stamp)
+        return base_stamp
+
+    @classmethod
+    def _read_base_stamp(
+        cls,
+        video: Union[str, bytes],
+        ensure_base_stamp: bool = False,
+    ) -> int:
+        with av.open(
+            BytesIO(video) if isinstance(video, bytes) else video, "r"
+        ) as container:
+            return cls._parse_base_stamp(
+                container.metadata.get("comment", "{}"), ensure_base_stamp
+            )
+
+    @classmethod
+    def _init_decode_pyav(
         cls,
         video: Union[str, bytes],
         thread_type: str = "AUTO",
@@ -290,41 +370,62 @@ class AvCoder(InitConfigMixin):
         # Enable multithreading for decoding
         video_stream = container.streams.video[0]
         video_stream.thread_type = thread_type
-        meta_comment = container.metadata.get("comment", "{}")
-        try:
-            comment: dict = json.loads(meta_comment)
-        except json.JSONDecodeError:
-            meta_comment = meta_comment.replace("'", '"')
-            comment: dict = json.loads(meta_comment)
-
-        base_stamp = comment.get("base_stamp", None)
-        if base_stamp is None:
-            assert not ensure_base_stamp, (
-                "Base timestamp not found in video metadata. "
-                "Set ensure_base_stamp to True to raise an error."
-            )
-            cls.get_logger().warning(
-                "Base timestamp not found in video metadata. Using 0 as base."
-            )
-            base_stamp = 0
-        else:
-            if not isinstance(base_stamp, int):
-                cls.get_logger().warning(
-                    f"Base timestamp is not an integer: {base_stamp}. "
-                    "Converting to integer."
-                )
-                base_stamp = int(base_stamp)
+        base_stamp = cls._parse_base_stamp(
+            container.metadata.get("comment", "{}"), ensure_base_stamp
+        )
         return container, video_stream, base_stamp, video_stream.frames
+
+    @staticmethod
+    def _torchcodec_format_frame(
+        frame_tensor,
+        frame_format: str,
+        dimension_order: Literal["NHWC", "NCHW"],
+    ):
+        if frame_tensor.ndim != 3:
+            raise ValueError(
+                f"Expected 3D frame tensor, got shape {tuple(frame_tensor.shape)}"
+            )
+        if frame_format == "rgb24":
+            return frame_tensor
+        if frame_format == "bgr24":
+            channel_dim = -1 if dimension_order == "NHWC" else 0
+            return frame_tensor.flip(channel_dim)
+        raise ValueError(
+            f"Unsupported torchcodec frame_format: {frame_format}. "
+            "Only 'rgb24' and 'bgr24' are supported."
+        )
+
+    @staticmethod
+    def _frame_stamp_from_seconds(
+        base_stamp: int, pts_seconds: float, target_time_base: int
+    ) -> int:
+        return int(base_stamp + fractions.Fraction(target_time_base, 1) * pts_seconds)
+
+    @classmethod
+    def _resolve_decode_config(
+        cls, config: Optional[DecodeConfig], kwargs: dict
+    ) -> DecodeConfig:
+        if config is not None and kwargs:
+            raise ValueError(
+                "Provide either 'config' or keyword decode overrides, not both."
+            )
+        if config is not None:
+            return config
+        if kwargs:
+            return DecodeConfig(**kwargs)
+        return DecodeConfig()
 
     @classmethod
     def decode(
         cls,
         video: Union[str, bytes],
         indices: Optional[List[int]] = None,
+        backend: VideoDecodeBackend = VideoDecodeBackend.PYAV,
         frame_format: str = "bgr24",
         thread_type: str = "AUTO",
         mismatch_tolerance: int = 0,
         ensure_base_stamp: bool = True,
+        dimension_order: Literal["NHWC", "NCHW"] = "NHWC",
     ) -> Union[List[np.ndarray], Dict[int, np.ndarray]]:
         """
         Reads all frames from a video file using PyAV.
@@ -333,7 +434,34 @@ class AvCoder(InitConfigMixin):
         Returns:
             List[np.ndarray]: A list of frames, each represented as a NumPy array.
         """
-        container, video_stream, base_stamp, frame_cnt = cls._init_decode(
+        if backend == VideoDecodeBackend.TORCHCODEC:
+            decoder = cls._load_torchcodec_decoder(video, dimension_order, thread_type)
+            frame_cnt = len(decoder)
+            if indices is not None:
+                indices = sorted(set(indices))
+                end_index = indices[-1]
+                assert 0 <= end_index < frame_cnt, f"{end_index} out of bounds"
+                batch = decoder.get_frames_at(indices)
+                frames = {
+                    index: cls._torchcodec_format_frame(
+                        frame, frame_format, dimension_order
+                    )
+                    for index, frame in zip(indices, batch.data, strict=True)
+                }
+                exp_cnt = len(indices)
+            else:
+                batch = decoder.get_frames_in_range(0, frame_cnt)
+                frames = [
+                    cls._torchcodec_format_frame(frame, frame_format, dimension_order)
+                    for frame in batch.data
+                ]
+                exp_cnt = frame_cnt
+            assert len(frames) == exp_cnt, (
+                f"Frame count mismatch: {len(frames)} != {exp_cnt}; indices: {indices} frame_cnt: {frame_cnt}"
+            )
+            return frames
+
+        container, video_stream, base_stamp, frame_cnt = cls._init_decode_pyav(
             video, thread_type, ensure_base_stamp=ensure_base_stamp
         )
         if indices is not None:
@@ -382,6 +510,7 @@ class AvCoder(InitConfigMixin):
         cls,
         video: Union[bytes, str],
         config: Optional[DecodeConfig] = None,
+        **kwargs,
     ) -> Generator[Union[DataStamped[np.ndarray], np.ndarray]]:
         """
         Generator to decode frames from a video file. This method yields frames one by one.
@@ -398,11 +527,33 @@ class AvCoder(InitConfigMixin):
             Union[tuple[np.ndarray, int], np.ndarray]: A tuple of the frame and its absolute timestamp
                 if target_time_base > 0, otherwise just the frame.
         """
-        config = config or DecodeConfig()
-        container, video_stream, base_stamp, frame_cnt = cls._init_decode(
+        config = cls._resolve_decode_config(config, kwargs)
+
+        if config.backend == VideoDecodeBackend.TORCHCODEC:
+            decoder = cls._load_torchcodec_decoder(
+                video, config.dimension_order, config.thread_type
+            )
+            frame_cnt = len(decoder)
+            base_stamp = cls._read_base_stamp(video, config.ensure_base_stamp)
+            cnt = 0
+            for index in range(frame_cnt):
+                frame = decoder.get_frame_at(index)
+                cnt += 1
+                frame_out = cls._torchcodec_format_frame(
+                    frame.data, config.frame_format, config.dimension_order
+                )
+                if config.target_time_base:
+                    abs_stamp = cls._frame_stamp_from_seconds(
+                        base_stamp, frame.pts_seconds, config.target_time_base
+                    )
+                    yield {"data": frame_out, "t": abs_stamp}
+                else:
+                    yield frame_out
+            return
+
+        container, video_stream, base_stamp, frame_cnt = cls._init_decode_pyav(
             video, config.thread_type, config.ensure_base_stamp
         )
-        # cls.get_logger().info(f"Decoding video with {frame_cnt} frames.")
         cnt = 0
         time_factor = (
             fractions.Fraction(config.target_time_base, 1) * video_stream.time_base
@@ -437,9 +588,8 @@ class AvCoder(InitConfigMixin):
                 f"mismatch tolerance: {config.mismatch_tolerance}"
             )
 
-    @classmethod
     def seek_frames(
-        cls,
+        self,
         video: Union[bytes, str],
         start_time: int,
         interval: int = 0,
@@ -450,7 +600,7 @@ class AvCoder(InitConfigMixin):
         ensure_base_stamp: bool = False,
     ) -> List[np.ndarray]:
         # TODO: implement according to the test_av_seek.py
-        container, video_stream, base_stamp, frame_cnt = cls._init_decode(
+        container, video_stream, base_stamp, frame_cnt = self._init_decode_pyav(
             video, thread_type, ensure_base_stamp
         )
         container.seek(start_time, stream=video_stream, backward=True, any_frame=False)
@@ -481,8 +631,8 @@ class AvCoder(InitConfigMixin):
             break
         else:
             target_frame = None
-            cls.get_logger().warning(
+            self.get_logger().warning(
                 "No frame found after seeking to target timestamp. The last frame pts is:",
                 frame.pts,
             )
-        cls.get_logger().info("Total frames processed:", frame_cnt)
+        self.get_logger().info("Total frames processed:", frame_cnt)

@@ -165,9 +165,9 @@ class McapLeRobotDataset(IterableDataset):
             IMAGE_KEY_PREFIX + "." + img_key.removeprefix("/").split("/")[0]: img_key
             for img_key in config.images
         }
-        self._timestamp_key = (
-            self._state_keys + self._image_keys + self._action_keys
-        )[0]
+        self._timestamp_key = (self._state_keys + self._image_keys + self._action_keys)[
+            0
+        ]
 
         self._datasets = self._make_datasets()
         self._ds_iter = None
@@ -223,7 +223,13 @@ class McapLeRobotDataset(IterableDataset):
                 common={
                     # "with_file": True,
                     "extra_keys": True,
-                    "media_configs": [DecodeConfig(frame_format="rgb24")],
+                    "media_configs": [
+                        DecodeConfig(
+                            frame_format="rgb24",
+                            dimension_order="NCHW",
+                            backend="torchcodec",
+                        ),
+                    ],
                 },
                 configs={
                     data_root: {"data_root": data_root, "keys": keys}
@@ -232,9 +238,7 @@ class McapLeRobotDataset(IterableDataset):
             )
         )
 
-    def _merge_episode_samples(
-        self, sample_datasets: list
-    ) -> Iterable[SampleStamped]:
+    def _merge_episode_samples(self, sample_datasets: list) -> Iterable[SampleStamped]:
         streams = [dataset.read_stream() for dataset in sample_datasets]
         for samples in zip(*streams):
             merged_sample = {}
@@ -242,28 +246,11 @@ class McapLeRobotDataset(IterableDataset):
                 merged_sample.update(sample)
             yield merged_sample
 
-    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
-        chw = np.transpose(image, (2, 0, 1)).astype(np.float32, copy=False)
-        chw /= 255.0
-        return chw
-
-    def _preprocess_sample(self, sample: SampleStamped) -> SampleStamped:
-        if not self._image_keys:
-            return sample
-        processed = sample.copy()
-        for key in self._image_keys:
-            stamped = sample[key]
-            processed[key] = {
-                "t": stamped["t"],
-                "data": self._preprocess_image(stamped["data"]),
-            }
-        return processed
-
     def _iter_episode_horizon_items(
         self, sample_datasets: list
     ) -> Iterable[tuple[tuple[SampleStamped, ...], tuple[SampleStamped, ...]]]:
         sample_iter = self._merge_episode_samples(sample_datasets)
-        sample_iter = map(self._preprocess_sample, sample_iter)
+        # sample_iter = map(self._preprocess_sample, sample_iter)
         iterator = iter(sample_iter)
         try:
             first_sample = next(iterator)
@@ -371,7 +358,9 @@ class McapLeRobotDataset(IterableDataset):
         if shuffle is None:
             shuffle = self.config.shuffle_episodes
         if shuffle and episode_num > 1:
-            random.Random(self.config.shuffle_seed + self._epoch).shuffle(episode_indices)
+            random.Random(self.config.shuffle_seed + self._epoch).shuffle(
+                episode_indices
+            )
         for episode_index in episode_indices:
             sample_datasets = [
                 episode_dataset[episode_index]
@@ -519,6 +508,28 @@ def _process_config_path(path):
     return str(path.parent), path.stem
 
 
+def _has_cli_override(argv: list[str], prefix: str) -> bool:
+    return any(arg == prefix or arg.startswith(f"{prefix}=") for arg in argv)
+
+
+def _prefer_pyav_when_torchcodec_unavailable(argv: list[str]) -> None:
+    import logging
+
+    if _has_cli_override(argv, "--dataset.video_backend"):
+        return
+
+    try:
+        import torchcodec  # noqa: F401
+    except Exception as exc:
+        argv.append("--dataset.video_backend=pyav")
+        summary = str(exc).strip().splitlines()[0] if str(exc).strip() else repr(exc)
+        logging.warning(
+            "Falling back to dataset.video_backend=pyav because torchcodec is unavailable (%s). "
+            "Set --dataset.video_backend=torchcodec to force it after fixing the local FFmpeg / TorchCodec runtime.",
+            summary,
+        )
+
+
 def train():
     from lerobot.scripts import lerobot_train
     from mcap_data_loader.datasets.mcap_lerobot import make_dataset
@@ -543,10 +554,9 @@ def train():
 
             # the cli args in lerobot_train will override the config file args
             extend_args(sys.argv, get_args_list(args))
+    _prefer_pyav_when_torchcodec_unavailable(sys.argv)
     # print(sys.argv), exit(0)
-    log_path, stop_event, thread = _start_memory_logger(
-        Path("outputs") / "memory_logs"
-    )
+    log_path, stop_event, thread = _start_memory_logger(Path("outputs") / "memory_logs")
     logging.warning("Periodic memory logs will be written to %s", log_path)
     try:
         return lerobot_train.main()

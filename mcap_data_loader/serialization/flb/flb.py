@@ -31,7 +31,6 @@ from mcap_data_loader.serialization.flb.pose import (
     encode_pose_in_frame_dict,
     decode_pose_in_frame_dict,
 )
-from mcap_data_loader.utils.av_coder import AvCoder
 from mcap_data_loader.utils.stat import StatisticsBasis
 from pathlib import Path
 from collections import defaultdict
@@ -478,6 +477,7 @@ def h264_attachment_to_compressed_images(
     Returns:
         Writer: An instance of Writer for the output MCAP file.
     """
+    from mcap_data_loader.utils.av_coder import AvCoder
 
     jpeg = TurboJPEG()
     av_coder = AvCoder()
