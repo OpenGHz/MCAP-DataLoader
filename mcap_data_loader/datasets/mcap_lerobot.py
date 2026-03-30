@@ -94,6 +94,29 @@ IMAGE_KEY_PREFIX = "observation.images"
 _QUEUE_SENTINEL = object()
 
 
+def _parse_repo_id_dirs(repo_id: str | list[str] | tuple[str, ...]) -> list[str]:
+    if isinstance(repo_id, (list, tuple)):
+        return [str(item) for item in repo_id]
+    if not isinstance(repo_id, str):
+        return [str(repo_id)]
+
+    repo_id = repo_id.strip()
+    if not repo_id:
+        return []
+
+    for parser in (json.loads, literal_eval):
+        try:
+            parsed = parser(repo_id)
+        except (json.JSONDecodeError, SyntaxError, ValueError, TypeError):
+            continue
+        if isinstance(parsed, str):
+            return [parsed]
+        if isinstance(parsed, (list, tuple)):
+            return [str(item) for item in parsed]
+
+    return [repo_id]
+
+
 def _read_proc_status_value_mb(field_name: str) -> float | None:
     try:
         with open("/proc/self/status", encoding="utf-8") as f:
@@ -484,12 +507,8 @@ def make_dataset(
     print(f"Loading config from {settings.cfg_path}")
     dict_config = hydra_instance_from_config_path(settings.cfg_path)
     # cfg.dataset.episodes: list[int] | None
-    try:
-        data_dirs = literal_eval(cfg.dataset.repo_id)
-    except SyntaxError:
-        data_dirs = [cfg.dataset.repo_id]
-    if isinstance(data_dirs, str):
-        data_dirs = [data_dirs]
+
+    data_dirs = _parse_repo_id_dirs(cfg.dataset.repo_id)
     # print(f"Data directories: {data_dirs}")
     data_paths = [str(Path(cfg.dataset.root) / data_dir) for data_dir in data_dirs]
     # print(f"Loading dataset from {data_path}")
@@ -593,6 +612,17 @@ def train():
         torch.utils.data.DataLoader = original_dataloader
         stop_event.set()
         thread.join(timeout=1.0)
+
+
+def infer():
+    from lerobot.scripts import lerobot_record
+    from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
+    from mcap_data_loader.utils.cli import extend_args
+    import sys
+    args = parse_args(None, False, False)
+    if args is not None:
+        extend_args(sys.argv, get_args_list())
+    return lerobot_record.main()
 
 
 def run_with_yaml():

@@ -50,3 +50,4 @@ include-package-data = true
 
 [project.scripts]
 mcap_lerobot_train = "mcap_data_loader.datasets.mcap_lerobot:train"
+mcap_lerobot_infer = "mcap_data_loader.datasets.mcap_lerobot:infer"

@@ -1,8 +1,12 @@
 import argparse
+import json
 import subprocess
 import sys
 import yaml
 from typing import Any, Dict
+
+
+PRESERVE_MAPPING_KEYS = {"env", "cameras", "rename_map"}
 
 
 def flatten_dict(
@@ -15,7 +19,7 @@ def flatten_dict(
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
+        if isinstance(v, dict) and k not in PRESERVE_MAPPING_KEYS:
             items.extend(flatten_dict(v, new_key, sep=sep).items())
         else:
             items.append((new_key, v))
@@ -25,9 +29,10 @@ def flatten_dict(
 def value_to_str(value: Any) -> str:
     """将 YAML 中的值安全地转为字符串（保留布尔、数字等原意）"""
     if isinstance(value, bool):
-        # 避免变成小写 true/false（某些命令可能需要 True/False 或 1/0）
-        # 这里按字符串输出，由目标命令解释
         return str(value).lower()
+    elif isinstance(value, (dict, list)):
+        # 用 JSON 保持结构化参数稳定，便于下游解析
+        return json.dumps(value, ensure_ascii=True)
     elif value is None:
         return "null"
     else:
