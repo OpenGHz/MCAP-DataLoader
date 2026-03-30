@@ -6,7 +6,7 @@ from collections.abc import Generator, Iterable
 from functools import cache, cached_property
 from mcap_data_loader.basis import DictDataStamped
 from mcap_data_loader.utils.basic import zip
-from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig
+from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig, VideoDecodeBackend
 from mcap_data_loader.utils.stat import StatisticsBasis, Statistics
 from collections import defaultdict
 from abc import ABC, abstractmethod
@@ -28,6 +28,7 @@ class McapReaderBasis(ABC):
         self._stat_schemas = ()
         self._post_init()
         self._jpeg = None
+        self._attachment_decode_cache = {}
 
     def _post_init(self):
         return
@@ -106,9 +107,48 @@ class McapReaderBasis(ABC):
                 media_type = attachment.media_type
                 cfg = media_config.get(media_type, None)
                 if media_type == "video/mp4":
-                    coder = AvCoder()
-                    # FIXME: check whether now no mismatching
-                    attach_iter = coder.iter_decode(attachment.data, cfg)
+                    cfg = cfg or DecodeConfig()
+                    if cfg.backend == VideoDecodeBackend.TORCHCODEC:
+                        cache_key = (
+                            name,
+                            cfg.backend,
+                            cfg.dimension_order,
+                            cfg.thread_type,
+                            cfg.ensure_base_stamp,
+                        )
+                        cached = AvCoder.load_torchcodec_decoder_cached(
+                            attachment.data,
+                            self._attachment_decode_cache,
+                            cache_key,
+                            dimension_order=cfg.dimension_order,
+                            thread_type=cfg.thread_type,
+                            ensure_base_stamp=cfg.ensure_base_stamp,
+                        )
+
+                        def torchcodec_iter():
+                            decoder = cached["decoder"]
+                            base_stamp = cached["base_stamp"]
+                            frame_cnt = cached["frame_cnt"]
+                            for index in range(frame_cnt):
+                                frame = decoder.get_frame_at(index)
+                                frame_out = AvCoder._torchcodec_format_frame(
+                                    frame.data, cfg.frame_format, cfg.dimension_order
+                                )
+                                if cfg.target_time_base:
+                                    abs_stamp = AvCoder._frame_stamp_from_seconds(
+                                        base_stamp,
+                                        frame.pts_seconds,
+                                        cfg.target_time_base,
+                                    )
+                                    yield {"data": frame_out, "t": abs_stamp}
+                                else:
+                                    yield frame_out
+
+                        attach_iter = torchcodec_iter()
+                    else:
+                        coder = AvCoder()
+                        # FIXME: check whether now no mismatching
+                        attach_iter = coder.iter_decode(attachment.data, cfg)
                 elif media_type == "application/json":
                     attach_iter = json.loads(attachment.data)
                 else:

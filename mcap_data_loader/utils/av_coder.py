@@ -316,6 +316,29 @@ class AvCoder(InitConfigMixin):
         )
 
     @classmethod
+    def load_torchcodec_decoder_cached(
+        cls,
+        video: Union[str, bytes],
+        cache: dict,
+        cache_key,
+        dimension_order: Literal["NHWC", "NCHW"] = "NHWC",
+        thread_type: str = "AUTO",
+        ensure_base_stamp: bool = False,
+    ):
+        cached = cache.get(cache_key)
+        if cached is None:
+            decoder = cls._load_torchcodec_decoder(video, dimension_order, thread_type)
+            cached = {
+                "decoder": decoder,
+                "frame_cnt": len(decoder),
+                "base_stamp": cls._read_base_stamp(video, ensure_base_stamp),
+                "dimension_order": dimension_order,
+                "thread_type": thread_type,
+            }
+            cache[cache_key] = cached
+        return cached
+
+    @classmethod
     def _parse_base_stamp(cls, meta_comment: str, ensure_base_stamp: bool) -> int:
         if not meta_comment:
             meta_comment = "{}"

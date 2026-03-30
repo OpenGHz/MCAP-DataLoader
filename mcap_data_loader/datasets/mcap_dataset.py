@@ -209,6 +209,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
                 f"No MCAP files found in {self.config.data_root}, please check the path."
             )
         self._episode_files = files
+        self._sample_dataset_cache: Dict[int, McapFlatBuffersSampleDataset] = {}
         self.refresh_config()
 
     def refresh_config(self):
@@ -224,8 +225,8 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         Read MCAP files and return episodic message stream.
         Each episode corresponds to one MCAP file.
         """
-        for file_path in self._episode_files:
-            yield self._create_sample_dataset(file_path)
+        for index in range(len(self._episode_files)):
+            yield self[index]
 
     def _create_sample_dataset(self, file_path: str) -> McapFlatBuffersSampleDataset:
         return McapFlatBuffersSampleDataset(
@@ -256,7 +257,11 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         return len(self._episode_files)
 
     def __getitem__(self, index: int):
-        return self._create_sample_dataset(self._episode_files[index])
+        dataset = self._sample_dataset_cache.get(index)
+        if dataset is None:
+            dataset = self._create_sample_dataset(self._episode_files[index])
+            self._sample_dataset_cache[index] = dataset
+        return dataset
 
 
 def get_config_and_class_type(data_root: Path):

@@ -1,4 +1,5 @@
 from torch.utils.data import IterableDataset
+from torch.utils.data._utils.collate import default_collate
 from torch import Tensor, asarray
 import torch
 import numpy as np
@@ -318,7 +319,7 @@ class McapLeRobotDataset(IterableDataset):
     ) -> Tensor:
         if len(keys) == 1:
             stacked = np.stack([sample[keys[0]]["data"] for sample in samples])
-            return torch.as_tensor(stacked, dtype=torch.float32, device="cpu")
+            return torch.from_numpy(stacked).to(dtype=torch.float32)
 
         stacked = np.stack(
             [
@@ -326,21 +327,19 @@ class McapLeRobotDataset(IterableDataset):
                 for sample in samples
             ]
         )
-        return torch.as_tensor(stacked, dtype=torch.float32, device="cpu")
+        return torch.from_numpy(stacked).to(dtype=torch.float32)
 
     @staticmethod
     def _sample_key_tensor(sample: SampleStamped, key: str) -> Tensor:
-        return McapLeRobotDataset._sample_image_tensor(sample, key).to(
-            dtype=torch.float32, device="cpu"
-        ) / 255.0
+        return McapLeRobotDataset._sample_image_tensor(sample, key)
 
     @staticmethod
     def _sample_keys_tensor(sample: SampleStamped, keys: tuple[str, ...]) -> Tensor:
         if len(keys) == 1:
             value = sample[keys[0]]["data"]
-            return torch.as_tensor(value, dtype=torch.float32, device="cpu")
+            return torch.from_numpy(value).to(dtype=torch.float32)
         merged = np.concatenate([sample[key]["data"] for key in keys], axis=-1)
-        return torch.as_tensor(merged, dtype=torch.float32, device="cpu")
+        return torch.from_numpy(merged).to(dtype=torch.float32)
 
     def _stack_horizon_item(
         self, horizon_item: tuple[tuple[SampleStamped, ...], tuple[SampleStamped, ...]]
@@ -420,9 +419,13 @@ class McapLeRobotDataset(IterableDataset):
 
     def _build_item_iter(self):
         item_iter = self._iter_items(self._datasets)
-        if self.config.prefetch_items > 0:
-            item_iter = self._iter_prefetched(item_iter)
         return item_iter
+
+    def collate_fn(self, batch: list[ItemType]) -> ItemType:
+        collated = default_collate(batch)
+        for camera_key in self._camera_mappings:
+            collated[camera_key] = collated[camera_key].float().mul_(1.0 / 255.0)
+        return collated
 
     def __iter__(self):
         item_iter = self._build_item_iter()
@@ -547,6 +550,7 @@ def train():
     from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
     import logging
     import sys
+    import torch
 
     argv_set = set(sys.argv)
     if ("--ori" not in argv_set) or ({"-c", "--config"} & argv_set):
@@ -564,12 +568,29 @@ def train():
             # the cli args in lerobot_train will override the config file args
             extend_args(sys.argv, get_args_list(args))
     _prefer_pyav_when_torchcodec_unavailable(sys.argv)
+    original_dataloader = torch.utils.data.DataLoader
+
+    class McapAwareDataLoader(original_dataloader):
+        @classmethod
+        def __class_getitem__(cls, item):
+            return original_dataloader[item]
+
+        def __init__(self, dataset, *args, **kwargs):
+            if (
+                isinstance(dataset, McapLeRobotDataset)
+                and kwargs.get("collate_fn") is None
+            ):
+                kwargs["collate_fn"] = dataset.collate_fn
+            super().__init__(dataset, *args, **kwargs)
+
+    torch.utils.data.DataLoader = McapAwareDataLoader
     # print(sys.argv), exit(0)
     log_path, stop_event, thread = _start_memory_logger(Path("outputs") / "memory_logs")
     logging.warning("Periodic memory logs will be written to %s", log_path)
     try:
         return lerobot_train.main()
     finally:
+        torch.utils.data.DataLoader = original_dataloader
         stop_event.set()
         thread.join(timeout=1.0)
 
