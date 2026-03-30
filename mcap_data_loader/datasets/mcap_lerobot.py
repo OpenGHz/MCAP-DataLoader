@@ -172,7 +172,7 @@ class McapLeRobotDataset(IterableDataset):
         self._datasets = self._make_datasets()
         self._ds_iter = None
         self._epoch = 0
-        first_item = next(self._iter_items(self._make_datasets(), shuffle=False))
+        first_item = next(self._iter_items(self._datasets, shuffle=False))
         # print(f"First item keys: {first_item.keys()}")
         self._add_items = {
             "action_is_pad": asarray([False] * first_item[ACTION_KEY].shape[0]),
@@ -246,11 +246,18 @@ class McapLeRobotDataset(IterableDataset):
                 merged_sample.update(sample)
             yield merged_sample
 
+    @staticmethod
+    def _sample_image_tensor(sample: SampleStamped, key: str) -> Tensor:
+        value = sample[key]["data"]
+        assert isinstance(value, torch.Tensor), f"{key} must be a torch.Tensor"
+        assert value.dtype == torch.uint8, f"{key} must be uint8, but got {value.dtype}"
+        assert value.ndim == 3, f"{key} must be CHW"
+        return value
+
     def _iter_episode_horizon_items(
         self, sample_datasets: list
     ) -> Iterable[tuple[tuple[SampleStamped, ...], tuple[SampleStamped, ...]]]:
         sample_iter = self._merge_episode_samples(sample_datasets)
-        # sample_iter = map(self._preprocess_sample, sample_iter)
         iterator = iter(sample_iter)
         try:
             first_sample = next(iterator)
@@ -311,25 +318,27 @@ class McapLeRobotDataset(IterableDataset):
     ) -> Tensor:
         if len(keys) == 1:
             stacked = np.stack([sample[keys[0]]["data"] for sample in samples])
-        else:
-            stacked = np.stack(
-                [
-                    np.concatenate([sample[key]["data"] for key in keys], axis=-1)
-                    for sample in samples
-                ]
-            )
+            return torch.as_tensor(stacked, dtype=torch.float32, device="cpu")
+
+        stacked = np.stack(
+            [
+                np.concatenate([sample[key]["data"] for key in keys], axis=-1)
+                for sample in samples
+            ]
+        )
         return torch.as_tensor(stacked, dtype=torch.float32, device="cpu")
 
     @staticmethod
     def _sample_key_tensor(sample: SampleStamped, key: str) -> Tensor:
-        return torch.as_tensor(sample[key]["data"], dtype=torch.float32, device="cpu")
+        return McapLeRobotDataset._sample_image_tensor(sample, key).to(
+            dtype=torch.float32, device="cpu"
+        ) / 255.0
 
     @staticmethod
     def _sample_keys_tensor(sample: SampleStamped, keys: tuple[str, ...]) -> Tensor:
         if len(keys) == 1:
-            return torch.as_tensor(
-                sample[keys[0]]["data"], dtype=torch.float32, device="cpu"
-            )
+            value = sample[keys[0]]["data"]
+            return torch.as_tensor(value, dtype=torch.float32, device="cpu")
         merged = np.concatenate([sample[key]["data"] for key in keys], axis=-1)
         return torch.as_tensor(merged, dtype=torch.float32, device="cpu")
 
