@@ -1,4 +1,5 @@
 from torch.utils.data import IterableDataset
+from torch.utils.data import get_worker_info
 from torch.utils.data._utils.collate import default_collate
 from torch import Tensor, asarray
 import torch
@@ -197,6 +198,7 @@ class McapLeRobotDataset(IterableDataset):
         self._ds_iter = None
         self._epoch = 0
         first_item = next(self._iter_items(self._datasets, shuffle=False))
+        self._reset_runtime_state()
         # print(f"First item keys: {first_item.keys()}")
         self._add_items = {
             "action_is_pad": asarray([False] * first_item[ACTION_KEY].shape[0]),
@@ -241,6 +243,19 @@ class McapLeRobotDataset(IterableDataset):
             features=features, stats=stats, camera_keys=self._camera_mappings.keys()
         )
 
+    def _reset_runtime_state(self):
+        self._ds_iter = None
+        if hasattr(self._datasets, "reset_runtime_state"):
+            self._datasets.reset_runtime_state()
+
+    @staticmethod
+    def _split_indices_for_worker(
+        indices: list[int], worker_id: int, num_workers: int
+    ) -> list[int]:
+        if num_workers <= 1:
+            return indices
+        return indices[worker_id::num_workers]
+
     def _make_datasets(self) -> McapMultiEpisodeDatasets:
         return McapMultiEpisodeDatasets(
             McapMultiEpisodeDatasetsConfig(
@@ -251,7 +266,7 @@ class McapLeRobotDataset(IterableDataset):
                         DecodeConfig(
                             frame_format="rgb24",
                             dimension_order="NCHW",
-                            backend="torchcodec",
+                            backend="pyav",
                         ),
                     ],
                 },
@@ -273,10 +288,21 @@ class McapLeRobotDataset(IterableDataset):
     @staticmethod
     def _sample_image_tensor(sample: SampleStamped, key: str) -> Tensor:
         value = sample[key]["data"]
-        assert isinstance(value, torch.Tensor), f"{key} must be a torch.Tensor"
-        assert value.dtype == torch.uint8, f"{key} must be uint8, but got {value.dtype}"
-        assert value.ndim == 3, f"{key} must be CHW"
-        return value
+        if isinstance(value, np.ndarray):
+            assert value.dtype == np.uint8, f"{key} must be uint8, but got {value.dtype}"
+            assert value.ndim == 3, f"{key} must be HWC or CHW"
+            value = torch.from_numpy(value)
+        elif isinstance(value, torch.Tensor):
+            assert value.dtype == torch.uint8, f"{key} must be uint8, but got {value.dtype}"
+            assert value.ndim == 3, f"{key} must be HWC or CHW"
+        else:
+            raise TypeError(f"{key} must be a numpy.ndarray or torch.Tensor, got {type(value)}")
+
+        if value.shape[0] == 3:
+            return value
+        if value.shape[-1] == 3:
+            return value.permute(2, 0, 1)
+        raise ValueError(f"{key} must have 3 channels, got shape {tuple(value.shape)}")
 
     def _iter_episode_horizon_items(
         self, sample_datasets: list
@@ -392,6 +418,11 @@ class McapLeRobotDataset(IterableDataset):
             random.Random(self.config.shuffle_seed + self._epoch).shuffle(
                 episode_indices
             )
+        worker_info = get_worker_info()
+        if worker_info is not None:
+            episode_indices = self._split_indices_for_worker(
+                episode_indices, worker_info.id, worker_info.num_workers
+            )
         for episode_index in episode_indices:
             sample_datasets = [
                 episode_dataset[episode_index]
@@ -464,6 +495,18 @@ class McapLeRobotDataset(IterableDataset):
         item = next(self._ds_iter)
         item.update(self._add_items)
         return item
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_ds_iter"] = None
+        datasets = state.get("_datasets")
+        if hasattr(datasets, "reset_runtime_state"):
+            datasets.reset_runtime_state()
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._ds_iter = None
 
     @property
     def meta(self) -> McapLeRobotDatasetMeta:
@@ -562,13 +605,18 @@ def _prefer_pyav_when_torchcodec_unavailable(argv: list[str]) -> None:
 
 
 def train():
+    from lerobot.datasets import utils as lerobot_dataset_utils
     from lerobot.scripts import lerobot_train
+    from lerobot.rl import wandb_utils
     from mcap_data_loader.datasets.mcap_lerobot import make_dataset
     from mcap_data_loader.utils.cli import extract_and_remove_args, extend_args
     from functools import partial
     from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
     import logging
+    import re
     import sys
+    import threading
+    import time
     import torch
 
     argv_set = set(sys.argv)
@@ -587,7 +635,92 @@ def train():
             # the cli args in lerobot_train will override the config file args
             extend_args(sys.argv, get_args_list(args))
     _prefer_pyav_when_torchcodec_unavailable(sys.argv)
+
+    def _safe_wandb_artifact_name(name: str) -> str:
+        return re.sub(r"[^0-9A-Za-z._-]+", "_", name)
+
+    class _DataWaitMonitor:
+        def __init__(self):
+            self.enabled = os.environ.get("MCAP_DATALOADER_WAIT_DEBUG", "1") != "0"
+            self.threshold_s = float(
+                os.environ.get("MCAP_DATALOADER_WAIT_THRESHOLD_S", "0.2")
+            )
+            self.summary_every = max(
+                int(os.environ.get("MCAP_DATALOADER_WAIT_SUMMARY_EVERY", "20")),
+                1,
+            )
+            self.fetch_count = 0
+            self.starved_count = 0
+            self.total_wait_s = 0.0
+            self.max_wait_s = 0.0
+
+        def record(self, wait_s: float):
+            if not self.enabled:
+                return
+            self.fetch_count += 1
+            if wait_s < self.threshold_s:
+                return
+            self.starved_count += 1
+            self.total_wait_s += wait_s
+            self.max_wait_s = max(self.max_wait_s, wait_s)
+            if self.starved_count == 1 or self.starved_count % self.summary_every == 0:
+                logging.warning(
+                    "DataLoader wait detected: fetch=%s wait=%.3fs threshold=%.3fs "
+                    "starved=%s total_wait=%.3fs max_wait=%.3fs",
+                    self.fetch_count,
+                    wait_s,
+                    self.threshold_s,
+                    self.starved_count,
+                    self.total_wait_s,
+                    self.max_wait_s,
+                )
+
+        def summary(self):
+            if not self.enabled or self.fetch_count == 0:
+                return
+            logging.warning(
+                "DataLoader wait summary: fetches=%s starved=%s threshold=%.3fs "
+                "total_wait=%.3fs max_wait=%.3fs",
+                self.fetch_count,
+                self.starved_count,
+                self.threshold_s,
+                self.total_wait_s,
+                self.max_wait_s,
+            )
+
+    data_wait_monitor = _DataWaitMonitor()
+
+    def _monitored_cycle(iterable):
+        iterator = iter(iterable)
+        while True:
+            start_time = time.perf_counter()
+            try:
+                item = next(iterator)
+            except StopIteration:
+                iterator = iter(iterable)
+                start_time = time.perf_counter()
+                item = next(iterator)
+            data_wait_monitor.record(time.perf_counter() - start_time)
+            yield item
+
+    def _quiet_pin_memory_thread_exceptions(args: threading.ExceptHookArgs) -> None:
+        thread_name = getattr(args.thread, "name", "") or ""
+        if "_pin_memory_loop" in thread_name and issubclass(
+            args.exc_type, (EOFError, BrokenPipeError, ConnectionResetError, OSError)
+        ):
+            return
+        original_threading_excepthook(args)
+
+    wandb_utils.get_safe_wandb_artifact_name = _safe_wandb_artifact_name
+    original_threading_excepthook = threading.excepthook
+    threading.excepthook = _quiet_pin_memory_thread_exceptions
+    original_cycle = lerobot_dataset_utils.cycle
+    original_train_cycle = lerobot_train.cycle
+    lerobot_dataset_utils.cycle = _monitored_cycle
+    lerobot_train.cycle = _monitored_cycle
     original_dataloader = torch.utils.data.DataLoader
+    original_asyncio_level = logging.getLogger("asyncio").level
+    logging.getLogger("asyncio").setLevel(logging.ERROR)
 
     class McapAwareDataLoader(original_dataloader):
         @classmethod
@@ -600,6 +733,21 @@ def train():
                 and kwargs.get("collate_fn") is None
             ):
                 kwargs["collate_fn"] = dataset.collate_fn
+            if (
+                isinstance(dataset, McapLeRobotDataset)
+                and kwargs.get("num_workers", 0) > 0
+                and kwargs.get("prefetch_factor") is None
+            ):
+                kwargs["prefetch_factor"] = 2
+            if isinstance(dataset, McapLeRobotDataset) and kwargs.get("num_workers", 0) > max(
+                dataset.num_episodes, 1
+            ):
+                logging.warning(
+                    "McapLeRobotDataset uses episode-level worker sharding right now. "
+                    "num_workers=%s but num_episodes=%s, so extra workers may stay idle.",
+                    kwargs.get("num_workers", 0),
+                    dataset.num_episodes,
+                )
             super().__init__(dataset, *args, **kwargs)
 
     torch.utils.data.DataLoader = McapAwareDataLoader
@@ -608,8 +756,24 @@ def train():
     logging.warning("Periodic memory logs will be written to %s", log_path)
     try:
         return lerobot_train.main()
+    except KeyboardInterrupt:
+        logging.warning("Training interrupted by Ctrl+C. Shutting down cleanly.")
+        data_wait_monitor.summary()
+        try:
+            import wandb
+
+            if wandb.run is not None:
+                wandb.finish(exit_code=130, quiet=True)
+        except Exception:
+            pass
+        return 130
     finally:
         torch.utils.data.DataLoader = original_dataloader
+        lerobot_dataset_utils.cycle = original_cycle
+        lerobot_train.cycle = original_train_cycle
+        threading.excepthook = original_threading_excepthook
+        logging.getLogger("asyncio").setLevel(original_asyncio_level)
+        data_wait_monitor.summary()
         stop_event.set()
         thread.join(timeout=1.0)
 

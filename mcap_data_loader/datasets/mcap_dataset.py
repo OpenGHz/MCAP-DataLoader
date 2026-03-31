@@ -55,6 +55,8 @@ class McapDatasetConfig(IterableDatasetConfig):
     """Media configurations for reading media data, e.g., videos."""
     extra_keys: bool = False
     """What to do when the requested keys are not found in the MCAP file. If False, raise an error. If True, ignore the missing keys and return the existing keys. """
+    cache_stream: bool = False
+    """Whether to materialize one full sample stream in memory and reuse it on later reads."""
 
     @property
     def is_empty(self) -> bool:
@@ -102,11 +104,9 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         # delay the reader initialization until read_stream is called
         # to support multiprocessing data reading
         self._reader = None
+        self._cached_stream = None
 
-    def read_stream(self):
-        """
-        Read MCAP file and return message stream.
-        """
+    def _iter_uncached_stream(self):
         self._ensure_reader()
         config = self.config
         kwargs = config.model_dump(
@@ -116,6 +116,7 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
                 "media_configs",
                 "slices",
                 "with_timestamp",
+                "cache_stream",
             }
         )
         kwargs.update(
@@ -131,9 +132,27 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
             for sample in samples_iter:
                 yield {key: value["data"] for key, value in sample.items()}
 
+    def read_stream(self):
+        """
+        Read MCAP file and return message stream.
+        """
+        if not self.config.cache_stream:
+            yield from self._iter_uncached_stream()
+            return
+
+        if self._cached_stream is None:
+            self._cached_stream = tuple(self._iter_uncached_stream())
+        yield from self._cached_stream
+
     def close(self):
         if self._reader is not None:
-            return self._reader.close()
+            self._reader.close()
+            self._reader = None
+
+    def reset_runtime_state(self):
+        """Drop live reader and optional materialized samples before worker reuse."""
+        self.close()
+        self._cached_stream = None
 
     def statistics(self):
         return self.reader.topic_statistics
@@ -263,6 +282,12 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
             self._sample_dataset_cache[index] = dataset
         return dataset
 
+    def reset_runtime_state(self):
+        """Clear per-episode runtime objects so DataLoader workers start clean."""
+        for dataset in self._sample_dataset_cache.values():
+            dataset.reset_runtime_state()
+        self._sample_dataset_cache.clear()
+
 
 def get_config_and_class_type(data_root: Path):
     """
@@ -355,3 +380,10 @@ class McapMultiEpisodeDatasets(IterableDatasetABC[McapFlatBuffersEpisodeDataset]
     def __len__(self) -> int:
         """Get the total number of episodes across all dataset roots."""
         return len(self._episode_datasets)
+
+    def reset_runtime_state(self):
+        """Release cached episode/sample runtime state across all roots."""
+        for datasets in self._episode_datasets:
+            for dataset in datasets:
+                if hasattr(dataset, "reset_runtime_state"):
+                    dataset.reset_runtime_state()
