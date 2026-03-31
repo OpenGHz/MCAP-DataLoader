@@ -211,3 +211,4 @@ outputs/
 configs/
 .vscode/
 AGENTS.md
+third_party/

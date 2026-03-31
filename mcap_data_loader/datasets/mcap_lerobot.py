@@ -26,6 +26,7 @@ from mcap_data_loader.utils.stat import concatenate_statistics, Statistics
 from mcap_data_loader.pipelines import HorizonConfig
 from mcap_data_loader.utils.av_coder import DecodeConfig
 from ast import literal_eval
+import yaml
 
 
 class McapLeRobotDatasetConfig(BaseModel, frozen=True):
@@ -604,6 +605,115 @@ def _prefer_pyav_when_torchcodec_unavailable(argv: list[str]) -> None:
         )
 
 
+def _deep_merge_dict(base: dict, override: dict) -> dict:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _resolve_path_from_config(
+    path: str | os.PathLike, config_path: str | os.PathLike
+) -> Path:
+    path = Path(path)
+    if path.is_absolute():
+        return path
+    return Path(config_path).resolve().parent / path
+
+
+def _load_robot_env_from_config_path(
+    env_config_path: str | os.PathLike, explicit_env_cfg: dict | None = None
+) -> dict:
+    from omegaconf import DictConfig, OmegaConf
+
+    from mcap_data_loader.utils.hydra_utils import init_hydra_config
+
+    cfg = init_hydra_config(str(env_config_path))
+    demonstrator = cfg.get("demonstrator")
+    if not isinstance(demonstrator, DictConfig):
+        raise ValueError(
+            f"Config file {env_config_path} does not contain a 'demonstrator' mapping."
+        )
+
+    component = demonstrator.get("component")
+    if not isinstance(component, DictConfig):
+        raise ValueError(
+            f"Config file {env_config_path} does not contain 'demonstrator.component'."
+        )
+
+    if explicit_env_cfg:
+        OmegaConf.set_struct(component, False)
+        merged_component = OmegaConf.merge(component, OmegaConf.create(explicit_env_cfg))
+        cfg.demonstrator.component = merged_component
+
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(cfg_dict, dict):
+        raise ValueError(
+            f"Config file {env_config_path} must resolve to a mapping, but got {type(cfg_dict).__name__}."
+        )
+
+    resolved_demonstrator = cfg_dict.get("demonstrator")
+    if not isinstance(resolved_demonstrator, dict):
+        raise ValueError(
+            f"Resolved config file {env_config_path} does not contain a 'demonstrator' mapping."
+        )
+
+    resolved_component = resolved_demonstrator.get("component")
+    if not isinstance(resolved_component, dict):
+        raise ValueError(
+            f"Resolved config file {env_config_path} does not contain 'demonstrator.component'."
+        )
+    to_pop = ("_target_", "name")
+    for key in to_pop:
+        resolved_component.pop(key, None)
+    return resolved_component
+
+
+def _build_infer_args_list(args) -> list[str]:
+    from omegaconf import OmegaConf
+    from mcap_data_loader.scripts.run_with_yaml import flatten_dict, value_to_str
+
+    with open(args.config, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"Config file {args.config} must contain a YAML mapping (dictionary)."
+        )
+
+    vars_cfg = config.pop("vars", None)
+    if isinstance(vars_cfg, dict):
+        # Hoist vars to top level so OmegaConf can resolve interpolations, then strip them out.
+        # vars keys do not override existing top-level keys.
+        merged = {**vars_cfg, **config}
+        resolved = OmegaConf.to_container(OmegaConf.create(merged), resolve=True)
+        assert isinstance(resolved, dict)
+        for key in vars_cfg:
+            resolved.pop(key, None)
+        config = resolved
+
+    for field in args.exclude:
+        config.pop(field, None)
+
+    robot_cfg = config.get("robot")
+    if isinstance(robot_cfg, dict):
+        env_cfg = robot_cfg.get("env")
+        if isinstance(env_cfg, dict) and "config_path" in env_cfg:
+            config_path = _resolve_path_from_config(env_cfg["config_path"], args.config)
+            explicit_env_cfg = {
+                key: value for key, value in env_cfg.items() if key != "config_path"
+            }
+            robot_cfg["env"] = _load_robot_env_from_config_path(
+                config_path, explicit_env_cfg
+            )
+
+    flat_config = flatten_dict(config)
+    return [f"--{key}={value_to_str(value)}" for key, value in flat_config.items()]
+
+
 def train():
     from lerobot.datasets import utils as lerobot_dataset_utils
     from lerobot.scripts import lerobot_train
@@ -780,12 +890,14 @@ def train():
 
 def infer():
     from lerobot.scripts import lerobot_record
-    from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
-    from mcap_data_loader.utils.cli import extend_args
+    from mcap_data_loader.scripts.run_with_yaml import parse_args
+    from mcap_data_loader.utils.cli import extend_args, extract_and_remove_args
     import sys
+
     args = parse_args(None, False, False)
     if args is not None:
-        extend_args(sys.argv, get_args_list())
+        extract_and_remove_args(["-c", "--config"])
+        extend_args(sys.argv, _build_infer_args_list(args))
     return lerobot_record.main()
 
 
