@@ -225,11 +225,17 @@ class InitConfigMixinBasis:
         """A hook to be called after the config is set."""
 
     @final
-    def copy(self, deep: bool = False) -> Self:
+    def copy(
+        self, update: Optional[Mapping[str, Any]] = None, deep: bool = False
+    ) -> Self:
         """Create a copy of the current instance with the same config."""
         if isinstance(self.config, BaseModel):
-            config = self.config.model_copy(deep=deep)
+            config = self.config.model_copy(deep=deep, update=update)
         else:
+            if update:
+                raise NotImplementedError(
+                    "Update is only supported for BaseModel config."
+                )
             method = copy if not deep else deepcopy
             config = method(self.config)
         return self.__class__(config)
