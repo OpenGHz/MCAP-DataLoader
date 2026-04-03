@@ -390,6 +390,11 @@ SchemaType = Hashable
 
 class McapWriterBasis(ABC):
     message_encoding: str
+    schema_encoding: str = ""
+
+    @property
+    def _effective_schema_encoding(self) -> str:
+        return self.schema_encoding or self.message_encoding
 
     def __init__(self, *args, **kwargs):
         self._smapping = {}
@@ -482,7 +487,7 @@ class McapWriterBasis(ABC):
             if not name_data:
                 continue
             self._smapping[stype] = self._writer.register_schema(
-                name_data[0], self.message_encoding, name_data[1]
+                name_data[0], self._effective_schema_encoding, name_data[1]
             )
         return self._smapping
 
