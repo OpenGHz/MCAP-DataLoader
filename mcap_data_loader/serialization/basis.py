@@ -1,7 +1,7 @@
 from mcap.reader import make_reader
 from mcap.records import Schema, Message
 from turbojpeg import TurboJPEG
-from typing import Dict, IO, Set, Optional, List, Any, Union, final
+from typing import Dict, IO, Set, Optional, List, Any, Union, Hashable, Tuple, final
 from collections.abc import Generator, Iterable
 from functools import cache, cached_property
 from mcap_data_loader.basis import DictDataStamped
@@ -10,6 +10,8 @@ from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig, VideoDecodeBa
 from mcap_data_loader.utils.stat import StatisticsBasis, Statistics
 from collections import defaultdict
 from abc import ABC, abstractmethod
+from mcap.writer import Writer
+from pathlib import Path
 import json
 import numpy as np
 import logging
@@ -381,3 +383,174 @@ class McapReaderBasis(ABC):
         if self._jpeg is None:
             self._jpeg = TurboJPEG()
         return self._jpeg
+
+
+SchemaType = Hashable
+
+
+class McapWriterBasis(ABC):
+    message_encoding: str
+
+    def __init__(self, *args, **kwargs):
+        self._smapping = {}
+        self._cmapping = {}
+        self._writer = None
+        self._img_enc_mapping = {
+            1: {
+                np.uint8: "8UC1",
+                np.uint16: "16UC1",
+                np.float32: "32FC1",
+            },
+            3: {
+                np.uint8: "8UC3",
+            },
+        }
+        self._stat = defaultdict(
+            lambda: {"sum": 0, "sum_sq": 0, "min": float("inf"), "max": float("-inf")}
+        )
+        self.builder = None
+
+    @final
+    def set_writer(self, writer: Writer, start: bool = False):
+        """Set the MCAP writer for this instance."""
+        if self._writer is not None:
+            raise ValueError("Writer is already set. Please unset it first.")
+
+        self._writer = writer
+        if start:
+            writer.start()
+
+    @final
+    def create_writer(
+        self,
+        file_path: Union[str, Path],
+        start: bool = True,
+        overwrite: bool = False,
+        make_dirs: bool = True,
+    ) -> Writer:
+        """Create and set a new MCAP writer (with default settings) for this instance."""
+        file_path = Path(file_path)
+        if file_path.suffix != ".mcap":
+            raise ValueError("File extension must be .mcap")
+        if file_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"File {file_path} already exists and overwrite is not allowed."
+            )
+        if make_dirs:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.set_writer(Writer(str(file_path)), start)
+        return self._writer
+
+    @final
+    def unset_writer(self, finish: bool = False):
+        """Unset the MCAP writer for this instance."""
+        if finish and self._writer is not None:
+            self._writer.finish()
+        self._writer = None
+        self._smapping.clear()
+        self._cmapping.clear()
+        if self.builder is not None:
+            self.builder.Clear()
+        self._stat.clear()
+
+    @final
+    def get_writer(self) -> Optional[Writer]:
+        return self._writer
+
+    @abstractmethod
+    def _get_schema_name_and_data(self, schema_type: Any) -> Tuple[str, bytes]:
+        """Get the schema name and serialized data for a given schema type."""
+
+    def _get_all_schema_types(self) -> Set[SchemaType]:
+        """Get all schema types that this writer can handle."""
+        raise NotImplementedError("Not implemented _get_all_schema_types method")
+
+    @final
+    def register_schemas(
+        self,
+        types: Optional[Set[SchemaType]] = None,
+    ) -> Dict[SchemaType, int]:
+        """Register schemas with the MCAP writer and return a mapping from schema types to schema IDs.
+        Args:
+            types (Optional[Set[SchemaType]]): A set of schema types to register. If None, all available schema types will be registered.
+        Returns:
+            Dict[SchemaType, int]: A dictionary mapping schema types to their corresponding schema IDs in the MCAP writer.
+        """
+        types = self._get_all_schema_types() if types is None else types
+        for stype in types:
+            name_data = self._get_schema_name_and_data(stype)
+            if not name_data:
+                continue
+            self._smapping[stype] = self._writer.register_schema(
+                name_data[0], self.message_encoding, name_data[1]
+            )
+        return self._smapping
+
+    @final
+    def register_channel(
+        self, topic: str, schema_type: Any, strict: bool = True
+    ) -> int:
+        """Register a channel with the given topic and schema type in the MCAP writer.
+        The schema will be automatically registered if not already present.
+        Args:
+            topic (str): The topic name for the channel.
+            schema_type (Any): The schema type for the channel.
+            strict (bool): Whether to enforce strict channel registration.
+        Returns:
+            int: The channel ID for the registered channel.
+        Raises:
+            ValueError: If the channel is already registered and strict is True.
+        """
+        if topic not in self._cmapping:
+            c_id = self._writer.register_channel(
+                topic,
+                self.message_encoding,
+                self._smapping.get(
+                    schema_type, self.register_schemas({schema_type})[schema_type]
+                ),
+            )
+            self._cmapping[topic] = c_id
+        elif strict:
+            raise ValueError(f"Channel '{topic}' is already registered.")
+        return self._cmapping[topic]
+
+    @final
+    def add_message(
+        self,
+        schema_type: Any,
+        topic: str,
+        data: Any,
+        publish_time: int,
+        log_time: int,
+        **kwargs,
+    ) -> None:
+        """Add a message to the MCAP file."""
+        self.register_channel(topic, schema_type, strict=False)
+        self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+
+    @abstractmethod
+    def on_add_message(
+        self,
+        schema_type: Any,
+        topic: str,
+        data: Any,
+        publish_time: int,
+        log_time: int,
+        **kwargs,
+    ) -> None:
+        """Hook method called when a message is added. Subclasses should implement this method to handle the actual message writing logic."""
+
+    def get_logger(self) -> logging.Logger:
+        return logging.getLogger(self.__class__.__name__)
+
+    @property
+    def topic_statistics(self) -> Dict[str, StatisticsBasis]:
+        """The accumulated statistics of topics (supported schema: FloatArray)."""
+        # NOTE: no `n` in the statistics
+        return self._stat
+
+    @final
+    def _get_image_encoding(self, image: np.typing.NDArray) -> str:
+        """Get the image encoding string for a given channel and dtype."""
+        channels = 1 if len(image.shape) == 2 else 3
+        return self._img_enc_mapping[channels][image.dtype.type]

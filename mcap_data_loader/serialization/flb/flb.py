@@ -1,8 +1,8 @@
 from mcap.reader import make_reader
 from mcap.writer import Writer
-from mcap.well_known import SchemaEncoding, MessageEncoding
+from mcap.well_known import MessageEncoding
 from turbojpeg import TurboJPEG
-from typing import Dict, IO, Set, Optional, Any, Union, Tuple
+from typing import Dict, IO, Optional, Any, Tuple
 from collections.abc import Iterable
 from foxglove_schemas_flatbuffer import (
     CompressedImage,
@@ -18,7 +18,7 @@ from mcap_data_loader.schemas.airbot_fbs import (
     MultiChannelImage,
     PointCloud2,
 )
-from mcap_data_loader.serialization.basis import McapReaderBasis
+from mcap_data_loader.serialization.basis import McapReaderBasis, McapWriterBasis
 from mcap_data_loader.serialization.flb.mci import (
     encode_multi_channel_image,
     decode_multi_channel_image,
@@ -31,9 +31,7 @@ from mcap_data_loader.serialization.flb.pose import (
     encode_pose_in_frame_dict,
     decode_pose_in_frame_dict,
 )
-from mcap_data_loader.utils.stat import StatisticsBasis
 from pathlib import Path
-from collections import defaultdict
 import numpy as np
 import flatbuffers
 
@@ -64,112 +62,22 @@ class FlatBuffersSchemas(Enum):
         return self is not FlatBuffersSchemas.NONE
 
 
-class McapFlatBuffersWriter:
+class McapFlatBuffersWriter(McapWriterBasis):
     """Class to handle writing MCAP files with FlatBuffers schemas."""
 
+    message_encoding = MessageEncoding.Flatbuffer
+
     def __init__(self, initial_builder_size: int = 1024 * 1024):
+        super().__init__()
         self.builder = flatbuffers.Builder(initial_builder_size)
-        self._smapping = {}
-        self._cmapping = {}
-        self._writer = None
-        self._img_enc_mapping = {
-            1: {
-                np.uint8: "8UC1",
-                np.uint16: "16UC1",
-                np.float32: "32FC1",
-            },
-            3: {
-                np.uint8: "8UC3",
-            },
-        }
-        self._stat = defaultdict(
-            lambda: {"sum": 0, "sum_sq": 0, "min": float("inf"), "max": float("-inf")}
-        )
 
-    def set_writer(self, writer: Writer, start: bool = False):
-        """Set the MCAP writer for this instance."""
-        if self._writer is not None:
-            raise ValueError("Writer is already set. Please unset it first.")
+    def _get_schema_name_and_data(self, schema_type: FlatBuffersSchemas):
+        return schema_type.value
 
-        self._writer = writer
-        if start:
-            writer.start()
+    def _get_all_schema_types(self):
+        return set(FlatBuffersSchemas) - {FlatBuffersSchemas.NONE}
 
-    def create_writer(
-        self,
-        file_path: Union[str, Path],
-        start: bool = True,
-        overwrite: bool = False,
-        make_dirs: bool = True,
-    ) -> Writer:
-        """Create and set a new MCAP writer (with default settings) for this instance."""
-        file_path = Path(file_path)
-        if file_path.suffix != ".mcap":
-            raise ValueError("File extension must be .mcap")
-        if file_path.exists() and not overwrite:
-            raise FileExistsError(
-                f"File {file_path} already exists and overwrite is not allowed."
-            )
-        if make_dirs:
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-        self.set_writer(Writer(str(file_path)), start)
-        return self._writer
-
-    def unset_writer(self, finish: bool = False):
-        """Unset the MCAP writer for this instance."""
-        if finish and self._writer is not None:
-            self._writer.finish()
-        self._writer = None
-        self._smapping.clear()
-        self._cmapping.clear()
-        self.builder.Clear()
-        self._stat.clear()
-
-    def get_writer(self) -> Optional[Writer]:
-        return self._writer
-
-    def register_schemas(
-        self,
-        types: Optional[Set[FlatBuffersSchemas]] = None,
-    ) -> Dict[FlatBuffersSchemas, int]:
-        types = set(FlatBuffersSchemas) if types is None else types
-        types.discard(FlatBuffersSchemas.NONE)
-        for stype in types:
-            self._smapping[stype] = self._writer.register_schema(
-                stype.value[0],
-                SchemaEncoding.Flatbuffer,
-                stype.value[1],
-            )
-        return self._smapping
-
-    def register_channel(
-        self, topic: str, schema_type: FlatBuffersSchemas, strict: bool = True
-    ) -> int:
-        """Register a channel with the given topic and schema type in the MCAP writer.
-        The schema will be automatically registered if not already present.
-        Args:
-            topic (str): The topic name for the channel.
-            schema_type (FlatBuffersSchemas): The schema type for the channel.
-            strict (bool): Whether to enforce strict channel registration.
-        Returns:
-            int: The channel ID for the registered channel.
-        Raises:
-            ValueError: If the channel is already registered and strict is True.
-        """
-        if topic not in self._cmapping:
-            c_id = self._writer.register_channel(
-                topic,
-                MessageEncoding.Flatbuffer,
-                self._smapping.get(
-                    schema_type, self.register_schemas({schema_type})[schema_type]
-                ),
-            )
-            self._cmapping[topic] = c_id
-        elif strict:
-            raise ValueError(f"Channel '{topic}' is already registered.")
-        return self._cmapping[topic]
-
-    def add_message(
+    def on_add_message(
         self,
         schema_type: FlatBuffersSchemas,
         topic: str,
@@ -178,8 +86,6 @@ class McapFlatBuffersWriter:
         log_time: int,
         **kwargs,
     ):
-        """Add a message to the MCAP data sampler."""
-        self.register_channel(topic, schema_type, False)
         return getattr(self, f"add_{schema_type.name.lower()}")(
             topic,
             data,
@@ -368,16 +274,6 @@ class McapFlatBuffersWriter:
             publish_time,
         )
 
-    @property
-    def topic_statistics(self) -> Dict[str, StatisticsBasis]:
-        """The accumulated statistics of topics (supported schema: FloatArray)."""
-        # NOTE: no `n` in the statistics
-        return self._stat
-
-    def _get_image_encoding(self, image: np.typing.NDArray) -> str:
-        """Get the image encoding string for a given channel and dtype."""
-        channels = 1 if len(image.shape) == 2 else 3
-        return self._img_enc_mapping[channels][image.dtype.type]
 
 
 class McapFlatBuffersReader(McapReaderBasis):
