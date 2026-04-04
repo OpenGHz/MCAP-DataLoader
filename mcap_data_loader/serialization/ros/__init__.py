@@ -23,6 +23,7 @@ def find_ros_distro(path: str) -> Optional[str]:
         return parts[ros_index + 1]
 
 
+ROS_VERSION = os.environ["ROS_VERSION"]
 # The Python path may contain multiple versions of ROS,
 # causing subsequent program processing errors.
 ROS_DISTRO = os.environ["ROS_DISTRO"]
@@ -38,11 +39,21 @@ for path in sys.path.copy():
                 ros_paths.append(path)
 logger.info(f"Using ROS distro: {ROS_DISTRO} with path: {ros_paths}")
 if len(ros_paths) == 0:
-    raise ImportError("No ROS paths found")
+    # ROS packages may be installed in generic site-packages (e.g. pixi/conda)
+    # without a path containing "ros/<distro>". Verify by trying to import.
+    try:
+        import importlib
+
+        importlib.import_module(
+            "rclpy" if ROS_VERSION == "2" else "rospy"
+        )
+        logger.info("ROS packages found in generic site-packages (pixi/conda)")
+    except ImportError:
+        raise ImportError("No ROS paths found")
 elif len(ros_paths) > 1:
     logger.warning("Multiple ROS paths found")
 
-ROS_VERSION = os.environ["ROS_VERSION"]
+
 if TYPE_CHECKING:
 
     def build_short_to_full_msg_map(preferred_packages) -> dict: ...
