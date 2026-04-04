@@ -20,6 +20,7 @@ class Configurer(ConfigurerBasis[T]):
     def parse(self, config_path=None) -> None:
         cwd = Path.cwd()
         parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--config-name", "--name", default="config")
         parser.add_argument("--config-path", "--path", default=config_path)
         parser.add_argument(
             "--base-dir",
@@ -51,7 +52,7 @@ class Configurer(ConfigurerBasis[T]):
         store.add_to_hydra_store()
         config_path = args.config_path
         if config_path is None:
-            for path in find_file_paths(cwd, "config.yaml", 2):
+            for path in find_file_paths(cwd, f"{args.config_name}.yaml", 2):
                 config_path = path
                 break
             else:
