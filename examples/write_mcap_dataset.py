@@ -1,4 +1,7 @@
-from airdc.common.samplers.mcap_sampler import McapDataSampler, McapDataSamplerConfig
+from airdc.common.samplers.mcap_smaplers.sampler_flb import (
+    McapFlbDataSampler,
+    McapFlbDataSamplerConfig,
+)
 from collections import defaultdict
 from pathlib import Path
 import time
@@ -10,7 +13,7 @@ if __name__ == "__main__":
     out_dir.mkdir(parents=True, exist_ok=True)
     episode = 0
 
-    mcap_sampler = McapDataSampler(McapDataSamplerConfig())
+    mcap_sampler = McapFlbDataSampler(McapFlbDataSamplerConfig())
 
     mcap_sampler.set_info({})
 

@@ -1,18 +1,65 @@
 from mcap_data_loader.serialization.ros import (
     ROS_VERSION,
     get_datatype_and_msgdef_text,
+    get_message,
+    get_message_short,
+    set_message_fields,
 )
-from typing import Any, Optional
+from typing import Any, Optional, final
 from mcap.writer import Writer as McapWriter
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap_data_loader.serialization.basis import McapReaderBasis, McapWriterBasis
+from abc import abstractmethod
+
+
+class McapROSWriterBasis(McapWriterBasis):
+    @final
+    def _resolve_type(self, schema_type) -> type:
+        """Resolve schema_type to a ROS message class.
+
+        Args:
+            schema_type: A ROS message class, a short name (e.g. "PoseStamped"),
+                or a full type name (e.g. "geometry_msgs/msg/PoseStamped").
+        """
+        if isinstance(schema_type, str):
+            msg_cls = get_message_short(schema_type)
+            if msg_cls is None:
+                msg_cls = get_message(schema_type)
+            return msg_cls
+
+        return schema_type
+
+    @final
+    def _get_schema_name_and_data(self, schema_type):
+        msg_cls = self._resolve_type(schema_type)
+        msg_type, msg_def = get_datatype_and_msgdef_text(msg_cls)
+        return (msg_type, msg_def.encode())
+
+    @abstractmethod
+    def _serialize_message(self, message: Any) -> bytes:
+        """Serialize a ROS message to bytes for writing to MCAP."""
+
+    @final
+    def on_add_message(
+        self, schema_type, topic, data, publish_time, log_time, **kwargs
+    ):
+        if isinstance(data, dict):
+            msg = schema_type()
+            set_message_fields(msg, data)
+            data = msg
+        self._writer.add_message(
+            channel_id=self._cmapping[topic],
+            data=self._serialize_message(data),
+            publish_time=publish_time,
+            log_time=log_time,
+        )
 
 
 if ROS_VERSION == "1":
     from mcap_ros1.writer import Writer  # noqa: F401
-
     from mcap_ros1.decoder import DecoderFactory
     from mcap.well_known import MessageEncoding
+    from io import BytesIO
 
     class McapROSReader(McapReaderBasis):
         def _post_init(self):
@@ -21,9 +68,14 @@ if ROS_VERSION == "1":
         def _decode(self, schema, message):
             return self._decoder_factory(MessageEncoding.ROS1, schema)(message.data)
 
-    class McapROSWriter(McapWriterBasis):
+    class McapROSWriter(McapROSWriterBasis):
         message_encoding = MessageEncoding.ROS1
         schema_encoding = SchemaEncoding.ROS1
+
+        def _serialize_message(self, message: Any) -> bytes:
+            buffer = BytesIO()
+            message.serialize(buffer)
+            return buffer.getvalue()
 
 
 else:
@@ -31,11 +83,6 @@ else:
     from typing import IO, Any, Dict, Optional, Union
     from mcap.writer import CompressionType
     from rclpy.serialization import serialize_message, deserialize_message
-    from mcap_data_loader.serialization.ros.ros2 import (
-        get_datatype_and_msgdef_text,
-    )
-    from rosidl_runtime_py.utilities import get_message
-    from mcap_data_loader.serialization.ros import get_message_short
     from airdc import __version__
     import time
     import mcap
@@ -138,39 +185,13 @@ else:
             ros_msg = deserialize_message(message.data, msg_type)
             return ros_msg
 
-    class McapROSWriter(McapWriterBasis):
+    class McapROSWriter(McapROSWriterBasis):
         message_encoding = MessageEncoding.CDR
         schema_encoding = SchemaEncoding.ROS2
 
-        def _resolve_type(self, schema_type) -> type:
-            """Resolve schema_type to a ROS message class.
-
-            Args:
-                schema_type: A ROS message class, a short name (e.g. "PoseStamped"),
-                    or a full type name (e.g. "geometry_msgs/msg/PoseStamped").
-            """
-            if isinstance(schema_type, str):
-                msg_cls = get_message_short(schema_type)
-                if msg_cls is None:
-                    msg_cls = get_message(schema_type)
-                return msg_cls
-            return schema_type
-
-        def _get_schema_name_and_data(self, schema_type):
-            msg_cls = self._resolve_type(schema_type)
-            msg_type, msg_def = get_datatype_and_msgdef_text(msg_cls)
-            return (msg_type, msg_def.encode())
-
-        def on_add_message(
-            self, schema_type, topic, data, publish_time, log_time, **kwargs
-        ):
-            self._writer.add_message(
-                channel_id=self._cmapping[topic],
-                data=serialize_message(data),
-                publish_time=publish_time,
-                log_time=log_time,
-            )
+        def _serialize_message(self, message: Any) -> bytes:
+            return serialize_message(message)
 
 
-def get_mcap_writer(writer) -> McapWriter:
+def get_mcap_writer(writer: Writer) -> McapWriter:
     return writer._Writer__writer

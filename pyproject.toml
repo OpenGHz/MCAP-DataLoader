@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcap-data-loader"
-version = "0.2.0"
+version = "0.2.1"
 description = "MCAP Data Loader"
 authors = [{ name = "OpenGHz", email = "your.email@example.com" }]
 readme = "README.md"
@@ -29,6 +29,7 @@ dependencies = [
     "array-api-compat",
     # "types-array-api",
     "termcolor",
+    "inflection",
     "send2trash >=1.8.3",
 ]
 urls = { "repository" = "https://github.com/OpenGHz/MCAP-DataLoader.git" }
