@@ -4,6 +4,7 @@ import genpy
 import numpy as np
 from foxglove_msgs.msg import CompressedVideo
 from mcap_data_loader.utils.av_coder import AvCoder, AvCoderConfig, AvCoderBasicConfig
+from mcap_data_loader.serialization.ros import time_ns_to_stamp
 from typing import Dict
 from pydantic import field_validator
 
@@ -88,7 +89,7 @@ class CompressedVideoEncoder:
         self._frame_index += 1
 
         msg = CompressedVideo()
-        msg.timestamp = genpy.Time.from_sec(timestamp_sec)
+        msg.timestamp = time_ns_to_stamp(int(timestamp_sec * 1e9))
         msg.frame_id = self._frame_id
         msg.format = "h264"
         msg.data = data
