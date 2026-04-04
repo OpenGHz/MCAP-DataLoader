@@ -3,6 +3,108 @@ import av
 import genpy
 import numpy as np
 from foxglove_msgs.msg import CompressedVideo
+from mcap_data_loader.utils.av_coder import AvCoder, AvCoderConfig, AvCoderBasicConfig
+from typing import Dict
+from pydantic import field_validator
+
+
+class CompressedVideoEncoderConfig(AvCoderBasicConfig):
+    """Configuration for CompressedVideoEncoder."""
+
+    frame_id: str = "camera_color_optical_frame"
+    """Frame ID to set in the CompressedVideo messages. Default is "camera_color_optical_frame"."""
+    gop_size: int = 10
+    """Group of Pictures (GOP) size for inter-frame compression. Default is 10, meaning one keyframe followed by 9 delta frames."""
+    codec_options: Dict[str, str] = {"preset": "ultrafast"}
+    """Options to pass to the underlying H.264 encoder. Defaults to ultrafast preset and zerolatency tune for low-latency streaming."""
+
+    @field_validator("codec_options", mode="after")
+    def validate_codec_options(cls, v: dict):
+        tune = v.get("tune")
+        if tune != "zerolatency":
+            if tune is not None:
+                print(
+                    f"Warning: Invalid tune option '{tune}'. Using 'zerolatency' instead."
+                )
+            v["tune"] = "zerolatency"
+        return v
+
+
+class CompressedVideoEncoder:
+    """Stateful H.264 encoder that leverages inter-frame compression (P-frames).
+
+    Built on top of :class:`AvCoder` in raw codec context mode (no container),
+    so each :meth:`encode` call returns Annex B packets for exactly one frame
+    (keyframe or delta frame), as required by the ``foxglove_msgs`` spec.
+    """
+
+    def __init__(self, config: CompressedVideoEncoderConfig):
+        self._config = config
+        self._frame_id = config.frame_id
+        self._gop_size = config.gop_size
+        av_config = AvCoderConfig(
+            time_base=config.time_base,
+            frame_format=config.frame_format,
+            container_format=None,
+            codec_options=config.codec_options,
+            blocking=True,
+        )
+        self._coder = AvCoder(av_config)
+        self._frame_index = 0
+
+    def reset(self):
+        """Reset encoder state for a new encoding session."""
+        self._coder.reset()
+        self._frame_index = 0
+
+    def configure_stream(
+        self,
+        width: int,
+        height: int,
+        gop_size: int | None = None,
+        max_b_frames: int = 0,
+    ):
+        """Configure the encoder stream parameters."""
+        self._coder.configure_stream(
+            width,
+            height,
+            gop_size=gop_size if gop_size is not None else self._gop_size,
+            max_b_frames=max_b_frames,
+        )
+
+    def encode(
+        self,
+        image_rgb: np.ndarray,
+        *,
+        timestamp_sec: float | None = None,
+    ) -> CompressedVideo:
+        """Encode one RGB frame and return a ``CompressedVideo`` message."""
+        if timestamp_sec is None:
+            timestamp_sec = self._frame_index / self._config.time_base
+
+        timestamp = self._frame_index
+        packets = self._coder.encode_frame_blocking(image_rgb, timestamp)
+        data = b"".join(bytes(p) for p in packets)
+        self._frame_index += 1
+
+        msg = CompressedVideo()
+        msg.timestamp = genpy.Time.from_sec(timestamp_sec)
+        msg.frame_id = self._frame_id
+        msg.format = "h264"
+        msg.data = data
+        return msg
+
+    def end(self, reset: bool = True):
+        return self._coder.end(reset=reset)
+
+    def close(self) -> None:
+        self._coder.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
 
 def encode_compressed_video(
@@ -12,38 +114,17 @@ def encode_compressed_video(
     fps: int = 30,
     timestamp_sec: float = 0.0,
 ) -> CompressedVideo:
-    """Encode a single RGB frame into a foxglove_msgs/CompressedVideo message."""
+    """Encode a single RGB frame (as an I-frame) into a CompressedVideo message."""
     if image_rgb.ndim != 3 or image_rgb.shape[2] != 3:
         raise ValueError("image_rgb must have shape (H, W, 3)")
     if image_rgb.dtype != np.uint8:
         raise ValueError("image_rgb must be uint8")
 
     height, width = image_rgb.shape[:2]
-    buffer = io.BytesIO()
-
-    # Foxglove's CompressedVideo currently expects H.264 Annex B payloads.
-    container = av.open(buffer, mode="w", format="h264")
-    stream = container.add_stream("libx264", rate=fps)
-    stream.width = width
-    stream.height = height
-    stream.pix_fmt = "yuv420p"
-    stream.options = {"preset": "ultrafast", "tune": "zerolatency"}
-    stream.codec_context.gop_size = 1
-    stream.codec_context.max_b_frames = 0
-
-    frame = av.VideoFrame.from_ndarray(image_rgb, format="rgb24")
-    for packet in stream.encode(frame):
-        container.mux(packet)
-    for packet in stream.encode():
-        container.mux(packet)
-    container.close()
-
-    msg = CompressedVideo()
-    msg.timestamp = genpy.Time.from_sec(timestamp_sec)
-    msg.frame_id = frame_id
-    msg.format = "h264"
-    msg.data = buffer.getvalue()
-    return msg
+    with CompressedVideoEncoder(
+        width, height, fps=fps, gop_size=1, frame_id=frame_id
+    ) as encoder:
+        return encoder.encode(image_rgb, timestamp_sec=timestamp_sec)
 
 
 def decode_compressed_video_to_rgb(msg: CompressedVideo) -> np.ndarray:
@@ -128,18 +209,19 @@ def encode_video_frames_to_messages(
     frames: list[np.ndarray],
     *,
     fps: float,
+    gop_size: int = 10,
     frame_id: str = "camera_color_optical_frame",
 ) -> list[CompressedVideo]:
+    if not frames:
+        return []
+    height, width = frames[0].shape[:2]
+    int_fps = max(1, round(fps))
     messages = []
-    for index, image_rgb in enumerate(frames):
-        messages.append(
-            encode_compressed_video(
-                image_rgb,
-                frame_id=frame_id,
-                fps=max(1, round(fps)),
-                timestamp_sec=index / fps,
-            )
-        )
+    with CompressedVideoEncoder(
+        width, height, fps=int_fps, gop_size=gop_size, frame_id=frame_id
+    ) as encoder:
+        for index, image_rgb in enumerate(frames):
+            messages.append(encoder.encode(image_rgb, timestamp_sec=index / fps))
     return messages
 
 

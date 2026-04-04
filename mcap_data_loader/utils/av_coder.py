@@ -7,7 +7,7 @@ from typing import List, Optional, Union, Literal, Dict
 from collections.abc import Generator
 from turbojpeg import TurboJPEG
 from logging import getLogger
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 from threading import Lock
 from mcap_data_loader.basis import DataStamped, StrEnum
 from mcap_data_loader.basis.cfgable import InitConfigMixin
@@ -58,7 +58,9 @@ class NonMonotonicTimeMode(StrEnum):
     """Do nothing. May result in out-of-order frames."""
 
 
-class AvCoderConfig(BaseModel, frozen=True):
+class AvCoderBasicConfig(BaseModel, frozen=True):
+    """Basic configuration for AvCoder."""
+
     model_config = ConfigDict(extra="forbid")
 
     time_base: PositiveInt = int(1e6)
@@ -66,14 +68,24 @@ class AvCoderConfig(BaseModel, frozen=True):
     Large time base (e.g. 1e9) improves timestamp precision but may cause overflow issues in some machines."""
     frame_format: str = "bgr24"
     """Format of the frames to encode/decode."""
-    blocking: bool = True
-    """Whether to use blocking encoding. If False, uses a separate thread."""
     log_level: Optional[int] = None
     """Logging level for the PyAV module."""
     non_monotonic_mode: NonMonotonicTimeMode = NonMonotonicTimeMode.ADJUST
     """Mode to handle frames with the same timestamp."""
     non_monotonic_log: bool = True
     """Whether to log when frames have the same timestamp."""
+    codec_options: Dict[str, str] = {"preset": "fast"}
+    """Codec options passed to the encoder."""
+
+
+class AvCoderConfig(AvCoderBasicConfig):
+    """Configuration for AvCoder."""
+
+    blocking: bool = True
+    """Whether to use blocking encoding. If False, uses a separate thread."""
+    container_format: Optional[str] = "mp4"
+    """Container format for encoding. Set to None for raw codec context mode
+    (outputs Annex B packets without a container, useful for per-frame packet extraction)."""
 
 
 PathLike = Union[str, Path]
@@ -122,32 +134,52 @@ class AvCoder(InitConfigMixin):
         self._last_future = None
         self._perf_logs = {}
 
-    def set_output(self, file_path: PathLike):
+    def set_output(self, file_path: PathLike = ""):
         """
         Set the output file path for the encoder.
         This method closes the current container and opens a new one with the specified file path.
+        When ``container_format`` is ``None``, creates a raw codec context (no container).
         Args:
             file_path (PathLike): The file path to save the encoded video.
         """
-        self._outbuf = None if file_path else BytesIO()
-        self._container = av.open(file_path or self._outbuf, "w", format="mp4")
-        self.stream = self._container.add_stream("h264", options={"preset": "fast"})
-        self.stream.codec_context.time_base = self._time_base
-        self.stream.time_base = self._time_base
+        if self.config.container_format is None:
+            self._outbuf = None
+            self._container = None
+            self.stream = av.CodecContext.create("libx264", "w")
+            self.stream.time_base = self._time_base
+            self.stream.options = self.config.codec_options
+        else:
+            self._outbuf = None if file_path else BytesIO()
+            self._container = av.open(
+                file_path or self._outbuf, "w", format=self.config.container_format
+            )
+            self.stream = self._container.add_stream(
+                "h264", options=self.config.codec_options
+            )
+            self.stream.codec_context.time_base = self._time_base
+            self.stream.time_base = self._time_base
 
     def configure_stream(
         self,
         width: int,
         height: int,
         pix_fmt: Literal["yuv420p", "rgb24"] = "yuv420p",
+        **codec_kwargs,
     ):
         """
         Configure the stream with the given parameters.
+        Additional keyword arguments (e.g. ``gop_size``, ``max_b_frames``) are
+        set as attributes on the stream / codec context.
+        In raw codec context mode the context is opened after configuration.
         """
         stream = self.stream
         stream.width = width
         stream.height = height
         stream.pix_fmt = pix_fmt
+        for key, value in codec_kwargs.items():
+            setattr(stream, key, value)
+        if self._container is None and self.config.container_format is None:
+            stream.open()
         self._configured = True
 
     def set_frame_type(self, frame_type: str):
@@ -171,12 +203,12 @@ class AvCoder(InitConfigMixin):
         else:
             raise TypeError(f"Unsupported frame type: {type(frame)}")
 
-    def _encode_frame(
+    def encode_frame_blocking(
         self,
         frame: Union[np.ndarray, bytes],
         timestamp: int,
         ns_to_base: bool = False,
-    ):
+    ) -> List[av.Packet]:
         """
         Encode a single video frame with the given timestamp.
         Args:
@@ -191,7 +223,10 @@ class AvCoder(InitConfigMixin):
             if timestamp < 0:
                 raise ValueError("Timestamp must not be negative")
             self._start_time = timestamp
-            self._container.metadata["comment"] = json.dumps({"base_stamp": timestamp})
+            if self._container is not None:
+                self._container.metadata["comment"] = json.dumps(
+                    {"base_stamp": timestamp}
+                )
         if self._preprocess is None:
             self._set_frame_type(frame)
         video_frame = av.VideoFrame.from_ndarray(
@@ -210,22 +245,24 @@ class AvCoder(InitConfigMixin):
                 if self.config.non_monotonic_log:
                     self.get_logger().warning(error_msg + f", {mode}")
                 if mode is NonMonotonicTimeMode.DROP:
-                    return
+                    return []
                 elif mode is NonMonotonicTimeMode.ADJUST:
                     timestamp = last_time + max(self._time_base.denominator // 1000, 1)
         self._last_time = timestamp
         video_frame.pts = timestamp - self._start_time
         video_frame.time_base = self._time_base
         packets = self.stream.encode(video_frame)
-        self._container.mux(packets)
+        if self._container is not None:
+            self._container.mux(packets)
         # self._perf_logs["encode"] =  time.monotonic() - start
+        return packets
 
     def encode_frame(
         self,
         frame: Union[np.ndarray, bytes],
         timestamp: Optional[int] = None,
         ns_to_base: bool = False,
-    ):
+    ) -> Union[List[av.Packet], Future]:
         """
         Encode a video frame with the given timestamp.
         Args:
@@ -237,10 +274,11 @@ class AvCoder(InitConfigMixin):
             timestamp = timestamp if timestamp is not None else time_ns()
             if self._executor is not None:
                 self._last_future = self._executor.submit(
-                    self._encode_frame, frame, timestamp, ns_to_base
+                    self.encode_frame_blocking, frame, timestamp, ns_to_base
                 )
+                return self._last_future
             else:
-                self._encode_frame(frame, timestamp, ns_to_base)
+                return self.encode_frame_blocking(frame, timestamp, ns_to_base)
 
     def end(self, file_path: PathLike = "", reset: bool = True) -> Optional[bytes]:
         """
@@ -254,15 +292,18 @@ class AvCoder(InitConfigMixin):
             if self._last_future:
                 self._last_future.result()
             packets = self.stream.encode()
-            self._container.mux(packets)
-            self._container.close()  # must close before getting value
-            self._container = None
+            if self._container is not None:
+                self._container.mux(packets)
+                self._container.close()  # must close before getting value
+                self._container = None
             value = None
             if self._outbuf is not None:
                 value = self._outbuf.getvalue()
                 if file_path:
                     with open(file_path, "wb") as f:
                         f.write(value)
+            elif self.config.container_format is None:
+                value = b"".join(bytes(p) for p in packets)
             self._close()
             if reset:
                 self.reset()
