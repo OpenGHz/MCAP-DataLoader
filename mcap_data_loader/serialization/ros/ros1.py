@@ -145,6 +145,17 @@ def set_message_fields(
             elem_type = None
             if len(current_value) > 0:
                 elem_type = type(current_value[0])
+            elif hasattr(target_obj, '__slots__') and hasattr(target_obj, '_slot_types'):
+                # Infer element type from message definition when default list is empty
+                try:
+                    idx = target_obj.__slots__.index(field_name)
+                    slot_type = target_obj._slot_types[idx]
+                    if slot_type.endswith('[]'):
+                        elem_cls = get_message(slot_type[:-2])
+                        if elem_cls is not None and issubclass(elem_cls, genpy.Message):
+                            elem_type = elem_cls
+                except (ValueError, IndexError):
+                    pass
             new_list = []
             for i, item in enumerate(value):
                 if elem_type and issubclass(elem_type, genpy.Message):
