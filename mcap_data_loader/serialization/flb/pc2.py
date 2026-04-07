@@ -44,14 +44,13 @@ NAME_TO_FB_DTYPE = {
     "UINT32": NumericType.NumericType.UINT32,
     "FLOAT32": NumericType.NumericType.FLOAT32,
     "FLOAT64": NumericType.NumericType.FLOAT64,
+    "7": NumericType.NumericType.FLOAT32,
 }
 
 FB_DTYPE_TO_NAME = {value: key for key, value in NAME_TO_FB_DTYPE.items()}
 
 
-def encode_pointcloud2_dict(
-    builder: flatbuffers.Builder, msg: dict[str, Any]
-) -> bytes:
+def encode_pointcloud2_dict(builder: flatbuffers.Builder, msg: dict[str, Any]) -> bytes:
     """Encode a PointCloud2-like dictionary into FlatBuffers bytes."""
     header = msg.get("header", {})
     stamp = header.get("stamp", {})
@@ -199,9 +198,7 @@ def main() -> None:
     print("Raw data equal:", pointcloud["data"] == decoded["data"])
     print("Decoded point array:")
     print(
-        np.frombuffer(decoded["data"], dtype=np.float32).reshape(
-            decoded["width"], -1
-        )
+        np.frombuffer(decoded["data"], dtype=np.float32).reshape(decoded["width"], -1)
     )
 
 
