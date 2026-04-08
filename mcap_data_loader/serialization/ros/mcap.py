@@ -71,6 +71,7 @@ if ROS_VERSION == "1":
     class McapROSWriter(McapROSWriterBasis):
         message_encoding = MessageEncoding.ROS1
         schema_encoding = SchemaEncoding.ROS1
+        profile = "ros1"
 
         def _serialize_message(self, message: Any) -> bytes:
             buffer = BytesIO()
@@ -188,6 +189,7 @@ else:
     class McapROSWriter(McapROSWriterBasis):
         message_encoding = MessageEncoding.CDR
         schema_encoding = SchemaEncoding.ROS2
+        profile = "ros2"
 
         def _serialize_message(self, message: Any) -> bytes:
             return serialize_message(message)

@@ -392,6 +392,7 @@ SchemaType = Hashable
 class McapWriterBasis(ABC):
     message_encoding: str
     schema_encoding: str = ""
+    profile: str = ""
 
     @property
     def _effective_schema_encoding(self) -> str:
@@ -426,7 +427,7 @@ class McapWriterBasis(ABC):
 
         self._writer = writer
         if start:
-            writer.start()
+            writer.start(self.profile)
 
     @final
     def create_writer(
