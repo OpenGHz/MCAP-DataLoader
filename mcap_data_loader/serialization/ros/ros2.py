@@ -131,6 +131,13 @@ def get_datatype_and_msgdef_text(msg) -> Tuple[str, str]:
     return msg_type, clean_text
 
 
+def stamp_from_dict(stamp_dict: Dict[str, int]) -> TimeMsg:
+    """Convert a dictionary with 'sec' and 'nanosec' to a TimeMsg message."""
+    sec = stamp_dict.get("secs") or stamp_dict.get("sec") or 0
+    nanosec = stamp_dict.get("nsecs") or stamp_dict.get("nanosec") or 0
+    return TimeMsg(sec=sec, nanosec=nanosec)
+
+
 if __name__ == "__main__":
     from geometry_msgs.msg import TransformStamped
 

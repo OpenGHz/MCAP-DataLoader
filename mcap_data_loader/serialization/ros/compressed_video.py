@@ -1,10 +1,9 @@
 import io
 import av
-import genpy
 import numpy as np
 from foxglove_msgs.msg import CompressedVideo
 from mcap_data_loader.utils.av_coder import AvCoder, AvCoderConfig, AvCoderBasicConfig
-from mcap_data_loader.serialization.ros import time_ns_to_stamp
+from mcap_data_loader.serialization.ros import time_ns_to_stamp, stamp_from_dict
 from typing import Dict
 from pydantic import field_validator
 
@@ -52,6 +51,7 @@ class CompressedVideoEncoder:
         )
         self._coder = AvCoder(av_config)
         self._frame_index = 0
+        self._configured = False
 
     def reset(self):
         """Reset encoder state for a new encoding session."""
@@ -73,6 +73,16 @@ class CompressedVideoEncoder:
             max_b_frames=max_b_frames,
         )
 
+    def _encode_frame(self, image_rgb: np.ndarray) -> bytes:
+        timestamp = self._frame_index
+        if not self._configured:
+            self.configure_stream(image_rgb.shape[1], image_rgb.shape[0])
+            self._configured = True
+        packets = self._coder.encode_frame_blocking(image_rgb, timestamp)
+        data = b"".join(bytes(p) for p in packets)
+        self._frame_index += 1
+        return data
+
     def encode(
         self,
         image_rgb: np.ndarray,
@@ -82,15 +92,22 @@ class CompressedVideoEncoder:
         """Encode one RGB frame and return a ``CompressedVideo`` message."""
         if timestamp_sec is None:
             timestamp_sec = self._frame_index / self._config.time_base
-
-        timestamp = self._frame_index
-        packets = self._coder.encode_frame_blocking(image_rgb, timestamp)
-        data = b"".join(bytes(p) for p in packets)
-        self._frame_index += 1
-
+        data = self._encode_frame(image_rgb)
         msg = CompressedVideo()
         msg.timestamp = time_ns_to_stamp(int(timestamp_sec * 1e9))
         msg.frame_id = self._frame_id
+        msg.format = "h264"
+        msg.data = data
+        return msg
+
+    def encode_image_dict(self, image_dict: dict):
+        """Encode an image dict with keys 'data' (RGB uint8 array) and optional 'timestamp_sec'."""
+        image_rgb = image_dict["data"]
+        data = self._encode_frame(image_rgb)
+        header = image_dict["header"]
+        msg = CompressedVideo()
+        msg.timestamp = stamp_from_dict(header["stamp"])
+        msg.frame_id = header.get("frame_id", self._frame_id)
         msg.format = "h264"
         msg.data = data
         return msg

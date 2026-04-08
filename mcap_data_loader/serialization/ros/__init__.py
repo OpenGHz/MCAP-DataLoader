@@ -44,9 +44,7 @@ if len(ros_paths) == 0:
     try:
         import importlib
 
-        importlib.import_module(
-            "rclpy" if ROS_VERSION == "2" else "rospy"
-        )
+        importlib.import_module("rclpy" if ROS_VERSION == "2" else "rospy")
         logger.info("ROS packages found in generic site-packages (pixi/conda)")
     except ImportError:
         raise ImportError("No ROS paths found")
@@ -67,6 +65,7 @@ if TYPE_CHECKING:
     def get_datatype_and_msgdef_text(msg) -> tuple: ...
     def process_camera_info_dict(cam_info_dict: Dict[str, Any]): ...
     def get_current_stamp() -> Any: ...
+    def stamp_from_dict(stamp_dict: Dict[str, int]) -> Any: ...
 else:
     module = import_module(f"mcap_data_loader.serialization.ros.ros{ROS_VERSION}")
     build_short_to_full_msg_map = module.build_short_to_full_msg_map
@@ -80,6 +79,7 @@ else:
         module, "process_camera_info_dict", lambda x: None
     )
     get_current_stamp = module.get_current_stamp
+    stamp_from_dict = module.stamp_from_dict
 
 
 MSG_MAP: dict = {}
@@ -129,22 +129,29 @@ class TopicInfo(BaseModel, frozen=True):
         if msg_type is not None:
             msg_type_stamped = get_message_short(msg_identifier + "Stamped")
             _PRIMITIVE_TYPE_MAP = {
-                "bool": bool, "boolean": bool,
-                "byte": int, "char": int, "octet": int,
-                "int8": int, "uint8": int,
-                "int16": int, "uint16": int,
-                "int32": int, "uint32": int,
-                "int64": int, "uint64": int,
-                "float32": float, "float64": float,
-                "string": str, "wstring": str,
-                "time": int, "duration": int,
+                "bool": bool,
+                "boolean": bool,
+                "byte": int,
+                "char": int,
+                "octet": int,
+                "int8": int,
+                "uint8": int,
+                "int16": int,
+                "uint16": int,
+                "int32": int,
+                "uint32": int,
+                "int64": int,
+                "uint64": int,
+                "float32": float,
+                "float64": float,
+                "string": str,
+                "wstring": str,
+                "time": int,
+                "duration": int,
             }
             fields_and_field_types = {}
             for filed, field_type_str in get_fields_and_field_types(msg_type).items():
-                if (
-                    field_type_str.startswith("sequence")
-                    or "[" in field_type_str
-                ):
+                if field_type_str.startswith("sequence") or "[" in field_type_str:
                     field_type = list
                 elif field_type_str in _PRIMITIVE_TYPE_MAP:
                     field_type = _PRIMITIVE_TYPE_MAP[field_type_str]

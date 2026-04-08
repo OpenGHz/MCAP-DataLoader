@@ -145,12 +145,14 @@ def set_message_fields(
             elem_type = None
             if len(current_value) > 0:
                 elem_type = type(current_value[0])
-            elif hasattr(target_obj, '__slots__') and hasattr(target_obj, '_slot_types'):
+            elif hasattr(target_obj, "__slots__") and hasattr(
+                target_obj, "_slot_types"
+            ):
                 # Infer element type from message definition when default list is empty
                 try:
                     idx = target_obj.__slots__.index(field_name)
                     slot_type = target_obj._slot_types[idx]
-                    if slot_type.endswith('[]'):
+                    if slot_type.endswith("[]"):
                         elem_cls = get_message(slot_type[:-2])
                         if elem_cls is not None and issubclass(elem_cls, genpy.Message):
                             elem_type = elem_cls
@@ -225,6 +227,13 @@ def process_camera_info_dict(cam_info_dict: Dict[str, Any]):
     for key in ("d", "k", "r", "p"):
         if key in cam_info_dict:
             cam_info_dict[key.upper()] = cam_info_dict.pop(key)
+
+
+def stamp_from_dict(stamp: Dict[str, int]) -> genpy.Message:
+    """Convert a dictionary with 'secs' and 'nsecs' to a genpy.Time message."""
+    sec = stamp.get("secs") or stamp.get("sec") or 0
+    nanosec = stamp.get("nsecs") or stamp.get("nanosec") or 0
+    return Time(secs=sec, nsecs=nanosec)
 
 
 def init_ros_node_safe(name: str, **kwargs):
