@@ -238,6 +238,7 @@ class McapFlatBuffersEpisodeDataset(IterableDatasetABC[McapFlatBuffersSampleData
         self._sample_ds_cfg["rearrange"] = self.config.rearrange.model_copy(
             update={"dataset": RearrangeType.NONE}
         )
+        self.reset_runtime_state()
 
     def read_stream(self):
         """

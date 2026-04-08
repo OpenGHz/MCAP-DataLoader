@@ -5,7 +5,8 @@ from mcap_data_loader.datasets.mcap_dataset import (
 from mcap_data_loader.utils.rela_abs import PoseGlobalRelaAbsTool
 from mcap_data_loader.utils.rot6d import Rotation6D
 from pprint import pprint
-from airdc.common.samplers.mcap_sampler import McapDataSampler, McapDataSamplerConfig
+# from airdc.common.samplers.mcap_sampler import McapDataSampler, McapDataSamplerConfig
+from airdc.common.samplers.mcap_samplers.sampler_flb import McapFlbDataSampler, McapFlbDataSamplerConfig
 from collections import defaultdict
 from pathlib import Path
 from typing import List, Set
@@ -83,7 +84,7 @@ if not keys:
 
 print(f"Extracted keys: {keys}")
 
-mcap_sampler = McapDataSampler(McapDataSamplerConfig())
+mcap_sampler = McapFlbDataSampler(McapFlbDataSamplerConfig())
 mcap_sampler.set_info({})
 assert mcap_sampler.configure()
 rela = PoseGlobalRelaAbsTool()
