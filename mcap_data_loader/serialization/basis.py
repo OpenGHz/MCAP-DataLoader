@@ -12,6 +12,7 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 from mcap.writer import Writer
 from pathlib import Path
+from natsort import natsorted
 import json
 import numpy as np
 import logging
@@ -414,6 +415,8 @@ class McapWriterBasis(ABC):
             lambda: {"sum": 0, "sum_sq": 0, "min": float("inf"), "max": float("-inf")}
         )
         self.builder = None
+        self._pending_channels: Dict[str, Any] = {}
+        self._pending_messages: List[tuple] = []
 
     @final
     def set_writer(self, writer: Writer, start: bool = False):
@@ -450,10 +453,13 @@ class McapWriterBasis(ABC):
     def unset_writer(self, finish: bool = False):
         """Unset the MCAP writer for this instance."""
         if finish and self._writer is not None:
+            self._flush_pending_channels()
             self._writer.finish()
         self._writer = None
         self._smapping.clear()
         self._cmapping.clear()
+        self._pending_channels.clear()
+        self._pending_messages.clear()
         if self.builder is not None:
             self.builder.Clear()
         self._stat.clear()
@@ -520,6 +526,18 @@ class McapWriterBasis(ABC):
         return self._cmapping[topic]
 
     @final
+    def _flush_pending_channels(self) -> None:
+        """Batch register all pending channels in sorted topic order, then flush buffered messages."""
+        if not self._pending_channels:
+            return
+        for topic in natsorted(self._pending_channels):
+            self.register_channel(topic, self._pending_channels[topic], strict=False)
+        self._pending_channels.clear()
+        for schema_type, topic, data, publish_time, log_time, kwargs in self._pending_messages:
+            self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+        self._pending_messages.clear()
+
+    @final
     def add_message(
         self,
         schema_type: Any,
@@ -530,8 +548,14 @@ class McapWriterBasis(ABC):
         **kwargs,
     ) -> None:
         """Add a message to the MCAP file."""
-        self.register_channel(topic, schema_type, strict=False)
-        self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+        if topic in self._cmapping:
+            self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+        elif topic in self._pending_channels:
+            self._flush_pending_channels()
+            self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+        else:
+            self._pending_channels[topic] = schema_type
+            self._pending_messages.append((schema_type, topic, data, publish_time, log_time, kwargs))
 
     @abstractmethod
     def on_add_message(
