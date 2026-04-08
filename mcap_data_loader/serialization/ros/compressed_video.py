@@ -16,7 +16,7 @@ class CompressedVideoEncoderConfig(AvCoderBasicConfig):
     """Frame ID to set in the CompressedVideo messages. Default is "camera_color_optical_frame"."""
     gop_size: int = 10
     """Group of Pictures (GOP) size for inter-frame compression. Default is 10, meaning one keyframe followed by 9 delta frames."""
-    codec_options: Dict[str, str] = {"preset": "ultrafast"}
+    codec_options: Dict[str, str] = {"preset": "ultrafast", "tune": "zerolatency"}
     """Options to pass to the underlying H.264 encoder. Defaults to ultrafast preset and zerolatency tune for low-latency streaming."""
 
     @field_validator("codec_options", mode="after")
