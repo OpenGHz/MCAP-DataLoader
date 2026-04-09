@@ -124,6 +124,8 @@ def set_message_fields(
                 try:
                     if isinstance(value, (genpy.Time, rospy.Time)):
                         time_val = value
+                    elif isinstance(value, dict):
+                        time_val = stamp_from_dict(value)
                     elif isinstance(value, (tuple, list)) and len(value) == 2:
                         time_val = genpy.Time(*value)
                     elif isinstance(value, int):
