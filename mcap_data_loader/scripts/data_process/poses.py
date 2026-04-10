@@ -107,7 +107,11 @@ for index, episode in enumerate(dataset):
             value_data = value["data"]
             value_t = value["t"]
             if "rela" in targets:
-                init_data = init[key]["data"]
+                if key.startswith("action/"):
+                    obs_key = key.removeprefix("action/")
+                    init_data = init[obs_key]["data"]
+                else:
+                    init_data = init[key]["data"]
                 if key.endswith("_rela"):
                     value_rela = value_data
                 else:
