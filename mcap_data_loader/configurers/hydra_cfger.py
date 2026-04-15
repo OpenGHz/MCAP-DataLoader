@@ -17,7 +17,7 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 class Configurer(ConfigurerBasis[T]):
     """The configurer using Hydra as the backend."""
 
-    def parse(self, config_path=None) -> None:
+    def parse(self, config_path=None) -> bool:
         cwd = Path.cwd()
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--config-name", "--name", default="config")
@@ -88,6 +88,7 @@ class Configurer(ConfigurerBasis[T]):
             sys.path.append(cwd)
         self._config_path = config_path
         self._config_name = config_name
+        return not {"-m", "--multirun"}.isdisjoint(unknown)
 
     @staticmethod
     def merge_dicts(base: dict, overrides: dict):
@@ -97,21 +98,22 @@ class Configurer(ConfigurerBasis[T]):
     def instantiate(config, overrides: dict = None):
         return instantiate(config, **(overrides or {}))
 
-    def __set_dict_config(self, dict_config: DictConfig) -> None:
+    def _set_dict_config(self, dict_config: DictConfig) -> None:
         self._job_env = hydra_config.HydraConfig.get().job.env_set
         self._dict_config = dict_config
+        self._hydra_config = hydra_config.HydraConfig.get()
         self.get_logger().info(
             f"Original working directory : {hydra.utils.get_original_cwd()}"
         )
         self.get_logger().info(
-            f"Output directory  : {hydra_config.HydraConfig.get().runtime.output_dir}"
+            f"Output directory  : {self._hydra_config.runtime.output_dir}"
         )
         if self._show_resolved:
             OmegaConf.resolve(dict_config)
             print(OmegaConf.to_yaml(dict_config))
             exit(0)
 
-    def __instantiate_config(self):
+    def _instantiate_config(self):
         os.environ.update(self._job_env)
         config_instance = instantiate(self._dict_config)
         if isinstance(config_instance, self.config_class):
@@ -125,21 +127,32 @@ class Configurer(ConfigurerBasis[T]):
                     f"The instantiated config {config_instance} must be a `{self.config_class}` or a dict, but got `{type(config_instance)}`."
                 )
 
-    def __set_and_run(self, dict_config: DictConfig) -> T:
-        self.__set_dict_config(dict_config)
-        return self._main(self._check_config(self.__instantiate_config()))
+    def _set_and_run(self, dict_config: DictConfig) -> T:
+        self._set_dict_config(dict_config)
+        self._run_result = self._main(
+            self._check_config(self._instantiate_config()),
+            job_id=self._hydra_config.job.num,
+        )
+        return self._run_result
 
     def on_configure(self) -> T:
         hydra_main = hydra.main(self._config_path, self._config_name, None)
         if self._main is None:
-            hydra_main(self.__set_dict_config)()
+            hydra_main(self._set_dict_config)()
             # NOTE: restoring sys.path may cause issues if using multiprocessing with spawn method
             # sys.path = syspath
             if self._dict_config is None:
                 exit(0)
-            return self.__instantiate_config()
+            return self._instantiate_config()
         else:
-            return hydra_main(self.__set_and_run)()
+            # NOTE: _run_hydra() has no return value since multirun calls
+            # task_function multiple times. We use _run_result to capture the
+            # return value from _set_and_run in single-run mode. In multirun
+            # mode, workers run in separate processes so _run_result stays at
+            # the default (0) in the main process.
+            self._run_result = 0
+            hydra_main(self._set_and_run)()
+            return self._run_result
 
 
 OmegaConf.register_new_resolver("merge_cfg", Configurer.merge_dicts)

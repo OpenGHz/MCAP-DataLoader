@@ -21,11 +21,13 @@ class ConfigurerBasis(ABC, Generic[T]):
         self._main = None
 
     @abstractmethod
-    def parse(self, config_path: Optional[str] = None, **kwargs) -> None:
+    def parse(self, config_path: Optional[str] = None, **kwargs) -> bool:
         """Parse the command line arguments.
         Args:
             config_path (Optional[str]): The path to the configuration file.
             **kwargs: Additional keyword arguments.
+        Returns:
+            bool: Whether using multirun mode.
         """
 
     @abstractmethod
@@ -36,10 +38,10 @@ class ConfigurerBasis(ABC, Generic[T]):
         """
 
     @final
-    def configure(self, main: Optional[Callable[[T], int]] = None) -> Union[int, T]:
+    def configure(self, main: Optional[Callable[[T, int], int]] = None) -> Union[int, T]:
         """Configure the given config class and return the instance.
         Args:
-            The main function to be called with the configured instance.
+            The main function to be called with the configured instance and a job ID.
         Returns:
             int: The return value of the main function.
         """
