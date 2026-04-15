@@ -41,6 +41,7 @@ letrain = ["hydra-core", "torchdata"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mcap_data_loader*"]
+exclude = ["data*", "outputs*", "configs*", "examples*", "tests*", "docs*", "scripts*", "third_party*"]
 
 [tool.setuptools.package-data]
 # Include FlatBuffers schema files in the wheel/sdist
