@@ -37,11 +37,21 @@ urls = { "repository" = "https://github.com/OpenGHz/MCAP-DataLoader.git" }
 # Optional dependencies
 [project.optional-dependencies]
 letrain = ["hydra-core", "torchdata"]
+nvc = ["PyNvVideoCodec"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mcap_data_loader*"]
-exclude = ["data*", "outputs*", "configs*", "examples*", "tests*", "docs*", "scripts*", "third_party*"]
+exclude = [
+    "data*",
+    "outputs*",
+    "configs*",
+    "examples*",
+    "tests*",
+    "docs*",
+    "scripts*",
+    "third_party*",
+]
 
 [tool.setuptools.package-data]
 # Include FlatBuffers schema files in the wheel/sdist
