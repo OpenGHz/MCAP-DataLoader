@@ -9,6 +9,7 @@ B*N 路独立 H264 视频编码示例 (GPU NVENC)
 """
 
 import logging
+import inspect
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +17,57 @@ import PyNvVideoCodec as nvc
 import torch
 
 _logger = logging.getLogger(__name__)
+
+
+def ensure_torch_dlpack_positional_stream_compat() -> None:
+    """Allow PyNvVideoCodec to pass the DLPack stream argument positionally.
+
+    PyTorch 2.10 makes ``Tensor.__dlpack__`` keyword-only for ``stream``, while
+    PyNvVideoCodec 2.1.0 still calls it as ``tensor.__dlpack__(stream)``.
+    """
+    current = torch.Tensor.__dlpack__
+    if getattr(current, "_nvc_positional_stream_compat", False):
+        return
+
+    try:
+        signature = inspect.signature(current)
+    except (TypeError, ValueError):
+        return
+
+    stream_param = signature.parameters.get("stream")
+    if stream_param is None or stream_param.kind is not inspect.Parameter.KEYWORD_ONLY:
+        return
+
+    supported_kwargs = set(signature.parameters) - {"self"}
+    original = current
+
+    def _dlpack_compat(self, *args, **kwargs):
+        positional_names = ("stream", "max_version", "dl_device", "copy")
+        if len(args) > len(positional_names):
+            raise TypeError(
+                f"Tensor.__dlpack__() takes at most "
+                f"{len(positional_names)} positional arguments "
+                f"but {len(args)} were given"
+            )
+        for name, value in zip(positional_names, args):
+            if name in kwargs:
+                raise TypeError(
+                    f"Tensor.__dlpack__() got multiple values for argument {name!r}"
+                )
+            kwargs[name] = value
+        kwargs.setdefault("stream", -1)
+
+        unknown = set(kwargs) - supported_kwargs
+        if unknown:
+            name = next(iter(unknown))
+            raise TypeError(
+                f"Tensor.__dlpack__() got an unexpected keyword argument {name!r}"
+            )
+        return original(self, **kwargs)
+
+    _dlpack_compat._nvc_positional_stream_compat = True
+    _dlpack_compat.__wrapped__ = original
+    torch.Tensor.__dlpack__ = _dlpack_compat
 
 
 def rgb_to_nv12(rgb: torch.Tensor) -> torch.Tensor:
@@ -111,6 +163,7 @@ class H264StreamEncoder:
             f"帧尺寸 {tuple(rgb.shape[:2])} 与 configure 的 ({self._H}, {self._W}) 不符"
         )
         nv12 = rgb_to_nv12(rgb)
+        ensure_torch_dlpack_positional_stream_compat()
         pkt = self._encoder.Encode(nv12)
         if pkt:
             self._bitstream.extend(bytes(pkt))

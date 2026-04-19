@@ -15,9 +15,12 @@ Limitations:
 """
 
 import av
+import ctypes
 import numpy as np
+import os
 import torch
 from io import BytesIO
+from functools import lru_cache
 from typing import List, Literal, Optional, Union
 
 import PyNvVideoCodec as nvc
@@ -30,7 +33,10 @@ from mcap_data_loader.serialization.video.basis import (
     Packet,
     PathLike,
 )
-from mcap_data_loader.utils.nvc import rgb_to_nv12
+from mcap_data_loader.utils.nvc import (
+    ensure_torch_dlpack_positional_stream_compat,
+    rgb_to_nv12,
+)
 
 
 FrameInput = Union[np.ndarray, bytes, torch.Tensor]
@@ -64,6 +70,57 @@ class NvcCoderConfig(AvCoderConfig):
 __all__ = ["NvcCoder", "NvcCoderConfig", "FrameInput"]
 
 
+@lru_cache(maxsize=1)
+def _get_cuda_driver():
+    cuda = ctypes.CDLL("libcuda.so.1")
+    cuda.cuInit.argtypes = [ctypes.c_uint]
+    cuda.cuInit.restype = ctypes.c_int
+    cuda.cuCtxGetCurrent.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    cuda.cuCtxGetCurrent.restype = ctypes.c_int
+    cuda.cuDevicePrimaryCtxRetain.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_int]
+    cuda.cuDevicePrimaryCtxRetain.restype = ctypes.c_int
+    cuda.cuCtxSetCurrent.argtypes = [ctypes.c_void_p]
+    cuda.cuCtxSetCurrent.restype = ctypes.c_int
+    return cuda
+
+
+def _check_cuda_result(status: int, func_name: str) -> None:
+    if status != 0:
+        raise RuntimeError(f"{func_name} failed with CUDA driver error code {status}")
+
+
+@lru_cache(maxsize=None)
+def _get_primary_cuda_context(device_id: int) -> int:
+    cuda = _get_cuda_driver()
+    ctx = ctypes.c_void_p()
+    _check_cuda_result(
+        cuda.cuDevicePrimaryCtxRetain(ctypes.byref(ctx), device_id),
+        "cuDevicePrimaryCtxRetain",
+    )
+    if not ctx.value:
+        raise RuntimeError(
+            f"Failed to retain primary CUDA context for device {device_id}"
+        )
+    return int(ctx.value)
+
+
+def _format_cuda_visible_mapping(visible_device_id: int) -> str:
+    visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if not visible_devices:
+        return f"visible_device={visible_device_id}, mapped_device={visible_device_id}"
+
+    tokens = [token.strip() for token in visible_devices.split(",")]
+    if 0 <= visible_device_id < len(tokens):
+        mapped_device = tokens[visible_device_id]
+    else:
+        mapped_device = "out-of-range"
+    return (
+        f"visible_device={visible_device_id}, "
+        f"mapped_device={mapped_device}, "
+        f"CUDA_VISIBLE_DEVICES={visible_devices!r}"
+    )
+
+
 class NvcCoder(AvCoderBasis):
     """NVIDIA NVENC-backed video encoder.
 
@@ -92,10 +149,56 @@ class NvcCoder(AvCoderBasis):
                 f"got {config.frame_format!r}"
             )
         super().__init__(config)
+        self._cuda_device_id = None
+        self._torch_device = None
+        self._cuda_context = None
+        self._cuda_stream = None
 
     def _set_log_level(self, level):
         # PyNvVideoCodec does not expose a shared logging control.
         return None
+
+    def _ensure_cuda_binding(self) -> None:
+        if self._torch_device is not None:
+            return
+        if not torch.cuda.is_available():
+            raise RuntimeError("NvcCoder requires CUDA, but torch.cuda is unavailable")
+        device_id = int(torch.cuda.current_device())
+        cuda = _get_cuda_driver()
+        _check_cuda_result(cuda.cuInit(0), "cuInit")
+        torch_device = torch.device("cuda", device_id)
+        with torch.cuda.device(device_id):
+            torch.empty(0, device=torch_device)
+            ctx = ctypes.c_void_p()
+            _check_cuda_result(
+                cuda.cuCtxGetCurrent(ctypes.byref(ctx)),
+                "cuCtxGetCurrent",
+            )
+            if not ctx.value:
+                primary_ctx = _get_primary_cuda_context(device_id)
+                _check_cuda_result(
+                    cuda.cuCtxSetCurrent(ctypes.c_void_p(primary_ctx)),
+                    "cuCtxSetCurrent",
+                )
+                _check_cuda_result(
+                    cuda.cuCtxGetCurrent(ctypes.byref(ctx)),
+                    "cuCtxGetCurrent",
+                )
+            if not ctx.value:
+                raise RuntimeError(
+                    f"No active CUDA context found for device {device_id}"
+                )
+            stream = int(torch.cuda.current_stream(device_id).cuda_stream)
+        self._cuda_device_id = device_id
+        self._torch_device = torch_device
+        self._cuda_context = int(ctx.value)
+        self._cuda_stream = stream
+        self.get_logger().info(
+            "Binding NVENC to %s (context=%s, stream=%s)",
+            _format_cuda_visible_mapping(device_id),
+            hex(self._cuda_context),
+            hex(self._cuda_stream),
+        )
 
     def set_output(self, file_path: PathLike = ""):
         self._file_path = str(file_path) if file_path else ""
@@ -145,11 +248,15 @@ class NvcCoder(AvCoderBasis):
                 )
             self._encoder = None
 
+        self._ensure_cuda_binding()
         self._encoder = nvc.CreateEncoder(
             width,
             height,
             "NV12",
             False,
+            gpuid=self._cuda_device_id,
+            cudacontext=self._cuda_context,
+            cudastream=self._cuda_stream,
             codec=cfg.nvenc_codec,
             preset=preset,
             tuninginfo=tuninginfo,
@@ -166,8 +273,13 @@ class NvcCoder(AvCoderBasis):
 
     def _coerce_frame(self, frame: FrameInput) -> torch.Tensor:
         """Normalize input to contiguous ``[H, W, 3]`` uint8 CUDA tensor in RGB order."""
+        self._ensure_cuda_binding()
         if isinstance(frame, torch.Tensor):
-            arr = frame if frame.is_cuda else frame.cuda(non_blocking=False)
+            arr = (
+                frame
+                if frame.device == self._torch_device
+                else frame.to(self._torch_device, non_blocking=False)
+            )
         else:
             if self._preprocess is None:
                 self._set_frame_type(frame)
@@ -176,7 +288,7 @@ class NvcCoder(AvCoderBasis):
                 raise TypeError(
                     f"Unexpected preprocess output type: {type(decoded).__name__}"
                 )
-            arr = torch.from_numpy(decoded).cuda(non_blocking=False)
+            arr = torch.from_numpy(decoded).to(self._torch_device, non_blocking=False)
 
         if arr.dtype != torch.uint8:
             raise TypeError(f"Frame dtype must be uint8, got {arr.dtype}")
@@ -231,6 +343,8 @@ class NvcCoder(AvCoderBasis):
         self._last_time = timestamp
 
         nv12 = rgb_to_nv12(rgb)
+        torch.cuda.synchronize(device=self._torch_device)
+        ensure_torch_dlpack_positional_stream_compat()
         pkt = self._encoder.Encode(nv12)
         if not pkt:
             return []
