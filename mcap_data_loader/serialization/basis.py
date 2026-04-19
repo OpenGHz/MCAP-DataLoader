@@ -6,7 +6,7 @@ from collections.abc import Generator, Iterable
 from functools import cache, cached_property
 from mcap_data_loader.basis import DictDataStamped
 from mcap_data_loader.utils.basic import zip
-from mcap_data_loader.utils.av_coder import AvCoder, DecodeConfig, VideoDecodeBackend
+from mcap_data_loader.serialization.video.pyav import AvCoder, DecodeConfig, VideoDecodeBackend
 from mcap_data_loader.utils.stat import StatisticsBasis, Statistics
 from collections import defaultdict
 from abc import ABC, abstractmethod

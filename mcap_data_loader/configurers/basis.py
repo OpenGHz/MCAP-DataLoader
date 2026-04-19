@@ -38,7 +38,9 @@ class ConfigurerBasis(ABC, Generic[T]):
         """
 
     @final
-    def configure(self, main: Optional[Callable[[T, int], int]] = None) -> Union[int, T]:
+    def configure(
+        self, main: Optional[Callable[[T, int], int]] = None
+    ) -> Union[int, T]:
         """Configure the given config class and return the instance.
         Args:
             The main function to be called with the configured instance and a job ID.

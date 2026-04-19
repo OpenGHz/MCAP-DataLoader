@@ -373,7 +373,7 @@ def h264_attachment_to_compressed_images(
     Returns:
         Writer: An instance of Writer for the output MCAP file.
     """
-    from mcap_data_loader.utils.av_coder import AvCoder
+    from mcap_data_loader.serialization.video.pyav import AvCoder
 
     jpeg = TurboJPEG()
     av_coder = AvCoder()

@@ -2,7 +2,7 @@ import io
 import av
 import numpy as np
 from foxglove_msgs.msg import CompressedVideo
-from mcap_data_loader.utils.av_coder import AvCoder, AvCoderConfig, AvCoderBasicConfig
+from mcap_data_loader.serialization.video.pyav import AvCoder, AvCoderConfig, AvCoderBasicConfig
 from mcap_data_loader.serialization.ros import time_ns_to_stamp, stamp_from_dict
 from typing import Dict
 from pydantic import field_validator

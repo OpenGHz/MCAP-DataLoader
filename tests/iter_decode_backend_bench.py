@@ -6,7 +6,7 @@ import argparse
 from statistics import mean
 from time import perf_counter
 from pathlib import Path
-from mcap_data_loader.utils.av_coder import AvCoder, AvCoderConfig, DecodeConfig
+from mcap_data_loader.serialization.video.pyav import AvCoder, AvCoderConfig, DecodeConfig
 
 
 def parse_args() -> argparse.Namespace:

@@ -5,17 +5,25 @@ import json
 from io import BytesIO
 from typing import List, Optional, Union, Literal, Dict
 from collections.abc import Generator
-from turbojpeg import TurboJPEG
-from logging import getLogger
-from concurrent.futures import ThreadPoolExecutor, Future
-from threading import Lock
 from mcap_data_loader.basis import DataStamped, StrEnum
-from mcap_data_loader.basis.cfgable import InitConfigMixin
-from pydantic import BaseModel, PositiveInt, NonNegativeInt, ConfigDict
 from enum import auto
-from time import time_ns
 from pathlib import Path
+from mcap_data_loader.serialization.video.basis import (
+    DecodeConfig as BasisDecodeConfig,
+    NonMonotonicTimeMode,
+    AvCoderBasis,
+    AvCoderBasicConfig,
+    AvCoderConfig,
+)
 
+__all__ = [
+    "AvCoder",
+    "AvCoderBasicConfig",
+    "AvCoderConfig",
+    "DecodeConfig",
+    "NonMonotonicTimeMode",
+    "VideoDecodeBackend",
+]
 
 try:
     from torchcodec.decoders import VideoDecoder
@@ -28,70 +36,17 @@ class VideoDecodeBackend(StrEnum):
     TORCHCODEC = auto()
 
 
-class DecodeConfig(BaseModel, frozen=True):
-    model_config = ConfigDict(extra="forbid")
-
+class DecodeConfig(BasisDecodeConfig):
     backend: VideoDecodeBackend = VideoDecodeBackend.PYAV
     """Video decoding backend."""
     thread_type: str = "AUTO"
     """Threading type for decoding. `AUTO` lets PyAV decide."""
-    frame_format: str = "bgr24"
-    """Format of the frames to decode."""
-    mismatch_tolerance: NonNegativeInt = 0
-    """Number of frames that can be missing before raising an error."""
-    ensure_base_stamp: bool = False
-    """If True, ensures that the base timestamp is present in the video metadata."""
-    target_time_base: PositiveInt = int(1e9)
-    """Time base for the timestamps. If set to 0, timestamps are not returned."""
-    dimension_order: Literal["NHWC", "NCHW"] = "NHWC"
-    """Dimension order for torchcodec frames. PyAV always uses NHWC."""
-
-
-class NonMonotonicTimeMode(StrEnum):
-    ADJUST = auto()
-    """Adjust the timestamp to be just greater than the last timestamp."""
-    DROP = auto()
-    """Drop the frame with non-monotonic timestamp."""
-    RAISE = auto()
-    """Raise an error when a non-monotonic timestamp is encountered."""
-    NONE = auto()
-    """Do nothing. May result in out-of-order frames."""
-
-
-class AvCoderBasicConfig(BaseModel, frozen=True):
-    """Basic configuration for AvCoder."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    time_base: PositiveInt = int(1e6)
-    """Time base for the encoder/decoder. Default is 1e6 (microseconds).
-    Large time base (e.g. 1e9) improves timestamp precision but may cause overflow issues in some machines."""
-    frame_format: str = "bgr24"
-    """Format of the frames to encode/decode."""
-    log_level: Optional[int] = None
-    """Logging level for the PyAV module."""
-    non_monotonic_mode: NonMonotonicTimeMode = NonMonotonicTimeMode.ADJUST
-    """Mode to handle frames with the same timestamp."""
-    non_monotonic_log: bool = True
-    """Whether to log when frames have the same timestamp."""
-    codec_options: Dict[str, str] = {"preset": "fast"}
-    """Codec options passed to the encoder."""
-
-
-class AvCoderConfig(AvCoderBasicConfig):
-    """Configuration for AvCoder."""
-
-    blocking: bool = True
-    """Whether to use blocking encoding. If False, uses a separate thread."""
-    container_format: Optional[str] = "mp4"
-    """Container format for encoding. Set to None for raw codec context mode
-    (outputs Annex B packets without a container, useful for per-frame packet extraction)."""
 
 
 PathLike = Union[str, Path]
 
 
-class AvCoder(InitConfigMixin):
+class AvCoder(AvCoderBasis):
     """
     A class for encoding and decoding video frames using PyAV.
     This class supports encoding frames in various formats and ensures that
@@ -101,38 +56,8 @@ class AvCoder(InitConfigMixin):
 
     logging = av.logging
 
-    def __init__(self, config: AvCoderConfig):
-        self.config = config
-        av.logging.set_level(config.log_level)
-        self._time_base = fractions.Fraction(1, config.time_base)
-        self._configured = False
-        self._frame_format = config.frame_format
-        self._preprocess = None
-        self._last_future = None
-        self._outbuf = None
-        self._container = None
-        # NOTE: set max_workers to 1 to ensure frames are processed in order
-        self._executor = None if config.blocking else ThreadPoolExecutor(1, "av_coder")
-        self._ns2base = int(1e9 / self.config.time_base)
-        self._encode_lock = Lock()
-        self.reset()
-
-    def reset(self, file_path: PathLike = ""):
-        """
-        Reset the encoder state.
-        This method clears the output buffer and resets the start and last timestamps.
-        Args:
-            file_path (PathLike): Optional file path to save the encoded video for the following encoding session.
-        """
-        if self._last_future:
-            self._last_future.result()
-        self._close()
-        self.set_output(file_path)
-        self._start_time = None
-        self._last_time = -1
-        self._configured = False
-        self._last_future = None
-        self._perf_logs = {}
+    def _set_log_level(self, level):
+        return av.logging.set_level(level)
 
     def set_output(self, file_path: PathLike = ""):
         """
@@ -181,27 +106,6 @@ class AvCoder(InitConfigMixin):
         if self._container is None and self.config.container_format is None:
             stream.open()
         self._configured = True
-
-    def set_frame_type(self, frame_type: str):
-        if frame_type == "bytes":
-            jpeg = TurboJPEG()
-            self._preprocess = jpeg.decode
-        elif frame_type == "ndarray":
-            self._preprocess = lambda x: x
-        else:
-            raise ValueError(f"Unsupported frame type: {frame_type}")
-
-    def _set_frame_type(self, frame: Union[np.ndarray, bytes]):
-        """
-        Set the frame type based on the input frame.
-        This method is called internally to determine how to process the frame.
-        """
-        if isinstance(frame, bytes):
-            self.set_frame_type("bytes")
-        elif isinstance(frame, np.ndarray):
-            self.set_frame_type("ndarray")
-        else:
-            raise TypeError(f"Unsupported frame type: {type(frame)}")
 
     def encode_frame_blocking(
         self,
@@ -257,57 +161,13 @@ class AvCoder(InitConfigMixin):
         # self._perf_logs["encode"] =  time.monotonic() - start
         return packets
 
-    def encode_frame(
-        self,
-        frame: Union[np.ndarray, bytes],
-        timestamp: Optional[int] = None,
-        ns_to_base: bool = False,
-    ) -> Union[List[av.Packet], Future]:
-        """
-        Encode a video frame with the given timestamp.
-        Args:
-            frame (Union[np.ndarray, bytes]): The video frame to encode.
-            timestamp (Optional[int]): The timestamp for the frame in nanoseconds.
-                If None, the current time will be used.
-        """
-        with self._encode_lock:
-            timestamp = timestamp if timestamp is not None else time_ns()
-            if self._executor is not None:
-                self._last_future = self._executor.submit(
-                    self.encode_frame_blocking, frame, timestamp, ns_to_base
-                )
-                return self._last_future
-            else:
-                return self.encode_frame_blocking(frame, timestamp, ns_to_base)
-
-    def end(self, file_path: PathLike = "", reset: bool = True) -> Optional[bytes]:
-        """
-        Finalize the encoding process.
-        Args:
-            file_path (PathLike): Optional file path to save the encoded video.
-        Returns:
-            Optional[bytes]: The encoded video bytes if no file is given.
-        """
-        with self._encode_lock:
-            if self._last_future:
-                self._last_future.result()
-            packets = self.stream.encode()
-            if self._container is not None:
-                self._container.mux(packets)
-                self._container.close()  # must close before getting value
-                self._container = None
-            value = None
-            if self._outbuf is not None:
-                value = self._outbuf.getvalue()
-                if file_path:
-                    with open(file_path, "wb") as f:
-                        f.write(value)
-            elif self.config.container_format is None:
-                value = b"".join(bytes(p) for p in packets)
-            self._close()
-            if reset:
-                self.reset()
-            return value
+    def _end(self):
+        packets = self.stream.encode()
+        if self._container is not None:
+            self._container.mux(packets)
+            self._container.close()  # must close before getting value
+            self._container = None
+        return packets
 
     def _close(self):
         if self._container is not None:
@@ -316,21 +176,6 @@ class AvCoder(InitConfigMixin):
         if self._outbuf is not None:
             self._outbuf.close()
             self._outbuf = None
-
-    def close(self):
-        """
-        Close the encoder and release resources.
-        """
-        if self._executor is not None:
-            self._executor.shutdown(wait=True, cancel_futures=True)
-        self._close()
-
-    @classmethod
-    def get_logger(cls):
-        """
-        Returns a logger instance for logging purposes.
-        """
-        return getLogger(cls.__name__)
 
     @classmethod
     def _torchcodec_num_ffmpeg_threads(cls, thread_type: str) -> int:
@@ -580,16 +425,15 @@ class AvCoder(InitConfigMixin):
         Generator to decode frames from a video file. This method yields frames one by one.
         Args:
             video (Union[bytes, str]): The video file path or the encoded video bytes.
-            thread_type (str): The threading type for decoding. Defaults to "AUTO".
-            frame_format (str): The format of the frames to decode. Defaults to "bgr24".
-            mismatch_tolerance (int): The number of frames that can be missing before raising an error.
-                Defaults to 0, which means no tolerance.
-            ensure_base_stamp (bool): If True, ensures that the base timestamp is present in the video metadata.
-                If not present, raises an error. Defaults to False.
-            target_time_base (int): The time base for the timestamps. Defaults to 1e9 (nanoseconds).
+            config (Optional[DecodeConfig]): Decode configuration. Mutually exclusive with
+                keyword overrides below.
+            **kwargs: Fields forwarded to ``DecodeConfig(**kwargs)`` when ``config`` is None.
+                See ``DecodeConfig`` for available fields (``backend``, ``thread_type``,
+                ``frame_format``, ``mismatch_tolerance``, ``ensure_base_stamp``,
+                ``target_time_base``, ``dimension_order``).
         Yields:
-            Union[tuple[np.ndarray, int], np.ndarray]: A tuple of the frame and its absolute timestamp
-                if target_time_base > 0, otherwise just the frame.
+            Union[DataStamped[np.ndarray], np.ndarray]: ``{"data": frame, "t": abs_stamp}``
+                when ``target_time_base > 0``, otherwise just the frame.
         """
         config = cls._resolve_decode_config(config, kwargs)
 
@@ -696,7 +540,8 @@ class AvCoder(InitConfigMixin):
         else:
             target_frame = None
             self.get_logger().warning(
-                "No frame found after seeking to target timestamp. The last frame pts is:",
+                "No frame found after seeking to target timestamp. The last frame pts is: %s",
                 frame.pts,
             )
-        self.get_logger().info("Total frames processed:", frame_cnt)
+        self.get_logger().info("Total frames processed: %s", frame_cnt)
+        return [target_frame] if target_frame is not None else []

@@ -4,7 +4,7 @@ from mcap_data_loader.datasets.mcap_dataset import (
     DataRearrangeConfig,
     RearrangeType,
 )
-from mcap_data_loader.utils.av_coder import DecodeConfig
+from mcap_data_loader.serialization.video.pyav import DecodeConfig
 import cv2
 import argparse
 import logging
