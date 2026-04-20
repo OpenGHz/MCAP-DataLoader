@@ -158,6 +158,11 @@ class Configurer(ConfigurerBasis[T]):
 OmegaConf.register_new_resolver("merge_cfg", Configurer.merge_dicts)
 OmegaConf.register_new_resolver("instantiate", Configurer.instantiate)
 OmegaConf.register_new_resolver("import_string", import_string)
+OmegaConf.register_new_resolver(
+    "floor_div",
+    lambda value, divisor: str(int(value) // int(divisor)),
+    replace=True,
+)
 
 
 if __name__ == "__main__":
