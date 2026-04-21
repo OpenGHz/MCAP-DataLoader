@@ -16,6 +16,7 @@ Limitations:
 
 import av
 import ctypes
+import gc
 import numpy as np
 import os
 import torch
@@ -153,6 +154,7 @@ class NvcCoder(AvCoderBasis):
         self._torch_device = None
         self._cuda_context = None
         self._cuda_stream = None
+        self._encoder = None
 
     def _set_log_level(self, level):
         # PyNvVideoCodec does not expose a shared logging control.
@@ -247,6 +249,7 @@ class NvcCoder(AvCoderBasis):
                     "NVENC EndEncode failed during reconfigure"
                 )
             self._encoder = None
+            gc.collect()
 
         self._ensure_cuda_binding()
         self._encoder = nvc.CreateEncoder(
@@ -362,6 +365,7 @@ class NvcCoder(AvCoderBasis):
             except Exception:
                 self.get_logger().exception("NVENC EndEncode failed in _end()")
             self._encoder = None
+            gc.collect()
 
         if tail_bytes:
             self._nvenc_bytes.extend(tail_bytes)
@@ -411,15 +415,15 @@ class NvcCoder(AvCoderBasis):
                     index += 1
 
     def _close(self):
-        encoder = getattr(self, "_encoder", None)
-        if encoder is not None:
+        if self._encoder is not None:
             try:
-                encoder.EndEncode()
+                self._encoder.EndEncode()
             except Exception:
                 self.get_logger().exception(
                     "NVENC EndEncode failed during close()"
                 )
             self._encoder = None
+            gc.collect()
         if getattr(self, "_outbuf", None) is not None:
             self._outbuf.close()
             self._outbuf = None
