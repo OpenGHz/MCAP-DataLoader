@@ -149,12 +149,12 @@ class NvcCoder(AvCoderBasis):
                 f"NvcCoder only supports rgb24/bgr24 frame_format, "
                 f"got {config.frame_format!r}"
             )
+        self._encoder = None
         super().__init__(config)
         self._cuda_device_id = None
         self._torch_device = None
         self._cuda_context = None
         self._cuda_stream = None
-        self._encoder = None
 
     def _set_log_level(self, level):
         # PyNvVideoCodec does not expose a shared logging control.
