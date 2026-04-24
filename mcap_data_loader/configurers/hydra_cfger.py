@@ -11,6 +11,7 @@ import argparse
 import sys
 import os
 import time
+import traceback
 
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
@@ -144,12 +145,22 @@ class Configurer(ConfigurerBasis[T]):
                 )
 
     def _set_and_run(self, dict_config: DictConfig) -> T:
-        self._set_dict_config(dict_config)
-        self._run_result = self._main(
-            self._check_config(self._instantiate_config()),
-            job_id=self._job_num,
-        )
-        return self._run_result
+        try:
+            self._set_dict_config(dict_config)
+            self._run_result = self._main(
+                self._check_config(self._instantiate_config()),
+                job_id=self._job_num,
+            )
+            return self._run_result
+        except BaseException:
+            # Multirun swallows per-job exceptions into JobReturn(FAILED) and
+            # only reports them after the whole Parallel batch finishes.
+            # Sibling jobs here can run indefinitely (Redis wait loops), so
+            # the error would otherwise never surface. Emit the traceback
+            # now so it is visible in the main terminal in real time.
+            traceback.print_exc()
+            sys.stderr.flush()
+            raise
 
     def on_configure(self) -> T:
         hydra_main = hydra.main(self._config_path, self._config_name, None)
