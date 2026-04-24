@@ -99,9 +99,17 @@ class Configurer(ConfigurerBasis[T]):
         return instantiate(config, **(overrides or {}))
 
     def _set_dict_config(self, dict_config: DictConfig) -> None:
-        self._job_env = hydra_config.HydraConfig.get().job.env_set
-        self._dict_config = dict_config
         self._hydra_config = hydra_config.HydraConfig.get()
+        job_env = self._hydra_config.job.env_set
+        self._job_env = (
+            {
+                str(key): str(value)
+                for key, value in OmegaConf.to_container(job_env, resolve=True).items()
+            }
+            if job_env is not None
+            else {}
+        )
+        self._dict_config = dict_config
         self.get_logger().info(
             f"Original working directory : {hydra.utils.get_original_cwd()}"
         )
