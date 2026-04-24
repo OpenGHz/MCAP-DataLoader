@@ -3,6 +3,7 @@ from omegaconf import DictConfig, OmegaConf
 from mcap_data_loader.configurers.basis import ConfigurerBasis, T
 from mcap_data_loader.utils.file import find_file_paths
 from mcap_data_loader.utils.basic import import_string
+from mcap_data_loader.utils.log import set_log_job_id
 from hydra_zen import instantiate, store
 from hydra.core import hydra_config
 import hydra
@@ -111,6 +112,7 @@ class Configurer(ConfigurerBasis[T]):
             else {}
         )
         self._dict_config = dict_config
+        set_log_job_id(self._hydra_config.job.num)
         self.get_logger().info(
             f"Original working directory : {hydra.utils.get_original_cwd()}"
         )
