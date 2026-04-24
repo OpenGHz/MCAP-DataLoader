@@ -160,7 +160,9 @@ OmegaConf.register_new_resolver("instantiate", Configurer.instantiate)
 OmegaConf.register_new_resolver("import_string", import_string)
 OmegaConf.register_new_resolver(
     "floor_div",
-    lambda value, divisor: str(int(value) // int(divisor)),
+    lambda value, divisor, default=0: (
+        str(int(value) // int(divisor)) if value is not None else str(default)
+    ),
     replace=True,
 )
 
