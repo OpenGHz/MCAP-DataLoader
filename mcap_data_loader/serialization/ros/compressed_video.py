@@ -44,6 +44,7 @@ class CompressedVideoEncoder:
         self._gop_size = config.gop_size
         av_config = AvCoderConfig(
             time_base=config.time_base,
+            fps=config.fps,
             frame_format=config.frame_format,
             container_format=None,
             codec_options=config.codec_options,

@@ -54,6 +54,8 @@ class AvCoderBasicConfig(BaseModel, frozen=True):
     time_base: PositiveInt = int(1e6)
     """Time base for the encoder/decoder. Default is 1e6 (microseconds).
     Large time base (e.g. 1e9) improves timestamp precision but may cause overflow issues in some machines."""
+    fps: Optional[PositiveInt] = None
+    """Optional fixed frame rate for encoding. When ``None``, input timestamps are preserved."""
     frame_format: str = "bgr24"
     """Format of the frames to encode/decode."""
     log_level: Optional[int] = None
@@ -91,6 +93,15 @@ class AvCoderBasis(InitConfigABCMixin):
         self.config = config
         self._set_log_level(config.log_level)
         self._time_base = fractions.Fraction(1, config.time_base)
+        if config.fps is not None and config.fps > config.time_base:
+            raise ValueError(
+                f"fps ({config.fps}) must not exceed time_base ({config.time_base})"
+            )
+        self._fixed_frame_step = (
+            fractions.Fraction(config.time_base, config.fps)
+            if config.fps is not None
+            else None
+        )
         self._configured = False
         self._frame_format = config.frame_format
         self._preprocess = None
@@ -121,9 +132,34 @@ class AvCoderBasis(InitConfigABCMixin):
         self.set_output(file_path)
         self._start_time = None
         self._last_time = -1
+        self._encoded_frame_count = 0
         self._configured = False
         self._last_future = None
         self._perf_logs = {}
+
+    @final
+    def _normalize_timestamp(self, timestamp: int, ns_to_base: bool) -> int:
+        assert isinstance(timestamp, int), "Timestamp must be an integer"
+        return timestamp // self._ns2base if ns_to_base else timestamp
+
+    @final
+    def _resolve_frame_timestamp(
+        self, timestamp: int, ns_to_base: bool
+    ) -> tuple[int, bool]:
+        timestamp = self._normalize_timestamp(timestamp, ns_to_base)
+        is_first_frame = self._start_time is None
+        if is_first_frame:
+            if timestamp < 0:
+                raise ValueError("Timestamp must not be negative")
+            self._start_time = timestamp
+        if self._fixed_frame_step is None:
+            return timestamp, is_first_frame
+
+        frame_offset = self._fixed_frame_step * self._encoded_frame_count
+        return (
+            self._start_time + int(frame_offset + fractions.Fraction(1, 2)),
+            is_first_frame,
+        )
 
     @abstractmethod
     def set_output(self, file_path: PathLike = ""):

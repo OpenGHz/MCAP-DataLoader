@@ -72,6 +72,8 @@ class AvCoder(AvCoderBasis):
             self._container = None
             self.stream = av.CodecContext.create("libx264", "w")
             self.stream.time_base = self._time_base
+            if self.config.fps is not None:
+                self.stream.framerate = fractions.Fraction(self.config.fps, 1)
             self.stream.options = self.config.codec_options
         else:
             self._outbuf = None if file_path else BytesIO()
@@ -79,9 +81,13 @@ class AvCoder(AvCoderBasis):
                 file_path or self._outbuf, "w", format=self.config.container_format
             )
             self.stream = self._container.add_stream(
-                "h264", options=self.config.codec_options
+                "h264", rate=self.config.fps, options=self.config.codec_options
             )
             self.stream.codec_context.time_base = self._time_base
+            if self.config.fps is not None:
+                self.stream.codec_context.framerate = fractions.Fraction(
+                    self.config.fps, 1
+                )
             self.stream.time_base = self._time_base
 
     def configure_stream(
@@ -121,16 +127,11 @@ class AvCoder(AvCoderBasis):
             ns_to_base (bool): Whether to convert the timestamp from nanoseconds to the time base.
         """
         # start = time.monotonic()
-        assert isinstance(timestamp, int), "Timestamp must be an integer"
-        timestamp = timestamp // self._ns2base if ns_to_base else timestamp
-        if self._start_time is None:
-            if timestamp < 0:
-                raise ValueError("Timestamp must not be negative")
-            self._start_time = timestamp
-            if self._container is not None:
-                self._container.metadata["comment"] = json.dumps(
-                    {"base_stamp": timestamp}
-                )
+        timestamp, is_first_frame = self._resolve_frame_timestamp(timestamp, ns_to_base)
+        if is_first_frame and self._container is not None:
+            self._container.metadata["comment"] = json.dumps(
+                {"base_stamp": self._start_time}
+            )
         if self._preprocess is None:
             self._set_frame_type(frame)
         video_frame = av.VideoFrame.from_ndarray(
@@ -156,6 +157,7 @@ class AvCoder(AvCoderBasis):
         video_frame.pts = timestamp - self._start_time
         video_frame.time_base = self._time_base
         packets = self.stream.encode(video_frame)
+        self._encoded_frame_count += 1
         if self._container is not None:
             self._container.mux(packets)
         # self._perf_logs["encode"] =  time.monotonic() - start
