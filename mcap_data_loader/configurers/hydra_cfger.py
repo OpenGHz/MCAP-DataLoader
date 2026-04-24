@@ -192,7 +192,7 @@ def _sleep_by_num(num, *increments):
     #
     # Process-global cache because OmegaConf's use_cache is per-DictConfig
     # and the resolver still fires multiple times inside one worker.
-    num = int(num)
+    num = int(num) if num is not None else 0
     if num <= 0 or not increments:
         delay = 0.0
     else:
