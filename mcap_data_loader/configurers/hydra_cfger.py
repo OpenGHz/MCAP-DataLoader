@@ -9,6 +9,7 @@ import hydra
 import argparse
 import sys
 import os
+import time
 
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
@@ -171,6 +172,42 @@ OmegaConf.register_new_resolver(
     lambda value, divisor, default=0: (
         str(int(value) // int(divisor)) if value is not None else str(default)
     ),
+    replace=True,
+)
+
+
+_slept_keys: set = set()
+
+
+def _sleep_by_num(num, *increments):
+    # Cumulative stagger: increments[i] is how much longer job (i+1) waits
+    # compared to job i. delay(N) = sum(increments[:N]); when N exceeds the
+    # list length, the last increment is reused for the tail.
+    #
+    # Example (yaml): ${sleep_by_num:${hydra:job.num},8,4,2,1}
+    #   job 0 -> 0s, job 1 -> 8s, job 2 -> 12s, job 3 -> 14s, job 4 -> 15s,
+    #   job 5 -> 16s (tail reuses last increment = 1).
+    #
+    # Process-global cache because OmegaConf's use_cache is per-DictConfig
+    # and the resolver still fires multiple times inside one worker.
+    num = int(num)
+    if num <= 0 or not increments:
+        delay = 0.0
+    else:
+        vals = [float(x) for x in increments]
+        tail = vals[-1]
+        delay = sum(vals[:num]) + tail * max(0, num - len(vals))
+    key = (num, delay)
+    if key not in _slept_keys:
+        _slept_keys.add(key)
+        if delay > 0:
+            time.sleep(delay)
+    return str(delay)
+
+
+OmegaConf.register_new_resolver(
+    "sleep_by_num",
+    _sleep_by_num,
     replace=True,
 )
 
