@@ -19,6 +19,10 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 class Configurer(ConfigurerBasis[T]):
     """The configurer using Hydra as the backend."""
 
+    @staticmethod
+    def _get_job_num(hydra_cfg: DictConfig):
+        return OmegaConf.select(hydra_cfg, "job.num", default=None)
+
     def parse(self, config_path=None) -> bool:
         cwd = Path.cwd()
         parser = argparse.ArgumentParser(add_help=False)
@@ -102,6 +106,7 @@ class Configurer(ConfigurerBasis[T]):
 
     def _set_dict_config(self, dict_config: DictConfig) -> None:
         self._hydra_config = hydra_config.HydraConfig.get()
+        self._job_num = self._get_job_num(self._hydra_config)
         job_env = self._hydra_config.job.env_set
         self._job_env = (
             {
@@ -112,7 +117,7 @@ class Configurer(ConfigurerBasis[T]):
             else {}
         )
         self._dict_config = dict_config
-        set_log_job_id(self._hydra_config.job.num)
+        set_log_job_id(self._job_num)
         self.get_logger().info(
             f"Original working directory : {hydra.utils.get_original_cwd()}"
         )
@@ -142,7 +147,7 @@ class Configurer(ConfigurerBasis[T]):
         self._set_dict_config(dict_config)
         self._run_result = self._main(
             self._check_config(self._instantiate_config()),
-            job_id=self._hydra_config.job.num,
+            job_id=self._job_num,
         )
         return self._run_result
 
