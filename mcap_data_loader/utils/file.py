@@ -2,6 +2,7 @@ from typing import Optional, Literal
 from collections.abc import Generator
 from pathlib import Path
 from send2trash import send2trash
+from send2trash.exceptions import TrashPermissionError
 import shutil
 
 
@@ -40,18 +41,36 @@ def find_file_paths(
     yield from _walk_with_depth(root, 0)
 
 
+def _permanent_remove(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
 def remove_path(
     path: Path, mode: Literal["permanent", "trash"] = "permanent", log: bool = False
 ) -> bool:
-    """Remove the data from the given or last saved path."""
+    """Remove the data from the given or last saved path.
+
+    When ``mode == "trash"`` the volume may not allow creating its
+    ``.Trash-<uid>`` directory (e.g. shared ``/data`` mounts on servers).
+    send2trash raises ``TrashPermissionError`` in that case; fall back to a
+    permanent removal so the caller still makes progress.
+    """
     if path.exists():
         if mode == "permanent":
-            if path.is_dir():
-                shutil.rmtree(path)
-            else:
-                path.unlink()
+            _permanent_remove(path)
         else:
-            send2trash(path)
+            try:
+                send2trash(path)
+            except TrashPermissionError as exc:
+                if log:
+                    print(
+                        f"send2trash unavailable for {path} ({exc!r}); "
+                        "falling back to permanent removal."
+                    )
+                _permanent_remove(path)
         return True
     else:
         if log:
