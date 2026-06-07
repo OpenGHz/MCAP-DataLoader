@@ -33,59 +33,18 @@ BaseModelT = TypeVar("BaseModelT", bound=BaseModel)
 T = TypeVar("T")
 
 
-def validate_field(obj: BaseModel, name: str, value: Any):
-    """Validate a field value using the Pydantic model's validator."""
-    obj.__pydantic_validator__.validate_assignment(obj, name, value)
-
-
-class ForceSetAttr(Generic[BaseModelT]):
-    """Context manager to temporarily allow setting attributes on frozen Pydantic models."""
-
-    def __init__(self, obj: BaseModelT):
-        if not isinstance(obj, BaseModel):
-            raise TypeError("Only Pydantic BaseModel instances are supported.")
-        self._obj = obj
-
-    def __enter__(self) -> BaseModelT:
-        self._original_setattr = self._obj.__class__.__setattr__
-        self._obj.__class__.__setattr__ = self._setattr
-        return self._obj
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._obj.__class__.__setattr__ = self._original_setattr
-
-    def _setattr(self, name, value):
-        obj = self._obj
-        config = obj.model_config
-        if config.get("frozen", False):
-            if config.get("validate_assignment", False):
-                validate_field(obj, name, value)
-            else:
-                object.__setattr__(obj, name, value)
-        else:
-            setattr(obj, name, value)
-
-
-def force_set_attr(method):
-    """Decorator to force attribute setting on frozen Pydantic models."""
-
-    @wraps(method)
-    def wrapper(self, *args, **kwargs):
-        with ForceSetAttr(self):
-            return method(self, *args, **kwargs)
-
-    return wrapper
-
-
-force_validate_field = force_set_attr(validate_field)
-
-
-@runtime_checkable
-class DataClassProto(Protocol):
-    """Protocol for dataclass types."""
-
-    @classmethod
-    def __dataclass_fields__(cls) -> Dict[str, Any]: ...
+# The configuration framework moved to the standalone `cfgable` package.
+# These names are re-exported so existing
+# `from mcap_data_loader.utils.basic import ...` imports keep working.
+from cfgable import (  # noqa: F401
+    validate_field,
+    ForceSetAttr,
+    force_set_attr,
+    force_validate_field,
+    DataClassProto,
+    import_string,
+    get_fully_qualified_class_name,
+)
 
 
 SlicesType = Union[List[tuple], tuple, int]
@@ -257,12 +216,7 @@ def file_hash(
     return hash_obj.hexdigest()
 
 
-def get_fully_qualified_class_name(obj_or_cls):
-    if isinstance(obj_or_cls, type):
-        cls = obj_or_cls
-    else:
-        cls = type(obj_or_cls)
-    return f"{cls.__module__}.{cls.__qualname__}"
+# get_fully_qualified_class_name moved to `cfgable` (re-exported above).
 
 
 def float_range(start: float, stop: float, step: int = 1):
@@ -316,9 +270,7 @@ def get_full_class_name(obj: Union[Any, Type]) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
-@validate_call
-def import_string(import_path: ImportString[T]) -> T:
-    return import_path
+# import_string moved to `cfgable` (re-exported above).
 
 
 def remove_util(string: str, stop: str, include_stop: bool = True) -> str:
