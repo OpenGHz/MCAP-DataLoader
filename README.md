@@ -127,6 +127,39 @@ mcap:
 
 The lists of topics specified by `states` and `actions` will be loaded and concatenated to form the `observation.state` and `action` required by lerobot, serving as low-dimensional state and action inputs in the training data. Meanwhile, `images` will be appended to the `observation.images` field, using the first part of the name (e.g., `env_camera` in the example above) as a suffix for image input, such as `observation.images.env_camera`, for use during training.
 
+#### Vision-language-action policies (pi0.5)
+
+Vision-language-action policies such as pi0.5 need two things beyond ACT, both handled by the `mcap` section:
+
+- **Language task.** Each sample must carry a language instruction. It is extracted per-episode from an MCAP metadata record (by default `task_info.task_description`). Set `task_source` to `metadata` (default), `config` (use the static `task` string), or `none` (disable, e.g. for ACT).
+- **Quantile statistics.** pi0.5 normalizes state/action with quantiles, so `q01`/`q99` stats are required. Set `compute_quantiles: true` to compute them with one extra pass over the dataset. This is auto-enabled when the policy uses quantile normalization.
+
+pi0.5 also requires a non-empty `states`. A minimal example (see `configs/pi05.yaml`):
+
+```yaml
+policy:
+  type: pi05
+  chunk_size: 50
+  n_action_steps: 50
+
+mcap:
+  states:
+    - /follow/arm/pose/position
+    - /follow/arm/pose/orientation
+  actions:
+    - /lead/arm/pose/position
+    - /lead/arm/pose/orientation
+  images:
+    - /env_camera/color/image_raw
+  task_source: metadata          # metadata | config | none
+  task_metadata_name: task_info
+  task_field: task_description    # or task_description_zh
+  task: "do the task"            # fallback when metadata is missing
+  compute_quantiles: true
+```
+
+The action chunk length, image resize to 224, and state/action padding are handled inside the pi0.5 model, so no data-side change is needed for those. The first run downloads the PaliGemma tokenizer/weights from the Hugging Face hub.
+
 #### Organizing processed data
 
 For processed data, MCAP is better suited to creating a new file that contains only the processed topics, rather than appending processed data back into the original file. For an example of generating processed topics, see [Data Processing](#data-processing).

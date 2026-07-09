@@ -182,6 +182,11 @@ class McapFlatBuffersSampleDataset(IterableDatasetABC[SampleUnion]):
         """Get the MCAP reader, initialize it if not already initialized."""
         return self._ensure_reader()
 
+    @property
+    def metadata(self) -> Dict[str, Dict[str, str]]:
+        """Get all metadata records of the MCAP file, keyed by record name."""
+        return self.reader.all_metadata()
+
 
 class McapFlatBuffersEpisodeDatasetConfig(McapDatasetConfig):
     """

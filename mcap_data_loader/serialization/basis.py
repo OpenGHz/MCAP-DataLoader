@@ -80,6 +80,19 @@ class McapReaderBasis(ABC):
         """Get all attachment names in the MCAP file."""
         return {attachment.name for attachment in self.reader.iter_attachments()}
 
+    @cache
+    def all_metadata(self) -> Dict[str, Dict[str, str]]:
+        """Get all metadata records in the MCAP file, keyed by record name.
+
+        Each MCAP metadata record maps string keys to string values (values are
+        commonly JSON-encoded). For example, a ``task_info`` record may contain a
+        ``task_description`` field describing the language instruction.
+        """
+        return {
+            metadata.name: dict(metadata.metadata)
+            for metadata in self.reader.iter_metadata()
+        }
+
     def iter_attachment_samples(
         self,
         names: Optional[Iterable[str]] = None,

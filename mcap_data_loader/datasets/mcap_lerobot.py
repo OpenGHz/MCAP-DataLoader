@@ -42,6 +42,22 @@ class McapLeRobotDatasetConfig(BaseModel, frozen=True):
     """The list of image keys."""
     actions: List[str]
     """The list of action keys."""
+    task: str = ""
+    """Fallback language instruction. Used when `task_source` is "config", or when
+    metadata extraction is enabled but the record/field is missing."""
+    task_source: str = "metadata"
+    """Where to source the per-episode language task: "metadata" reads it from the
+    MCAP metadata record, "config" always uses the static `task` string, "none"
+    disables task injection entirely (e.g. for ACT which needs no language)."""
+    task_metadata_name: str = "task_info"
+    """Name of the MCAP metadata record holding the task (task_source="metadata")."""
+    task_field: str = "task_description"
+    """Field within the metadata record holding the task string. For Chinese
+    instructions use "task_description_zh"."""
+    compute_quantiles: bool = False
+    """Whether to compute q01/q99 quantile statistics for state/action. Required by
+    policies that use QUANTILES normalization (e.g. pi0.5). Triggers one extra pass
+    over the dataset at construction time, so it is disabled by default."""
     horizon: HorizonConfig = {}
     """The horizon configuration."""
     shuffle_episodes: bool = False
@@ -92,7 +108,10 @@ ItemType = Dict[str, Tensor]
 
 STATE_KEY = "observation.state"
 ACTION_KEY = "action"
+TASK_KEY = "task"
 IMAGE_KEY_PREFIX = "observation.images"
+# Keys carried on items that are not tensor-valued dataset features.
+_NON_FEATURE_KEYS = frozenset({TASK_KEY})
 _QUEUE_SENTINEL = object()
 
 
@@ -214,6 +233,9 @@ class McapLeRobotDataset(IterableDataset):
         # it is int64
         features = {}
         for key, value in first_item.items():
+            if key in _NON_FEATURE_KEYS or not hasattr(value, "shape"):
+                # e.g. the language `task` string is not a tensor feature
+                continue
             if len(value.shape) == 3:
                 dtype = "image"
                 names = ["channel", "height", "width"]
@@ -243,6 +265,50 @@ class McapLeRobotDataset(IterableDataset):
         self._meta = McapLeRobotDatasetMeta(
             features=features, stats=stats, camera_keys=self._camera_mappings.keys()
         )
+        if config.compute_quantiles:
+            self._inject_quantile_stats()
+
+    def _inject_quantile_stats(self) -> None:
+        """Compute q01/q99 per-dimension quantiles for state/action and merge them
+        into the metadata stats. Required by QUANTILES-normalized policies (pi0.5).
+
+        The streaming Statistics only track sum/sum_sq/min/max, from which
+        quantiles cannot be recovered, so this performs one extra pass over the
+        raw episode samples. Quantiles are mutated onto the stored stats dicts
+        because the pydantic ``Statistics`` schema would otherwise drop them.
+        """
+        collectors: dict[str, tuple[list, tuple[str, ...]]] = {}
+        if self._state_keys:
+            collectors[STATE_KEY] = ([], self._state_keys)
+        if self._action_keys:
+            collectors[ACTION_KEY] = ([], self._action_keys)
+        if not collectors:
+            return
+
+        episode_num = len(self._datasets._episode_datasets[0])
+        for episode_index in range(episode_num):
+            sample_datasets = [
+                episode_dataset[episode_index]
+                for episode_dataset in self._datasets._episode_datasets
+            ]
+            for merged in self._merge_episode_samples(sample_datasets):
+                for buf, keys in collectors.values():
+                    if len(keys) == 1:
+                        vec = merged[keys[0]]["data"]
+                    else:
+                        vec = np.concatenate(
+                            [merged[key]["data"] for key in keys], axis=-1
+                        )
+                    buf.append(np.asarray(vec, dtype=np.float64).reshape(-1))
+        self._reset_runtime_state()
+
+        for concat_key, (buf, _keys) in collectors.items():
+            if not buf or concat_key not in self._meta.stats:
+                continue
+            arr = np.stack(buf)  # [num_frames, dim]
+            stat = self._meta.stats[concat_key]
+            stat["q01"] = np.quantile(arr, 0.01, axis=0)
+            stat["q99"] = np.quantile(arr, 0.99, axis=0)
 
     def _reset_runtime_state(self):
         self._ds_iter = None
@@ -406,6 +472,51 @@ class McapLeRobotDataset(IterableDataset):
             item[camera_key] = self._sample_key_tensor(current_sample, source_key)
         return item
 
+    @staticmethod
+    def _decode_task_value(raw: str) -> str:
+        """Decode a metadata task value. MCAP metadata values are strings and are
+        commonly JSON-encoded (e.g. '"do some thing"'), so strip the JSON quoting
+        when possible and fall back to the raw string otherwise."""
+        try:
+            decoded = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return raw.strip()
+        if isinstance(decoded, str):
+            return decoded.strip()
+        return str(decoded).strip()
+
+    def _resolve_episode_task(self, sample_datasets: list) -> str | None:
+        """Resolve the language task for one episode.
+
+        Returns ``None`` when task injection is disabled so that non-language
+        policies (e.g. ACT) get items without a ``task`` key.
+        """
+        source = self.config.task_source
+        if source == "none":
+            return None
+        if source == "config":
+            return self.config.task or None
+        if source != "metadata":
+            raise ValueError(
+                f"Invalid task_source {source!r}, expected 'metadata', 'config' or 'none'."
+            )
+        for dataset in sample_datasets:
+            metadata = getattr(dataset, "metadata", None)
+            if not metadata:
+                continue
+            record = metadata.get(self.config.task_metadata_name)
+            if not record:
+                continue
+            raw = record.get(self.config.task_field)
+            if raw is None:
+                continue
+            task = self._decode_task_value(raw)
+            if task:
+                return task
+        # No task found in metadata: fall back to the static task string, or None
+        # (no `task` key) so non-language policies keep their previous behavior.
+        return self.config.task or None
+
     def _iter_items(
         self, datasets: McapMultiEpisodeDatasets, shuffle: bool | None = None
     ):
@@ -429,8 +540,12 @@ class McapLeRobotDataset(IterableDataset):
                 episode_dataset[episode_index]
                 for episode_dataset in datasets._episode_datasets
             ]
+            episode_task = self._resolve_episode_task(sample_datasets)
             for horizon_item in self._iter_episode_horizon_items(sample_datasets):
-                yield self._stack_horizon_item(horizon_item)
+                item = self._stack_horizon_item(horizon_item)
+                if episode_task is not None:
+                    item[TASK_KEY] = episode_task
+                yield item
 
     def _iter_prefetched(self, item_iter):
         queue = Queue(maxsize=max(self.config.prefetch_items, 1))
@@ -567,7 +682,27 @@ def make_dataset(
     if "mcap" in dict_config:
         # print("use mcap field")
         dict_config = dict_config["mcap"]
+
+    # Auto-enable quantile stats when the policy uses QUANTILES normalization
+    # (e.g. pi0.5). The yaml `mcap` field can still override this explicitly.
+    norm_map = getattr(cfg.policy, "normalization_mapping", None) or {}
+    needs_quantiles = any(
+        "QUANTILE" in str(mode).upper() for mode in norm_map.values()
+    )
+    if needs_quantiles and "compute_quantiles" not in dict_config:
+        base_dict["compute_quantiles"] = True
+
     base_dict.update(dict_config)
+
+    if needs_quantiles and not base_dict.get("states"):
+        import logging
+
+        logging.warning(
+            "Policy uses QUANTILES normalization (e.g. pi0.5) but no `states` are "
+            "configured. Such policies require a non-empty observation state; set "
+            "`mcap.states` in the config."
+        )
+
     return McapLeRobotDataset(
         McapLeRobotDatasetConfig(
             **base_dict,
