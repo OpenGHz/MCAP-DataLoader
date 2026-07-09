@@ -24,7 +24,7 @@ from mcap_data_loader.datasets.mcap_dataset import (
 from mcap_data_loader.utils.basic import force_set_attr
 from mcap_data_loader.utils.stat import concatenate_statistics, Statistics
 from mcap_data_loader.pipelines import HorizonConfig
-from mcap_data_loader.utils.av_coder import DecodeConfig
+from mcap_data_loader.serialization.video.pyav import DecodeConfig
 from ast import literal_eval
 import yaml
 
