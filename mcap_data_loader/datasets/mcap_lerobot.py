@@ -285,22 +285,29 @@ class McapLeRobotDataset(IterableDataset):
         if not collectors:
             return
 
-        episode_num = len(self._datasets._episode_datasets[0])
-        for episode_index in range(episode_num):
-            sample_datasets = [
-                episode_dataset[episode_index]
-                for episode_dataset in self._datasets._episode_datasets
-            ]
-            for merged in self._merge_episode_samples(sample_datasets):
-                for buf, keys in collectors.values():
-                    if len(keys) == 1:
-                        vec = merged[keys[0]]["data"]
-                    else:
-                        vec = np.concatenate(
-                            [merged[key]["data"] for key in keys], axis=-1
-                        )
-                    buf.append(np.asarray(vec, dtype=np.float64).reshape(-1))
-        self._reset_runtime_state()
+        # Read only the low-dimensional state/action topics with NO media_configs,
+        # so this pass never decodes video. Decoding here would (a) waste time and
+        # (b) leave FFmpeg/thread state in the main process that deadlocks forked
+        # DataLoader workers (fork-after-threads).
+        lowdim = self._make_lowdim_datasets()
+        try:
+            episode_num = len(lowdim._episode_datasets[0])
+            for episode_index in range(episode_num):
+                sample_datasets = [
+                    episode_dataset[episode_index]
+                    for episode_dataset in lowdim._episode_datasets
+                ]
+                for merged in self._merge_episode_samples(sample_datasets):
+                    for buf, keys in collectors.values():
+                        if len(keys) == 1:
+                            vec = merged[keys[0]]["data"]
+                        else:
+                            vec = np.concatenate(
+                                [merged[key]["data"] for key in keys], axis=-1
+                            )
+                        buf.append(np.asarray(vec, dtype=np.float64).reshape(-1))
+        finally:
+            lowdim.reset_runtime_state()
 
         for concat_key, (buf, _keys) in collectors.items():
             if not buf or concat_key not in self._meta.stats:
@@ -340,6 +347,20 @@ class McapLeRobotDataset(IterableDataset):
                 configs={
                     data_root: {"data_root": data_root, "keys": keys}
                     for data_root, keys in self.config.data_root.items()
+                },
+            )
+        )
+
+    def _make_lowdim_datasets(self) -> McapMultiEpisodeDatasets:
+        """Datasets reading only the state/action topics, with no media_configs so
+        no video is decoded. Used for the quantile-statistics pass."""
+        lowdim_keys = list(self._state_keys) + list(self._action_keys)
+        return McapMultiEpisodeDatasets(
+            McapMultiEpisodeDatasetsConfig(
+                common={"extra_keys": True},
+                configs={
+                    data_root: {"data_root": data_root, "keys": lowdim_keys}
+                    for data_root in self.config.data_root
                 },
             )
         )
