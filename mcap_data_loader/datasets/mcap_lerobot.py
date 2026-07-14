@@ -103,6 +103,14 @@ class McapLeRobotDatasetMeta(BaseModel, frozen=True):
             stat["count"] = stat["n"]
         return v
 
+    @property
+    def has_language_columns(self) -> bool:
+        """lerobot>=0.6 checks this to pick a collate_fn. We supply our own
+        collate_fn via McapAwareDataLoader (image normalization + task strings),
+        so route lerobot to the default (None) collate path by returning False;
+        the language `task` is still carried through our collate."""
+        return False
+
 
 ItemType = Dict[str, Tensor]
 
@@ -873,7 +881,13 @@ def _build_infer_args_list(args) -> list[str]:
 def train():
     from lerobot.datasets import utils as lerobot_dataset_utils
     from lerobot.scripts import lerobot_train
-    from lerobot.rl import wandb_utils
+
+    try:
+        # lerobot >= 0.6: wandb_utils lives under lerobot.common
+        from lerobot.common import wandb_utils
+    except ImportError:
+        # older lerobot layout
+        from lerobot.rl import wandb_utils
     from mcap_data_loader.datasets.mcap_lerobot import make_dataset
     from mcap_data_loader.utils.cli import extract_and_remove_args, extend_args
     from functools import partial
@@ -894,9 +908,20 @@ def train():
             config_root, config_name = _process_config_path(args.config)
 
             if "--ori" not in extracted_dict:
-                lerobot_train.make_dataset = partial(
+                _mcap_make_dataset = partial(
                     make_dataset, config_root=config_root, config_name=config_name
                 )
+                lerobot_train.make_dataset = _mcap_make_dataset
+                # lerobot >= 0.6 builds the dataset via
+                # lerobot.datasets.factory.make_dataset (called by
+                # make_train_eval_datasets), not lerobot_train.make_dataset, so
+                # patch the factory entry point too.
+                try:
+                    from lerobot.datasets import factory as _lerobot_ds_factory
+
+                    _lerobot_ds_factory.make_dataset = _mcap_make_dataset
+                except Exception:
+                    pass
 
             # the cli args in lerobot_train will override the config file args
             extend_args(sys.argv, get_args_list(args))
@@ -980,10 +1005,14 @@ def train():
     wandb_utils.get_safe_wandb_artifact_name = _safe_wandb_artifact_name
     original_threading_excepthook = threading.excepthook
     threading.excepthook = _quiet_pin_memory_thread_exceptions
-    original_cycle = lerobot_dataset_utils.cycle
+    # `lerobot_train.cycle` is the one actually used by the training loop; patch it
+    # always. Older lerobot also exposed `cycle` on datasets.utils, so patch that
+    # only when present (it moved to lerobot.utils.utils in 0.6).
     original_train_cycle = lerobot_train.cycle
-    lerobot_dataset_utils.cycle = _monitored_cycle
     lerobot_train.cycle = _monitored_cycle
+    original_cycle = getattr(lerobot_dataset_utils, "cycle", None)
+    if original_cycle is not None:
+        lerobot_dataset_utils.cycle = _monitored_cycle
     original_dataloader = torch.utils.data.DataLoader
     original_asyncio_level = logging.getLogger("asyncio").level
     logging.getLogger("asyncio").setLevel(logging.ERROR)
@@ -1035,8 +1064,9 @@ def train():
         return 130
     finally:
         torch.utils.data.DataLoader = original_dataloader
-        lerobot_dataset_utils.cycle = original_cycle
         lerobot_train.cycle = original_train_cycle
+        if original_cycle is not None:
+            lerobot_dataset_utils.cycle = original_cycle
         threading.excepthook = original_threading_excepthook
         logging.getLogger("asyncio").setLevel(original_asyncio_level)
         data_wait_monitor.summary()
