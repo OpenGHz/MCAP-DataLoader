@@ -110,9 +110,9 @@ So the more useful explanation is:
 
 The MCAP adapter builds samples by iterating MCAP streams:
 
-- `McapLeRobotDataset._iter_items()` in [`mcap_lerobot.py`]( /home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py )
-- `McapLeRobotDataset._merge_episode_samples()` in [`mcap_lerobot.py`]( /home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py )
-- `McapReaderBasis.iter_samples()` in [`basis.py`]( /home/haizhou/MCAP-DataLoader/mcap_data_loader/serialization/basis.py )
+- `McapLeRobotDataset._iter_items()` in [`mcap_lerobot.py`]( ../mcap_data_loader/datasets/mcap_lerobot.py )
+- `McapLeRobotDataset._merge_episode_samples()` in [`mcap_lerobot.py`]( ../mcap_data_loader/datasets/mcap_lerobot.py )
+- `McapReaderBasis.iter_samples()` in [`basis.py`]( ../mcap_data_loader/serialization/basis.py )
 
 This means training time still includes work that LeRobot has already paid during
 dataset creation/conversion.
@@ -122,7 +122,7 @@ dataset creation/conversion.
 
 In the current MCAP path, image attachments are iterated together with topic data:
 
-- `iter_attachment_samples()` in [`basis.py`]( /home/haizhou/MCAP-DataLoader/mcap_data_loader/serialization/basis.py )
+- `iter_attachment_samples()` in [`basis.py`]( ../mcap_data_loader/serialization/basis.py )
 
 So every epoch still performs:
 
@@ -140,7 +140,7 @@ That coupling is one of the main differences from LeRobot.
 
 The action horizon is assembled during iteration:
 
-- `_iter_episode_horizon_items()` in [`mcap_lerobot.py`]( /home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py )
+- `_iter_episode_horizon_items()` in [`mcap_lerobot.py`]( ../mcap_data_loader/datasets/mcap_lerobot.py )
 
 This alone is not likely to explain the whole gap, but it is part of the same
 pattern: repeated fixed-dataset work that LeRobot largely avoids.

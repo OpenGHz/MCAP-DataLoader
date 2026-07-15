@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "MCAP Data Loader"
+abstract: >-
+  A Python library for loading and processing MCAP data files in a way that is
+  more suitable for machine learning and robotics training pipelines, including
+  an integration for training LeRobot models directly from MCAP datasets.
+type: software
+authors:
+  - name: "OpenGHz"
+    alias: "OpenGHz"
+repository-code: "https://github.com/OpenGHz/MCAP-DataLoader"
+url: "https://github.com/OpenGHz/MCAP-DataLoader"
+license: MIT
+version: "0.3.2"
+keywords:
+  - mcap
+  - dataset
+  - dataloader
+  - robotics
+  - machine-learning
+  - lerobot

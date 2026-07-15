@@ -8,6 +8,8 @@
 
 A Python library for loading and processing MCAP data files in a way that is more suitable for machine learning and robotics training pipelines.
 
+**English** | [简体中文](README.zh-CN.md)
+
 </div>
 
 ## Features
@@ -229,6 +231,41 @@ python mcap_data_loader/scripts/data_process/poses.py \
 
 
 
+## Documentation
+
+- [MCAP loader performance](docs/mcap_loader_performance.md) — benchmarks and tuning notes for the MCAP data loader
+- [LeRobot performance analysis](docs/lerobot_performance_analysis.md) — throughput analysis for LeRobot training with MCAP
+- [Pose post-processing (`poses.py`)](docs/poses.md) — generating relative-pose and `rotation_6d` topics
+
+More runnable examples live in the [examples](examples) directory.
+
+## Project structure
+
+```text
+mcap_data_loader/
+├── basis/          # Config-able base classes (datasets, loaders, data types)
+├── callers/        # Composable transforms (map, normalize, stack, policy, ...)
+├── configurers/    # Hydra / config wiring
+├── data_types/     # Shared data-type definitions
+├── datasets/       # MCAP dataset APIs + LeRobot training integration
+├── pipelines/      # Data pipeline stages (horizon, flatten, merge, slice, ...)
+├── schemas/        # FlatBuffers schemas (.fbs / .bfbs)
+├── scripts/        # Data-processing / helper scripts
+├── serialization/  # MCAP / ROS / FlatBuffers / video (de)serialization
+└── utils/          # Shared utilities
+```
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for the development
+setup, coding style, and pull-request process, and note our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Getting help
+
+- Questions and usage help: see [SUPPORT.md](SUPPORT.md)
+- Bug reports and feature requests: open an [issue](https://github.com/OpenGHz/MCAP-DataLoader/issues)
+- Security reports: see [SECURITY.md](SECURITY.md)
+
 ## License
 
-See [LICENSE](LICENSE).
+This project is licensed under the terms of the [MIT License](LICENSE).

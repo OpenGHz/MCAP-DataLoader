@@ -1,0 +1,22 @@
+name: Question
+description: Ask a usage or how-to question
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before asking, please check the [README](../../README.md), [docs/](../../docs), and
+        [examples/](../../examples). See also [SUPPORT.md](../../SUPPORT.md).
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do, and where are you stuck?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Relevant config, code snippet, or environment details that help us answer.
+      render: shell

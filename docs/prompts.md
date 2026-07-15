@@ -1,1 +1,0 @@
-我使用/home/ghz/Work/OpenGHz/data-collection/airdc/airbot_ie/configs/demonstrators/mujoco/basis.yaml环境采集的数据，然后使用的configs/mujoco.yaml配置进行的训练，训练的模型位于outputs/train/2026-03-29/16-07-32_act。请据此给我改一版能用的configs/infer.yaml推理配置。

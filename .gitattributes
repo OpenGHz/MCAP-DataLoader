@@ -1,0 +1,32 @@
+# Normalize line endings to LF on checkin, auto on checkout
+* text=auto eol=lf
+
+# Explicitly declare text files
+*.py    text
+*.pyi   text
+*.md    text
+*.txt   text
+*.toml  text
+*.cfg   text
+*.ini   text
+*.yaml  text
+*.yml   text
+*.json  text
+*.fbs   text
+*.sh    text eol=lf
+
+# Binary files (never modify line endings, exclude from diffs)
+*.bfbs  binary
+*.mcap  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.mp4   binary
+*.pdf   binary
+*.zip   binary
+*.npy   binary
+*.npz   binary
+*.pt    binary
+*.pth   binary
+*.safetensors binary

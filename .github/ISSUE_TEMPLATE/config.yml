@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/OpenGHz/MCAP-DataLoader/issues/new?template=question.yml
+    about: Ask how to use MCAP Data Loader.
+  - name: Security report
+    url: https://github.com/OpenGHz/MCAP-DataLoader/security/advisories/new
+    about: Please report security vulnerabilities privately, not as public issues.

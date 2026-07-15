@@ -5,9 +5,9 @@ logic of the MCAP training data path used by `mcap-lerobot-train`.
 
 The focus is the current implementation in:
 
-- [`mcap_data_loader/datasets/mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py)
-- [`mcap_data_loader/datasets/mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py)
-- [`mcap_data_loader/serialization/basis.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/serialization/basis.py)
+- [`mcap_data_loader/datasets/mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py)
+- [`mcap_data_loader/datasets/mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py)
+- [`mcap_data_loader/serialization/basis.py`](../mcap_data_loader/serialization/basis.py)
 
 
 ## Scope
@@ -50,7 +50,7 @@ The main performance levers are therefore:
 ### Training-side DataLoader parameters
 
 These live in the top level training config, for example
-[`configs/mujoco.yaml`](/home/haizhou/MCAP-DataLoader/configs/mujoco.yaml).
+[`configs/mujoco.yaml`](../configs/mujoco.yaml).
 
 #### `num_workers`
 
@@ -65,8 +65,8 @@ Current behavior:
 
 Relevant implementation:
 
-- worker sharding logic: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L368)
-- DataLoader wrapper: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L559)
+- worker sharding logic: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L368)
+- DataLoader wrapper: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L559)
 
 Practical impact:
 
@@ -107,8 +107,8 @@ Meaning:
 
 Implementation:
 
-- stored in config: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L38)
-- converted in `_sample_keys_tensor()`: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L345)
+- stored in config: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L38)
+- converted in `_sample_keys_tensor()`: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L345)
 
 Performance impact:
 
@@ -124,7 +124,7 @@ Meaning:
 
 Implementation:
 
-- stacked in `_stack_sample_keys()`: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L325)
+- stacked in `_stack_sample_keys()`: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L325)
 
 Performance impact:
 
@@ -141,8 +141,8 @@ Meaning:
 
 Implementation:
 
-- mapped to LeRobot camera keys in `__init__()`: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L166)
-- materialized in `_stack_horizon_item()`: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L353)
+- mapped to LeRobot camera keys in `__init__()`: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L166)
+- materialized in `_stack_horizon_item()`: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L353)
 
 Performance impact:
 
@@ -159,9 +159,9 @@ Meaning:
 
 Implementation:
 
-- config field exists here: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L50)
+- config field exists here: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L50)
 - internal queue-based prefetch implementation exists here:
-  [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L394)
+  [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L394)
 
 Current status:
 
@@ -170,7 +170,7 @@ Current status:
 
 Relevant line:
 
-- [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L434)
+- [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L434)
 
 Why:
 
@@ -185,7 +185,7 @@ Meaning:
 
 Implementation:
 
-- handled in `_iter_items()`: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L375)
+- handled in `_iter_items()`: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L375)
 
 Performance impact:
 
@@ -200,8 +200,8 @@ The adapter internally uses `HorizonConfig`, and training derives
 
 Implementation:
 
-- config field: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L44)
-- horizon iterator: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L267)
+- config field: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L44)
+- horizon iterator: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L267)
 
 Performance impact:
 
@@ -215,8 +215,8 @@ Performance impact:
 
 This exists at the lower MCAP dataset layer:
 
-- config field: [`mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py#L58)
-- behavior in `read_stream()`: [`mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py#L135)
+- config field: [`mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py#L58)
+- behavior in `read_stream()`: [`mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py#L135)
 
 Meaning:
 
@@ -239,8 +239,8 @@ Current behavior:
 
 Implementation:
 
-- cache field: [`mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py#L225)
-- reuse in `__getitem__()`: [`mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py#L272)
+- cache field: [`mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py#L225)
+- reuse in `__getitem__()`: [`mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py#L272)
 
 Why it matters:
 
@@ -260,13 +260,13 @@ Current behavior:
 Implementation:
 
 - reset after first-sample probe:
-  [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L177)
+  [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L177)
 - dataset-level reset:
-  [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L223)
+  [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L223)
 - sample-dataset reset:
-  [`mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py#L152)
+  [`mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py#L152)
 - episode-dataset reset:
-  [`mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py#L285)
+  [`mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py#L285)
 
 Why it matters:
 
@@ -290,21 +290,21 @@ The current training adapter always constructs MCAP datasets with:
 
 Implementation:
 
-- [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L230)
+- [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L230)
 
 Fallback:
 
 - if `torchcodec` import fails at training launch, the CLI appends
   `--dataset.video_backend=pyav`
-- see [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L541)
+- see [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L541)
 
 
 ### Attachment decode caching
 
 At the MCAP reader layer, there is a cache for attachment decoders:
 
-- cache field: [`basis.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/serialization/basis.py#L24)
-- attachment iteration: [`basis.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/serialization/basis.py#L80)
+- cache field: [`basis.py`](../mcap_data_loader/serialization/basis.py#L24)
+- attachment iteration: [`basis.py`](../mcap_data_loader/serialization/basis.py#L80)
 
 Current behavior for `video/mp4` attachments:
 
@@ -362,7 +362,7 @@ Current parallelism is:
 
 Implementation:
 
-- worker split: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L381)
+- worker split: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L381)
 
 This means:
 
@@ -427,7 +427,7 @@ Important points:
 
 Relevant code:
 
-- DataLoader wrapper: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py#L587)
+- DataLoader wrapper: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py#L587)
 
 So it is reasonable to think of the pipeline as:
 
@@ -558,7 +558,7 @@ The most effective sanity checks are:
 
 ## Recommended Reading
 
-- LeRobot comparison: [`docs/lerobot_performance_analysis.md`](/home/haizhou/MCAP-DataLoader/docs/lerobot_performance_analysis.md)
-- MCAP adapter code: [`mcap_lerobot.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_lerobot.py)
-- lower-level MCAP datasets: [`mcap_dataset.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/datasets/mcap_dataset.py)
-- attachment decode logic: [`basis.py`](/home/haizhou/MCAP-DataLoader/mcap_data_loader/serialization/basis.py)
+- LeRobot comparison: [`docs/lerobot_performance_analysis.md`](../docs/lerobot_performance_analysis.md)
+- MCAP adapter code: [`mcap_lerobot.py`](../mcap_data_loader/datasets/mcap_lerobot.py)
+- lower-level MCAP datasets: [`mcap_dataset.py`](../mcap_data_loader/datasets/mcap_dataset.py)
+- attachment decode logic: [`basis.py`](../mcap_data_loader/serialization/basis.py)
