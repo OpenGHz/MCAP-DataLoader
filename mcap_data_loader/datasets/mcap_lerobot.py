@@ -1075,7 +1075,14 @@ def train():
 
 
 def infer():
-    from lerobot.scripts import lerobot_record
+    # lerobot >=0.6 split policy deployment out of `lerobot-record` (which is now
+    # teleop-only data collection and raises "A teleoperator is required" if no
+    # teleop is given) into `lerobot-rollout`. Route policy inference there.
+    # The flattened `--key=value` args map onto RolloutConfig (robot.*, policy.*,
+    # task, fps, duration, inference.*, ...); a record-shaped config (e.g.
+    # `dataset.single_task`, `policy.pretrained_path`) must be updated to the
+    # rollout schema (`task`, `policy.path`).
+    from lerobot.scripts import lerobot_rollout
     from mcap_data_loader.scripts.run_with_yaml import parse_args
     from mcap_data_loader.utils.cli import extend_args, extract_and_remove_args
     import sys
@@ -1084,7 +1091,7 @@ def infer():
     if args is not None:
         extract_and_remove_args(["-c", "--config"])
         extend_args(sys.argv, _build_infer_args_list(args))
-    return lerobot_record.main()
+    return lerobot_rollout.main()
 
 
 def run_with_yaml():
