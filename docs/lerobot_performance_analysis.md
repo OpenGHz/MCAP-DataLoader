@@ -1,7 +1,7 @@
 # Why LeRobot Trains Faster Than The Current MCAP Adapter
 
 This note summarizes why the original LeRobot dataset path is much faster than the
-current `mcap_lerobot_train` path, even when MCAP uses fewer cameras.
+current `mcap-lerobot-train` path, even when MCAP uses fewer cameras.
 
 It is based on:
 

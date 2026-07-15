@@ -1,7 +1,7 @@
 # MCAP Data Loading Performance Guide
 
 This document explains the current performance-related parameters and execution
-logic of the MCAP training data path used by `mcap_lerobot_train`.
+logic of the MCAP training data path used by `mcap-lerobot-train`.
 
 The focus is the current implementation in:
 
@@ -15,7 +15,7 @@ The focus is the current implementation in:
 This guide is about the data path used when you run:
 
 ```bash
-mcap_lerobot_train -c configs/mujoco.yaml
+mcap-lerobot-train -c configs/mujoco.yaml
 ```
 
 It does not describe generic MCAP utilities in the repo. It only covers the

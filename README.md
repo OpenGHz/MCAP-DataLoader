@@ -91,7 +91,7 @@ pip install lerobot
 Run:
 
 ```bash
-mcap_lerobot_train -c configs/config.yaml
+mcap-lerobot-train -c configs/config.yaml
 ```
 
 Recommended: place your config file under a `configs/` directory in your current working directory.
@@ -181,7 +181,7 @@ Notes:
 - `dataset.root` and `dataset.repo_id` are reused to specify the MCAP dataset root directory and dataset name.
 - Command-line overrides compatible with LeRobot are supported and take the highest priority (they override values in the config file). For example:
   ```bash
-  mcap_lerobot_train -c configs/config.yaml --dataset.repo_id=example_task
+  mcap-lerobot-train -c configs/config.yaml --dataset.repo_id=example_task
   ```
 
 ### Train with LeRobot’s original dataset format
@@ -189,7 +189,7 @@ Notes:
 If you want to use LeRobot’s original data format (while still using this CLI), add `--ori`:
 
 ```bash
-mcap_lerobot_train -c configs/ori.yaml --ori
+mcap-lerobot-train -c configs/ori.yaml --ori
 ```
 
 Make sure the dataset path in your config points to the actual LeRobot dataset location.
@@ -199,13 +199,13 @@ Make sure the dataset path in your config points to the actual LeRobot dataset l
 Show supported parameters:
 
 ```bash
-mcap_lerobot_train -h
+mcap-lerobot-train -h
 ```
 
 If the output is long, redirect to a file:
 
 ```bash
-mcap_lerobot_train -h > lerobot_help.txt
+mcap-lerobot-train -h > lerobot_help.txt
 ```
 
 ### Data Processing
