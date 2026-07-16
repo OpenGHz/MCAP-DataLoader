@@ -836,6 +836,38 @@ def _load_robot_env_from_config_path(
     return resolved_component
 
 
+def _apply_config_env(config_path) -> None:
+    """Apply a top-level ``env:`` mapping from the YAML config to os.environ.
+
+    This lets a run config carry its own process environment (e.g. HF_HUB_OFFLINE,
+    WANDB_MODE, HF_ENDPOINT) instead of relying on a wrapper task, so `train` and
+    `infer` are driven the same way — a plain command + `-c <config>.yaml`.
+
+    Semantics:
+      * Values are set with setdefault: an env var already present in the real
+        environment WINS, so the shell can still override the config.
+      * ``env`` is in run_with_yaml.PRESERVE_MAPPING_KEYS, so it is not flattened
+        into ``--key=value`` args. We also pop it here so it never reaches the
+        downstream lerobot CLI even if that ever changes.
+    """
+    import os
+
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    except Exception:
+        return
+    if not isinstance(config, dict):
+        return
+    env = config.get("env")
+    if not isinstance(env, dict):
+        return
+    for key, value in env.items():
+        if value is None:
+            continue
+        os.environ.setdefault(str(key), str(value))
+
+
 def _build_infer_args_list(args) -> list[str]:
     from omegaconf import OmegaConf
     from mcap_data_loader.scripts.run_with_yaml import flatten_dict, value_to_str
@@ -847,6 +879,10 @@ def _build_infer_args_list(args) -> list[str]:
         raise ValueError(
             f"Config file {args.config} must contain a YAML mapping (dictionary)."
         )
+
+    # A top-level ``env:`` block is preserved (not flattened) and consumed here,
+    # so drop it before building the lerobot CLI args.
+    config.pop("env", None)
 
     vars_cfg = config.pop("vars", None)
     if isinstance(vars_cfg, dict):
@@ -901,8 +937,14 @@ def train():
 
     argv_set = set(sys.argv)
     if ("--ori" not in argv_set) or ({"-c", "--config"} & argv_set):
-        args = parse_args(["mcap"], False, False)
+        args = parse_args(["mcap", "env"], False, False)
         if args is not None:
+            # Apply a top-level ``env:`` block from the config (WANDB_MODE,
+            # HF_HUB_OFFLINE, ...) so training is driven by a plain command +
+            # `-c <config>.yaml`, same as inference — no wrapper task needed.
+            # ``env`` is also in the parse_args exclude list above so it is
+            # stripped from the flattened lerobot-train args.
+            _apply_config_env(args.config)
             _, extracted_dict = extract_and_remove_args(["-c", "--config", "--ori"])
             # print(f"Extracted args: {extracted_dict}")
             config_root, config_name = _process_config_path(args.config)
@@ -1089,6 +1131,7 @@ def infer():
 
     args = parse_args(None, False, False)
     if args is not None:
+        _apply_config_env(args.config)
         extract_and_remove_args(["-c", "--config"])
         extend_args(sys.argv, _build_infer_args_list(args))
     return lerobot_rollout.main()
