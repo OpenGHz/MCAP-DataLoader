@@ -915,6 +915,25 @@ def _build_infer_args_list(args) -> list[str]:
 
 
 def train():
+    # IMPORTANT: apply the config's ``env:`` block BEFORE importing lerobot (which
+    # imports huggingface_hub/transformers). huggingface_hub reads HF_HUB_OFFLINE
+    # ONCE at import time and freezes it into a module constant, so setting it
+    # afterwards has no effect — the training would then hit the network for the
+    # policy backbone (e.g. SmolVLM2) and fail on offline/air-gapped machines.
+    import sys
+    from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
+
+    argv_set = set(sys.argv)
+    if ("--ori" not in argv_set) or ({"-c", "--config"} & argv_set):
+        args = parse_args(["mcap", "env"], False, False)
+        if args is not None:
+            # Apply a top-level ``env:`` block from the config (WANDB_MODE,
+            # HF_HUB_OFFLINE, ...) so training is driven by a plain command +
+            # `-c <config>.yaml`, same as inference — no wrapper task needed.
+            # ``env`` is also in the parse_args exclude list above so it is
+            # stripped from the flattened lerobot-train args.
+            _apply_config_env(args.config)
+
     from lerobot.datasets import utils as lerobot_dataset_utils
     from lerobot.scripts import lerobot_train
 
@@ -927,24 +946,15 @@ def train():
     from mcap_data_loader.datasets.mcap_lerobot import make_dataset
     from mcap_data_loader.utils.cli import extract_and_remove_args, extend_args
     from functools import partial
-    from mcap_data_loader.scripts.run_with_yaml import parse_args, get_args_list
     import logging
     import re
-    import sys
     import threading
     import time
     import torch
 
-    argv_set = set(sys.argv)
     if ("--ori" not in argv_set) or ({"-c", "--config"} & argv_set):
         args = parse_args(["mcap", "env"], False, False)
         if args is not None:
-            # Apply a top-level ``env:`` block from the config (WANDB_MODE,
-            # HF_HUB_OFFLINE, ...) so training is driven by a plain command +
-            # `-c <config>.yaml`, same as inference — no wrapper task needed.
-            # ``env`` is also in the parse_args exclude list above so it is
-            # stripped from the flattened lerobot-train args.
-            _apply_config_env(args.config)
             _, extracted_dict = extract_and_remove_args(["-c", "--config", "--ori"])
             # print(f"Extracted args: {extracted_dict}")
             config_root, config_name = _process_config_path(args.config)
@@ -1124,7 +1134,11 @@ def infer():
     # task, fps, duration, inference.*, ...); a record-shaped config (e.g.
     # `dataset.single_task`, `policy.pretrained_path`) must be updated to the
     # rollout schema (`task`, `policy.path`).
-    from lerobot.scripts import lerobot_rollout
+    # IMPORTANT: apply the config's ``env:`` block BEFORE importing lerobot_rollout
+    # (which imports huggingface_hub/transformers). huggingface_hub freezes
+    # HF_HUB_OFFLINE into a module constant at import time, so it must be set first
+    # — otherwise offline/air-gapped inference hits the network for the policy
+    # backbone and fails.
     from mcap_data_loader.scripts.run_with_yaml import parse_args
     from mcap_data_loader.utils.cli import extend_args, extract_and_remove_args
     import sys
@@ -1134,6 +1148,9 @@ def infer():
         _apply_config_env(args.config)
         extract_and_remove_args(["-c", "--config"])
         extend_args(sys.argv, _build_infer_args_list(args))
+
+    from lerobot.scripts import lerobot_rollout
+
     return lerobot_rollout.main()
 
 
