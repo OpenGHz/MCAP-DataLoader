@@ -846,9 +846,8 @@ def _apply_config_env(config_path) -> None:
     Semantics:
       * Values are set with setdefault: an env var already present in the real
         environment WINS, so the shell can still override the config.
-      * ``env`` is in run_with_yaml.PRESERVE_MAPPING_KEYS, so it is not flattened
-        into ``--key=value`` args. We also pop it here so it never reaches the
-        downstream lerobot CLI even if that ever changes.
+      * ``env`` is popped (train: via parse_args exclude; infer: config.pop) before
+        the config is flattened, so it never reaches the downstream lerobot CLI.
     """
     import os
 
@@ -870,7 +869,11 @@ def _apply_config_env(config_path) -> None:
 
 def _build_infer_args_list(args) -> list[str]:
     from omegaconf import OmegaConf
-    from mcap_data_loader.scripts.run_with_yaml import flatten_dict, value_to_str
+    from mcap_data_loader.scripts.run_with_yaml import (
+        extract_preserve_keys,
+        flatten_dict,
+        value_to_str,
+    )
 
     with open(args.config, encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -898,6 +901,11 @@ def _build_infer_args_list(args) -> list[str]:
     for field in args.exclude:
         config.pop(field, None)
 
+    # Keys to keep as whole mappings, declared via a top-level `preserve_keys:`
+    # list in the config (e.g. sim_cameras, cameras) — so a structured robot arg
+    # is not flattened into --a.b.c=... args and needs no code change.
+    preserve_keys = extract_preserve_keys(config)
+
     robot_cfg = config.get("robot")
     if isinstance(robot_cfg, dict):
         env_cfg = robot_cfg.get("env")
@@ -910,7 +918,7 @@ def _build_infer_args_list(args) -> list[str]:
                 config_path, explicit_env_cfg
             )
 
-    flat_config = flatten_dict(config)
+    flat_config = flatten_dict(config, preserve_keys=preserve_keys)
     return [f"--{key}={value_to_str(value)}" for key, value in flat_config.items()]
 
 

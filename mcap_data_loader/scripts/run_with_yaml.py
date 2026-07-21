@@ -6,24 +6,56 @@ import yaml
 from typing import Any, Dict
 
 
-PRESERVE_MAPPING_KEYS = {"env", "cameras", "rename_map"}
+# Dict keys whose value is kept as ONE whole mapping (JSON-encoded) instead of
+# being flattened into --a.b.c=... args. There are NO built-in defaults: a config
+# declares exactly which keys to preserve via a top-level ``preserve_keys:`` list
+# in its YAML (see extract_preserve_keys / get_flat_args_dict), so behavior is
+# explicit per-config and adding a new structured arg needs no code edit.
+
+# Reserved top-level YAML key holding the preserve keys for this run. It is
+# consumed (popped) before flattening and never emitted as a downstream arg.
+PRESERVE_KEYS_FIELD = "preserve_keys"
 
 
 def flatten_dict(
-    d: Dict[str, Any], parent_key: str = "", sep: str = "."
+    d: Dict[str, Any],
+    parent_key: str = "",
+    sep: str = ".",
+    preserve_keys: Any = None,
 ) -> Dict[str, Any]:
     """
     递归地将嵌套字典扁平化，例如：
     {'a': {'b': 1}} -> {'a.b': 1}
+
+    ``preserve_keys`` 为需要整体保留(不向下拍平)的键集合，来自配置里的
+    ``preserve_keys:`` 声明；命中的 dict 值原样保留，便于把结构化参数(如自定义
+    相机映射)整体传给下游。无内置默认，全部由配置显式声明。
     """
+    preserve = set(preserve_keys) if preserve_keys else set()
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict) and k not in PRESERVE_MAPPING_KEYS:
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        if isinstance(v, dict) and k not in preserve:
+            items.extend(
+                flatten_dict(v, new_key, sep=sep, preserve_keys=preserve).items()
+            )
         else:
             items.append((new_key, v))
     return dict(items)
+
+
+def extract_preserve_keys(config: Dict[str, Any]) -> list:
+    """Pop the top-level ``preserve_keys`` list from a loaded config (if any).
+
+    Returns the extra preserve keys and mutates ``config`` to remove the field so
+    it is not flattened/emitted downstream.
+    """
+    value = config.pop(PRESERVE_KEYS_FIELD, None)
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
 
 
 def value_to_str(value: Any) -> str:
@@ -82,7 +114,8 @@ def get_flat_args_dict(args) -> Dict[str, Any]:
         sys.exit(1)
     for field in args.exclude:
         config.pop(field, None)
-    flat_config = flatten_dict(config)
+    preserve_keys = extract_preserve_keys(config)
+    flat_config = flatten_dict(config, preserve_keys=preserve_keys)
     return flat_config
 
 
