@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcap-data-loader"
-version = "0.3.3"
+version = "0.3.4"
 description = "Load and process MCAP data files for machine learning and robotics training pipelines."
 authors = [{ name = "OpenGHz", email = "1352674740@qq.com" }]
 readme = "README.md"
