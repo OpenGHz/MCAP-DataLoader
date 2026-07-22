@@ -6,7 +6,11 @@ from collections.abc import Generator, Iterable
 from functools import cache, cached_property
 from mcap_data_loader.basis import DictDataStamped
 from mcap_data_loader.utils.basic import zip
-from mcap_data_loader.serialization.video.pyav import AvCoder, DecodeConfig, VideoDecodeBackend
+from mcap_data_loader.serialization.video.pyav import (
+    AvCoder,
+    DecodeConfig,
+    VideoDecodeBackend,
+)
 from mcap_data_loader.utils.stat import StatisticsBasis, Statistics
 from collections import defaultdict
 from abc import ABC, abstractmethod
@@ -547,8 +551,17 @@ class McapWriterBasis(ABC):
         for topic in natsorted(self._pending_channels):
             self.register_channel(topic, self._pending_channels[topic], strict=False)
         self._pending_channels.clear()
-        for schema_type, topic, data, publish_time, log_time, kwargs in self._pending_messages:
-            self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+        for (
+            schema_type,
+            topic,
+            data,
+            publish_time,
+            log_time,
+            kwargs,
+        ) in self._pending_messages:
+            self.on_add_message(
+                schema_type, topic, data, publish_time, log_time, **kwargs
+            )
         self._pending_messages.clear()
 
     @final
@@ -563,13 +576,22 @@ class McapWriterBasis(ABC):
     ) -> None:
         """Add a message to the MCAP file."""
         if topic in self._cmapping:
-            self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+            self.on_add_message(
+                schema_type, topic, data, publish_time, log_time, **kwargs
+            )
         elif topic in self._pending_channels:
             self._flush_pending_channels()
-            self.on_add_message(schema_type, topic, data, publish_time, log_time, **kwargs)
+            self.on_add_message(
+                schema_type, topic, data, publish_time, log_time, **kwargs
+            )
         else:
             self._pending_channels[topic] = schema_type
-            self._pending_messages.append((schema_type, topic, data, publish_time, log_time, kwargs))
+            self._pending_messages.append(
+                (schema_type, topic, data, publish_time, log_time, kwargs)
+            )
+        self.after_add_message(
+            schema_type, topic, data, publish_time, log_time, **kwargs
+        )
 
     @abstractmethod
     def on_add_message(
@@ -582,6 +604,18 @@ class McapWriterBasis(ABC):
         **kwargs,
     ) -> None:
         """Hook method called when a message is added. Subclasses should implement this method to handle the actual message writing logic."""
+
+    def after_add_message(
+        self,
+        schema_type: Any,
+        topic: str,
+        data: Any,
+        publish_time: int,
+        log_time: int,
+        **kwargs,
+    ) -> None:
+        """Hook method called after a message is added. Subclasses can override this method to perform additional processing after a message is written."""
+        pass
 
     def get_logger(self) -> logging.Logger:
         return logging.getLogger(self.__class__.__name__)
