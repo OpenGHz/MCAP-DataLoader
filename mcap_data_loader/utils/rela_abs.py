@@ -349,8 +349,9 @@ class PoseGlobalRelaAbsTool:
     def to_rela_rot6d(rot6d, ref_rot6d):
         R_ref = Rotation6D.rot6d_to_matrix(ref_rot6d)  # [3, 3]
         R = Rotation6D.rot6d_to_matrix(rot6d)  # [3, 3]
-        # 计算相对旋转矩阵：R_rel = R_ref^{-1} @ R
-        R_rel = R_ref.T @ R  # [3, 3]
+        # World-frame (left) relative rotation, matching to_rela_orientation
+        # (rela = abs * ref^{-1}): R_rel = R @ R_ref^{-1} = R @ R_ref.T
+        R_rel = R @ R_ref.T  # [3, 3]
         return Rotation6D.matrix_to_rot6d(R_rel)
 
     @staticmethod
@@ -366,7 +367,8 @@ class PoseGlobalRelaAbsTool:
     def to_abs_rot6d(rela_rot6d, ref_rot6d):
         R_ref = Rotation6D.rot6d_to_matrix(ref_rot6d)  # [3, 3]
         R_rel = Rotation6D.rot6d_to_matrix(rela_rot6d)  # [3, 3]
-        R = R_ref @ R_rel
+        # Inverse of to_rela_rot6d (world frame): abs = rela * ref => R = R_rel @ R_ref
+        R = R_rel @ R_ref
         return Rotation6D.matrix_to_rot6d(R)
 
 
@@ -477,5 +479,16 @@ if __name__ == "__main__":
     assert np.allclose(Rotation6D.rot6d_to_quat(rot6d_abs), quat) or np.allclose(
         Rotation6D.rot6d_to_quat(rot6d_abs), -quat
     ), "to_rela_rot6d 和 to_abs_rot6d 恢复四元数不准确！"
+
+    # Cross-path regression: rot6d relative must use the SAME world-frame
+    # convention as the quaternion path, i.e.
+    #   to_rela_rot6d(R, R_ref) == quat_to_rot6d(to_rela_orientation(q, q_ref))
+    # (see poses.py, which mixes both paths when emitting rotation_6d_rela).
+    rot6d_rela_via_quat = Rotation6D.quat_to_rot6d(
+        PoseGlobalRelaAbsTool.to_rela_orientation(quat, quat_ref)
+    )
+    assert np.allclose(rot6d_rela, rot6d_rela_via_quat), (
+        "to_rela_rot6d 与 to_rela_orientation 的相对约定不一致（应同为 world 帧）！"
+    )
 
     print("所有测试通过！")
