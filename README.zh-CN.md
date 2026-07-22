@@ -164,7 +164,7 @@ mcap:
 
 #### 组织处理后的数据
 
-对于处理后的数据，MCAP 更适合创建一个只包含处理后 topic 的新文件，而不是把处理结果追加回原始文件。生成处理后 topic 的示例见 [数据处理](#数据处理)。
+对于处理后的数据，MCAP 更适合创建一个只包含处理后 topic 的新文件，而不是把处理结果追加回原始文件。生成处理后 topic 的示例见 [airdc `process_poses`](https://github.com/OpenGHz/data-collection/blob/develop/airdc/scripts/process_poses.py) 脚本。
 
 在训练时，你可以同时指定原始数据集目录和处理后数据集目录。MCAP Data Loader 会在运行时自动合并它们，使其如同从单一数据集读取一样被使用。
 
@@ -212,9 +212,9 @@ mcap-lerobot-train -h > lerobot_help.txt
 
 ### 数据处理
 
-关于 pose topic 的后处理，参见 [docs/poses.md](docs/poses.md)。
+关于 pose topic 的后处理（生成相对 pose 与 `rotation_6d` topic），参见 [airdc](https://github.com/OpenGHz/data-collection) 项目中的 [`airdc.scripts.process_poses`](https://github.com/OpenGHz/data-collection/blob/develop/airdc/scripts/process_poses.py) 脚本。
 
-脚本 [mcap_data_loader/scripts/data_process/poses.py](mcap_data_loader/scripts/data_process/poses.py) 可用于生成：
+该脚本可用于生成：
 
 - 带 `_rela` 后缀的相对 pose topic
 - 由四元数 pose topic 转换而来的 `rotation_6d` topic
@@ -222,7 +222,7 @@ mcap-lerobot-train -h > lerobot_help.txt
 示例：
 
 ```bash
-python mcap_data_loader/scripts/data_process/poses.py \
+python3 -m airdc.scripts.process_poses \
   data/example \
   --keys /follow/arm/pose/position /follow/arm/pose/orientation \
   --targets rela rotation_6d
@@ -232,7 +232,6 @@ python mcap_data_loader/scripts/data_process/poses.py \
 
 - [MCAP loader 性能](docs/mcap_loader_performance.md) —— MCAP 数据加载器的基准测试与调优说明
 - [LeRobot 性能分析](docs/lerobot_performance_analysis.md) —— 使用 MCAP 进行 LeRobot 训练的吞吐分析
-- [Pose 后处理（`poses.py`）](docs/poses.md) —— 生成相对 pose 与 `rotation_6d` topic
 
 更多可运行的示例见 [examples](examples) 目录。
 

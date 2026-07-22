@@ -164,7 +164,7 @@ The action chunk length, image resize to 224, and state/action padding are handl
 
 #### Organizing processed data
 
-For processed data, MCAP is better suited to creating a new file that contains only the processed topics, rather than appending processed data back into the original file. For an example of generating processed topics, see [Data Processing](#data-processing).
+For processed data, MCAP is better suited to creating a new file that contains only the processed topics, rather than appending processed data back into the original file. For an example of generating processed topics, see the [airdc `process_poses`](https://github.com/OpenGHz/data-collection/blob/develop/airdc/scripts/process_poses.py) script.
 
 During training, you can specify both the original dataset directory and the processed dataset directory at the same time. MCAP Data Loader will merge them automatically at runtime, so they can be consumed as if they were read from a single dataset.
 
@@ -212,9 +212,9 @@ mcap-lerobot-train -h > lerobot_help.txt
 
 ### Data Processing
 
-For pose-topic post-processing, see [docs/poses.md](docs/poses.md).
+For pose-topic post-processing (generating relative-pose and `rotation_6d` topics), see the [`airdc.scripts.process_poses`](https://github.com/OpenGHz/data-collection/blob/develop/airdc/scripts/process_poses.py) script in the [airdc](https://github.com/OpenGHz/data-collection) project.
 
-The script [mcap_data_loader/scripts/data_process/poses.py](mcap_data_loader/scripts/data_process/poses.py) can be used to generate:
+The script can generate:
 
 - relative pose topics with `_rela` suffix
 - `rotation_6d` topics converted from quaternion pose topics
@@ -222,7 +222,7 @@ The script [mcap_data_loader/scripts/data_process/poses.py](mcap_data_loader/scr
 Example:
 
 ```bash
-python mcap_data_loader/scripts/data_process/poses.py \
+python3 -m airdc.scripts.process_poses \
   data/example \
   --keys /follow/arm/pose/position /follow/arm/pose/orientation \
   --targets rela rotation_6d
@@ -235,7 +235,6 @@ python mcap_data_loader/scripts/data_process/poses.py \
 
 - [MCAP loader performance](docs/mcap_loader_performance.md) — benchmarks and tuning notes for the MCAP data loader
 - [LeRobot performance analysis](docs/lerobot_performance_analysis.md) — throughput analysis for LeRobot training with MCAP
-- [Pose post-processing (`poses.py`)](docs/poses.md) — generating relative-pose and `rotation_6d` topics
 
 More runnable examples live in the [examples](examples) directory.
 
