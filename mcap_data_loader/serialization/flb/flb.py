@@ -258,6 +258,7 @@ class McapFlatBuffersWriter(McapWriterBasis):
             self._cmapping[topic], log_time, bytes(msg_data), publish_time
         )
         self.builder.Clear()
+        return arr  # Return the array for potential further processing
 
     def add_multi_channel_image(
         self,
