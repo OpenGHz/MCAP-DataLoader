@@ -241,7 +241,7 @@ class McapFlatBuffersWriter(McapWriterBasis):
 
     def add_float_array(
         self, topic: str, data: Iterable[float], publish_time: int, log_time: int
-    ):
+    ) -> np.ndarray:
         # TODO: is float64 needed?
         arr = np.asarray(data, dtype=np.float32)
         self._stat[topic]["sum"] += arr
