@@ -564,7 +564,6 @@ class McapWriterBasis(ABC):
             )
         self._pending_messages.clear()
 
-    @final
     def add_message(
         self,
         schema_type: Any,
@@ -574,7 +573,12 @@ class McapWriterBasis(ABC):
         log_time: int,
         **kwargs,
     ) -> None:
-        """Add a message to the MCAP file."""
+        """Add a message to the MCAP file.
+
+        Not ``@final``: subclasses may override to intercept/augment writes
+        (e.g. auto-generating derived topics), as long as they delegate the
+        actual routing back to ``super().add_message``.
+        """
         if topic in self._cmapping:
             self.on_add_message(
                 schema_type, topic, data, publish_time, log_time, **kwargs
